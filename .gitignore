@@ -1,0 +1,10 @@
+.env
+.env.local
+.tmp/
+token.json
+credentials.json
+node_modules/
+dist/
+*.log
+.vite/
+.DS_Store
