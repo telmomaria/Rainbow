@@ -9,8 +9,8 @@ style.textContent = `
     background: linear-gradient(160deg, #ffe3f3, #e6dcff 45%, #d8f1ff); font-family: system-ui, sans-serif;
     animation: fadein .3s;
   }
-  .select h1 { margin: 18px 0 14px; font: 900 40px/1.1 system-ui, sans-serif; color: #7c3aed; text-align: center; }
-  .select-grid { display: grid; grid-template-columns: repeat(5, minmax(120px, 170px)); gap: 14px; padding: 0 16px 24px; }
+  .select h1 { margin: 12px 0 10px; font: 900 40px/1.1 system-ui, sans-serif; color: #7c3aed; text-align: center; }
+  .select-grid { display: grid; grid-template-columns: repeat(5, minmax(110px, min(150px, 17vh))); gap: 12px; padding: 0 16px 14px; justify-content: center; }
   @media (max-width: 760px) { .select-grid { grid-template-columns: repeat(3, minmax(100px, 150px)); } }
   .select-card {
     border: 0; border-radius: 22px; background: #fff; padding: 8px 8px 12px; cursor: pointer;
@@ -19,9 +19,16 @@ style.textContent = `
   }
   .select-card:hover, .select-card:focus-visible, .select-card.focus { transform: translateY(-4px) scale(1.04); box-shadow: 0 0 0 5px #a78bfa, 0 10px 20px rgba(0,0,0,.12); }
   .select-card.chosen { box-shadow: 0 0 0 6px #22c55e, 0 10px 20px rgba(0,0,0,.12); }
-  .select-card img { width: 100%; aspect-ratio: 4/5; display: block; border-radius: 16px; background: linear-gradient(#bfe6ff, #e8f7ff); }
+  .select-card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; object-position: 50% 30%; display: block; border-radius: 16px; background: linear-gradient(#bfe6ff, #e8f7ff); }
   .select-card b { display: block; margin-top: 8px; font: 900 22px/1 system-ui, sans-serif; color: #3b2a5a; }
   .select-card span { display: block; margin-top: 4px; font: 700 15px/1 system-ui, sans-serif; color: #7c6c99; }
+  .select-settings { display: flex; gap: 10px; justify-content: center; align-items: center; padding: 0 16px 16px; }
+  .select-settings b { font: 900 22px/1 system-ui, sans-serif; color: #3b2a5a; margin-right: 6px; }
+  .select-diff {
+    border: 0; border-radius: 16px; padding: 10px 16px; cursor: pointer; background: #fff; color: #3b2a5a;
+    font: 800 20px/1 system-ui, sans-serif; box-shadow: 0 4px 0 rgba(124,58,237,.18);
+  }
+  .select-diff.on { background: #7c3aed; color: #fff; }
   .select-actions { display: flex; gap: 16px; justify-content: center; padding: 0 16px 24px; }
   .select-go {
     border: 0; border-radius: 999px; padding: 16px 36px; cursor: pointer; color: #fff;
@@ -82,7 +89,10 @@ export type StartMode = 'pick' | 'continue' | 'new';
  * - Start screen (`start` given): cards only select; then "Continuar" (keep everything, if a saved game exists)
  *   or "Novo jogo" (start from zero). Enter = Continuar when possible, else Novo jogo.
  */
-export function chooseCharacter(current?: string, start?: { canContinue: boolean }): Promise<{ id: string; mode: StartMode }> {
+export function chooseCharacter(
+  current?: string,
+  start?: { canContinue: boolean; difficulty: 'facil' | 'medio' | 'dificil'; onDifficulty: (d: 'facil' | 'medio' | 'dificil') => void },
+): Promise<{ id: string; mode: StartMode }> {
   const pics = renderThumbs();
   const box = document.createElement('div');
   box.className = 'select';
@@ -107,6 +117,29 @@ export function chooseCharacter(current?: string, start?: { canContinue: boolean
   let continueBtn: HTMLButtonElement | null = null;
   let newBtn: HTMLButtonElement | null = null;
   if (start) {
+    // settings live on the main page: monster difficulty
+    const set = document.createElement('div');
+    set.className = 'select-settings';
+    set.innerHTML = '<b>Monstros</b>';
+    const diffs: ['facil' | 'medio' | 'dificil', string, string][] = [
+      ['facil', '🐢', 'Fácil'],
+      ['medio', '🙂', 'Médio'],
+      ['dificil', '🔥', 'Difícil'],
+    ];
+    const dbtns = diffs.map(([d, icon, label]) => {
+      const b = document.createElement('button');
+      b.className = 'select-diff' + (start.difficulty === d ? ' on' : '');
+      b.innerHTML = `<span>${icon}</span> ${label}`;
+      b.addEventListener('click', () => {
+        dbtns.forEach((x) => x.classList.remove('on'));
+        b.classList.add('on');
+        start.onDifficulty(d);
+        void speak([`Monstros: ${label}`]);
+      });
+      set.appendChild(b);
+      return b;
+    });
+    wrap.appendChild(set);
     const row = document.createElement('div');
     row.className = 'select-actions';
     if (start.canContinue) {

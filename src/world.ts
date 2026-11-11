@@ -21,6 +21,8 @@ export interface Interactable {
   interact(ctx: InteractCtx): void;
   /** Optional per-frame animation. */
   update?(dt: number): void;
+  /** Shops etc.: don't fire on mere contact — only when the child clicks/taps it (or presses Enter next to it). */
+  requiresClick?: boolean;
 }
 
 export interface InteractCtx {

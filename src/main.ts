@@ -7,7 +7,7 @@ import { Collectibles } from './collectibles';
 import { Npcs, type QuestionNpc } from './npcs';
 import { loadSave, writeSave } from './save';
 import { Hud, askQuestion, createHomeButton, setCompass, setFade, showArrival, showBanner, showCityName, showTravel } from './ui';
-import { speak, sfx, spokenLog, taunt, voiceInfo } from './audio';
+import { speak, sfx, spokenLog, taunt, tone, voiceInfo } from './audio';
 import { CITIES, COINS_PER_LEVEL, cityAt } from './cities';
 import { Monsters } from './monsters';
 import { Airport } from './airport';
@@ -16,13 +16,13 @@ import { Car } from './car';
 import { createBeggar } from './beggar';
 import { chooseCharacter, createAvatarButton } from './select';
 import { CAT_REWARD, CatTree } from './cattree';
-import { createShops } from './shops';
+import { buildItem, createShops } from './shops';
 import { Trouble } from './trouble';
 import { Traffic } from './traffic';
 import { createHospital, type Hospital } from './hospital';
 import { Weather } from './weather';
 import type { GameCtx } from './gamectx';
-import { DIFFICULTY_FACTOR, createSettingsButton, showIdlePause } from './ui';
+import { DIFFICULTY_FACTOR, createBag, showIdlePause } from './ui';
 import { isFree } from './spawn';
 
 const WALK_SPEED = 6.5; // m/s
@@ -99,19 +99,66 @@ const gameCtx: GameCtx = {
   coins: () => save.coins,
   addCoins: (n) => addCoins(n),
   hurt: (from, cost) => hurt(from, cost),
+  // A shop handing over an item = it goes into the bag (and into her hand). null = the item in her hand was used up.
   setCarried(item, kind) {
-    if (carriedObj) carriedObj.parent?.remove(carriedObj);
-    carriedObj = item;
-    carriedKind = item ? (kind ?? 'item') : null;
-    if (item) {
-      item.position.set(0.42, 1.0, -0.32); // in front of her right hand
-      player.root.add(item);
+    if (item && kind) {
+      save.bag[kind] = (save.bag[kind] ?? 0) + 1;
+      holdItem(kind, item);
+    } else if (!item && carriedKind) {
+      save.bag[carriedKind] = Math.max(0, (save.bag[carriedKind] ?? 0) - 1);
+      holdItem(null);
     }
+    writeSave(save);
+    refreshBag();
   },
   carried: () => carriedKind,
   isDriving: () => !!driving,
   isPaused: () => paused,
 };
+
+/** Show an item in her hand (display only — the bag counts are in save.bag). */
+function holdItem(kind: string | null, mesh?: THREE.Object3D): void {
+  if (carriedObj) carriedObj.parent?.remove(carriedObj);
+  carriedObj = null;
+  carriedKind = null;
+  eating = null;
+  if (kind) {
+    const m = mesh ?? buildItem(kind);
+    if (m) {
+      m.position.set(0.42, 1.0, -0.32); // in front of her right hand
+      player.root.add(m);
+      carriedObj = m;
+    }
+    carriedKind = kind;
+  }
+  refreshBag?.();
+}
+
+/** Eating a sweet from the bag: four bites, then it's gone. */
+let eating: { kind: string; t: number; bites: number } | null = null;
+function useBagItem(kind: string): void {
+  if (paused || driving || flight || (save.bag[kind] ?? 0) <= 0) return;
+  holdItem(kind);
+  if (kind !== 'pao') eating = { kind, t: 0, bites: 0 };
+}
+function updateEating(dt: number): void {
+  if (!eating || !carriedObj) return;
+  eating.t += dt;
+  if (eating.t < 0.5 + eating.bites * 0.6) return;
+  eating.bites++;
+  if (eating.kind === 'chocolate') tone(300, 0, 0.06, 'square', 0.05);
+  else tone(900, 0, 0.1, 'sine', 0.04);
+  const edible = (carriedObj.userData as { edible?: THREE.Object3D }).edible ?? carriedObj;
+  edible.scale.setScalar(Math.max(0, 1 - eating.bites * 0.27));
+  if (eating.bites >= 4) {
+    const k = eating.kind;
+    eating = null;
+    save.bag[k] = Math.max(0, (save.bag[k] ?? 0) - 1);
+    writeSave(save);
+    holdItem(null);
+    [523, 659, 784].forEach((f, i) => tone(f, i * 0.08, 0.15, 'triangle', 0.05)); // yum
+  }
+}
 
 /** Knock her away from `from`, flash, lose `cost` coins. False if she can't be hurt right now. */
 function hurt(from: THREE.Vector3, cost: number): boolean {
@@ -176,7 +223,7 @@ function loadCity(): void {
   cityPill.textContent = city.name;
   weather.setLights({ hemi: world.hemi, sun: world.sun });
   void weather.setCity(city.name);
-  gameCtx.setCarried(null);
+  holdItem(null);
 }
 
 /** Travel = walk to the airport, board the plane, fly, land in the next city. */
@@ -252,6 +299,24 @@ createHomeButton(() => {
 });
 
 let rescuing = false;
+/** Shop the child tapped and is walking to (buys on arrival). */
+let buyTarget: Interactable | null = null;
+// Enter next to a shop counter buys too (keyboard players)
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || paused || driving || flight) return;
+  const shop = world.interactables.find(
+    (i) => i.requiresClick && Math.hypot(i.position.x - player.position.x, i.position.z - player.position.z) < i.radius,
+  );
+  if (shop) {
+    e.preventDefault();
+    shop.interact({ player: player.position });
+  }
+});
+const refreshBag = (() => {
+  const draw = createBag((kind) => useBagItem(kind));
+  return () => draw(save.bag, carriedKind);
+})();
+refreshBag();
 
 /** Real weather of the current city (Open-Meteo), re-applied on every city change. */
 const weather = new Weather(scene, { hemi: world.hemi, sun: world.sun }, camera);
@@ -267,7 +332,7 @@ function runOver(carPos: THREE.Vector3): void {
   paused = true;
   clearTarget();
   input.releaseAll();
-  gameCtx.setCarried(null);
+  holdItem(null);
   hospitalPhase = 'fall';
   hospitalT = 0;
   knock.set(player.position.x - carPos.x, 0, player.position.z - carPos.z).setLength(6);
@@ -453,8 +518,8 @@ function handleTap(x: number, y: number): void {
     return;
   }
   // Objects and characters first: tapping one walks the character up to it (touching it uses it).
-  const targets = [
-    ...world.interactables.map((i) => ({ object: i.object as THREE.Object3D, position: i.position })),
+  const targets: { object: THREE.Object3D; position: THREE.Vector3; it?: Interactable }[] = [
+    ...world.interactables.map((i) => ({ object: i.object as THREE.Object3D, position: i.position, it: i })),
     ...npcs.list
       .filter((n) => n.leaving === null)
       .map((n) => ({ object: n.group as THREE.Object3D, position: n.group.position })),
@@ -466,6 +531,15 @@ function handleTap(x: number, y: number): void {
   if (objHits.length > 0) {
     const hit = targets.find((t) => isDescendant(objHits[0].object, t.object));
     if (hit) {
+      if (hit.it?.requiresClick) {
+        // shops: tapping = "I want to buy": walk there and buy on arrival (or right away if already there)
+        const d = Math.hypot(hit.it.position.x - player.position.x, hit.it.position.z - player.position.z);
+        if (d < hit.it.radius) {
+          hit.it.interact({ player: player.position });
+          return;
+        }
+        buyTarget = hit.it;
+      }
       setTarget(hit.position);
       return;
     }
@@ -541,6 +615,7 @@ function tick(time: number): void {
     speed = Math.abs(driving.speed);
   } else if (k.up || k.down || k.left || k.right) {
     clearTarget(); // keyboard always takes over from click-to-walk
+    buyTarget = null;
     if (k.left) player.heading += TURN_SPEED * dt;
     if (k.right) player.heading -= TURN_SPEED * dt;
     const dir = (k.up ? 1 : 0) - (k.down ? 1 : 0);
@@ -575,6 +650,15 @@ function tick(time: number): void {
   // --- touch-to-interact (edge triggered: fires once when the character reaches the object) ---
   for (const it of world.interactables) {
     const d = Math.hypot(it.position.x - player.position.x, it.position.z - player.position.z);
+    if (it.requiresClick) {
+      // only when the child asked for it (tap, or Enter next to it)
+      if (buyTarget === it && d < it.radius) {
+        buyTarget = null;
+        clearTarget();
+        it.interact({ player: player.position });
+      }
+      continue;
+    }
     if (d < it.radius) {
       if (!insideInteractable.has(it)) {
         insideInteractable.add(it);
@@ -585,6 +669,7 @@ function tick(time: number): void {
     }
   }
   world.update(dt);
+  updateEating(dt);
 
   // --- kitten stuck in a tree: touch the trunk to climb up and rescue it ---
   catTree.update(dt, player.position);
@@ -737,6 +822,7 @@ function tick(time: number): void {
       hospital: hospitalPhase,
       hospitalLeft: Math.max(0, save.hospitalUntil - Date.now()),
       carried: carriedKind,
+      bag: save.bag,
       weather: weather.state,
       traffic: traffic.positions().slice(0, 3),
       trouble: trouble.positions(),
@@ -792,12 +878,14 @@ function applyCharacter(id: string): void {
 function newGame(): void {
   hospitalPhase = 'none';
   player.root.rotation.x = 0;
-  Object.assign(save, { hospitalUntil: 0, coins: 0, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null, visited: [] });
+  holdItem(null);
+  Object.assign(save, { bag: {}, hospitalUntil: 0, coins: 0, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null, visited: [] });
   solved.clear();
   hud.set('coins', 0);
   hud.set('jewels', 0);
   hud.set('correct', 0);
   loadCity();
+  refreshBag();
   writeSave(save);
   showArrival(city.arrival);
 }
@@ -806,7 +894,15 @@ function newGame(): void {
 async function startScreen(): Promise<void> {
   paused = true;
   const canContinue = save.character !== null;
-  const { id, mode } = await chooseCharacter(save.character ?? undefined, { canContinue });
+  const { id, mode } = await chooseCharacter(save.character ?? undefined, {
+    canContinue,
+    difficulty: save.difficulty,
+    onDifficulty: (d) => {
+      save.difficulty = d;
+      monsters.difficulty = DIFFICULTY_FACTOR[d];
+      writeSave(save);
+    },
+  });
   applyCharacter(id);
   if (mode === 'new') newGame();
   lastActivity = performance.now();
@@ -817,19 +913,7 @@ async function startScreen(): Promise<void> {
 const setAvatar = createAvatarButton(save.character ?? 'princesa', () => {
   if (!paused && !flight && !driving) void pickCharacter();
 });
-createSettingsButton(
-  () => save.difficulty,
-  (d) => {
-    save.difficulty = d;
-    monsters.difficulty = DIFFICULTY_FACTOR[d];
-    writeSave(save);
-  },
-  () => !paused && !flight,
-  (open) => {
-    paused = open;
-    if (!open) canvas.focus();
-  },
-);
+// settings (monster difficulty) live on the start page
 void startScreen().then(() => {
   if (save.hospitalUntil > Date.now()) {
     paused = true;

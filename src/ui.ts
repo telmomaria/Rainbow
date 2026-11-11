@@ -448,3 +448,65 @@ export function createSettingsButton(get: () => Difficulty, set: (d: Difficulty)
     document.body.appendChild(ov);
   });
 }
+
+const bagStyle = document.createElement('style');
+bagStyle.textContent = `
+  .bag { position: fixed; left: 16px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 10px; }
+  .bag-item {
+    position: relative; width: 70px; height: 70px; border: 0; border-radius: 22px; padding: 0; cursor: pointer;
+    background: rgba(255,255,255,.92); box-shadow: 0 4px 12px rgba(0,0,0,.15); font-size: 38px; line-height: 70px;
+    animation: pop .25s ease-out; touch-action: manipulation;
+  }
+  .bag-item:hover { transform: scale(1.06); }
+  .bag-item:active { transform: scale(.94); }
+  .bag-item.in-hand { box-shadow: 0 0 0 4px #22c55e, 0 4px 12px rgba(0,0,0,.15); }
+  .bag-count {
+    position: absolute; right: -6px; bottom: -6px; min-width: 28px; height: 28px; border-radius: 14px; padding: 0 6px;
+    background: #7c3aed; color: #fff; font: 900 17px/28px system-ui, sans-serif; text-align: center;
+  }
+`;
+document.head.appendChild(bagStyle);
+
+/** Emoji per bag item kind (bought in the shops). */
+export const BAG_ICONS: Record<string, string> = { pao: '🥖', gelado: '🍦', chocolate: '🍫', chupa: '🍭' };
+const BAG_NAMES: Record<string, string> = { pao: 'Pão', gelado: 'Gelado', chocolate: 'Chocolate', chupa: 'Chupa-chupa' };
+
+/**
+ * Side bar (left) with what she has bought, and how many. Tap an item to use it
+ * (sweets: she eats it; bread: she holds it, ready for the pigeons). Returns a refresh function.
+ */
+export function createBag(onUse: (kind: string) => void): (bag: Record<string, number>, inHand: string | null) => void {
+  const bar = document.createElement('div');
+  bar.className = 'bag';
+  document.body.appendChild(bar);
+  const buttons = new Map<string, HTMLButtonElement>();
+  return (bag, inHand) => {
+    for (const kind of Object.keys(BAG_ICONS)) {
+      const n = bag[kind] ?? 0;
+      let b = buttons.get(kind);
+      if (n <= 0) {
+        b?.remove();
+        buttons.delete(kind);
+        continue;
+      }
+      if (!b) {
+        b = document.createElement('button');
+        b.className = 'bag-item';
+        b.setAttribute('aria-label', BAG_NAMES[kind]);
+        b.innerHTML = `${BAG_ICONS[kind]}<span class="bag-count"></span>`;
+        b.addEventListener('mouseenter', () => void speak([BAG_NAMES[kind]]));
+        b.addEventListener('click', () => {
+          b!.blur();
+          onUse(kind);
+        });
+        // keep the order stable: pão, gelado, chocolate, chupa
+        const order = Object.keys(BAG_ICONS);
+        const next = [...buttons.entries()].find(([k]) => order.indexOf(k) > order.indexOf(kind));
+        bar.insertBefore(b, next ? next[1] : null);
+        buttons.set(kind, b);
+      }
+      b.querySelector('.bag-count')!.textContent = String(n);
+      b.classList.toggle('in-hand', inHand === kind);
+    }
+  };
+}

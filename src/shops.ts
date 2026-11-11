@@ -182,6 +182,12 @@ type HatKind = 'chef' | 'cap' | 'beret' | 'bow';
  * appended. `rng` drives placement only (stable per city). The first returned Interactable's update()
  * also drives the shared effects (flying coins, handed items, crumbs, eating).
  */
+/** Builders for the items sold (filled by createShops), so the game can put a bag item in her hand. */
+const itemBuilders = new Map<string, () => THREE.Group>();
+export function buildItem(kind: string): THREE.Group | null {
+  return itemBuilders.get(kind)?.() ?? null;
+}
+
 export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number, ctx: GameCtx): Interactable[] {
   /* ---- shared materials / geometries ---- */
   const mats = new Map<string, THREE.MeshStandardMaterial>();
@@ -349,10 +355,7 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
         snd.happy();
         bits.burst(handPos(to).setY(1.2), 8, [0xffffff, 0xffd43b, 0xff8fab], 1.2, 2.5, 0.6, 0.04);
         if (kind === 'pao') lastBread = item;
-        else {
-          const ud = item.userData as { edible?: THREE.Object3D; crumbs?: number[] };
-          eating = { item, edible: ud.edible ?? item, kind, t: 0, bites: 0, crumbs: ud.crumbs ?? [0xffffff] };
-        }
+        // sweets are kept in the bag (side bar) and eaten when the child taps them there
         done();
       },
     );
@@ -527,6 +530,12 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
     g.userData = { edible: top, crumbs: [0x5c3317, 0x7b4a2a] };
     return g;
   };
+  const registerItems = () => {
+    itemBuilders.set('pao', buildBread);
+    itemBuilders.set('gelado', buildGelado);
+    itemBuilders.set('chocolate', buildChocolate);
+    itemBuilders.set('chupa', buildChupa);
+  };
   const buildChupa = (): THREE.Group => {
     const g = new THREE.Group();
     mk(cyl(0.012, 0.012, 0.3, 6), mat(0xffffff), g, 0, 0.03, 0);
@@ -542,6 +551,7 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
     g.userData = { edible: top, crumbs: [0xff4d8d, 0xffffff] };
     return g;
   };
+  registerItems();
 
   /* ---- a stall = something to stand in front of + a seller + a price ---- */
   const stall = (
@@ -559,6 +569,7 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
       object: group,
       position: stand,
       radius,
+      requiresClick: true,
       interact() {
         if (ctx.isPaused() || ctx.isDriving() || busy) return;
         if (kind === 'pao' && ctx.carried() === 'pao') {
