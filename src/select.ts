@@ -40,6 +40,17 @@ style.textContent = `
   .select-go.new { background: #7c3aed; }
   .select-go.cfg { background: #fff; color: #7c3aed; }
   .select-go:active { transform: translateY(3px); }
+  .confirm {
+    position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(59,42,90,.4);
+    font-family: system-ui, sans-serif; animation: fadein .2s;
+  }
+  .confirm-box { background: #fff; border-radius: 28px; padding: 26px 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.25); max-width: 92vw; }
+  .confirm-box h2 { margin: 0 0 8px; font: 900 32px/1.1 system-ui, sans-serif; color: #7c3aed; }
+  .confirm-box p { margin: 0 0 20px; font: 700 18px/1.3 system-ui, sans-serif; color: #7c6c99; }
+  .confirm-row { display: flex; gap: 14px; justify-content: center; }
+  .confirm-row button { border: 0; border-radius: 999px; padding: 14px 28px; cursor: pointer; font: 900 22px/1 system-ui, sans-serif; box-shadow: 0 5px 0 rgba(0,0,0,.15); }
+  .confirm-no { background: #22c55e; color: #fff; }
+  .confirm-yes { background: #f3f0ff; color: #7c3aed; }
   .avatar-btn {
     position: fixed; top: 150px; right: 16px; width: 64px; height: 64px; border: 0; border-radius: 50%; padding: 0;
     background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.15); cursor: pointer; overflow: hidden;
@@ -81,6 +92,39 @@ function renderThumbs(): Map<string, string> {
   }
   renderer.dispose();
   return thumbs;
+}
+
+/** "Start over?" — resolves true for yes. Spoken too, for children who don't read yet. */
+function confirmNewGame(): Promise<boolean> {
+  const ov = document.createElement('div');
+  ov.className = 'confirm';
+  ov.innerHTML = `<div class="confirm-box">
+    <h2>Começar de novo?</h2>
+    <p>As moedas, as joias e as cidades visitadas voltam a zero.</p>
+    <div class="confirm-row"><button class="confirm-no">✖ Não</button><button class="confirm-yes">★ Sim, começar</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  void speak(['Começar de novo? As moedas voltam a zero.']);
+  return new Promise((resolve) => {
+    const done = (yes: boolean) => {
+      window.removeEventListener('keydown', onKey, true);
+      ov.remove();
+      resolve(yes);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') done(false);
+      else if (e.key === 'Enter') done(false); // Enter never wipes the game by accident
+      else return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener('keydown', onKey, true);
+    ov.querySelector('.confirm-no')!.addEventListener('click', () => done(false));
+    ov.querySelector('.confirm-yes')!.addEventListener('click', () => done(true));
+    ov.addEventListener('pointerdown', (e) => {
+      if (e.target === ov) done(false);
+    });
+  });
 }
 
 export type StartMode = 'pick' | 'continue' | 'new';
@@ -181,7 +225,7 @@ export function chooseCharacter(
     };
     const cols = () => (window.innerWidth <= 760 ? 3 : 5);
     const onKey = (e: KeyboardEvent) => {
-      if (document.querySelector('.settings')) return;
+      if (document.querySelector('.settings') || document.querySelector('.confirm')) return;
       const k = e.key;
       const moves: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -cols(), ArrowDown: cols() };
       if (k in moves) setFocus(focus + moves[k]);
@@ -209,7 +253,11 @@ export function chooseCharacter(
       }),
     );
     continueBtn?.addEventListener('click', () => finish('continue'));
-    newBtn?.addEventListener('click', () => finish('new'));
+    newBtn?.addEventListener('click', async () => {
+      // starting over loses the progress: ask first (only when there is something to lose)
+      if (start?.canContinue && !(await confirmNewGame())) return;
+      finish('new');
+    });
   });
 }
 
