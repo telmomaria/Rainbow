@@ -16,10 +16,12 @@ Pelo caminho encontra roupas e acessórios para trocar.
 - **Stack:** Three.js + Vite + TypeScript · mapa OSM estilizado · Web Speech API pt-PT · localStorage · porta 1234.
 - **Scaffold v7** gerado (CLAUDE.md, ROADMAP, memory/, docs trindade, SKILLS/, .gitignore, .env.example, .mcp.json vazio).
 - **Bootstrap jogável:** cena placeholder, personagem placeholder, setas + rato/toque, colisões, candeeiro interativo (src/main.ts · input.ts · character.ts · world.ts). `?debug` expõe estado em `body[data-debug]` para QA no browser.
+- **Moedas/joias + perguntas faladas** (collectibles.ts · npcs.ts · questions.ts · ui.ts · audio.ts · save.ts). Moeda 1 · joia 5 · certa 10; progresso em localStorage (`rainbow.save.v1`).
 
 ## What's broken / blocked
 
-- **Fonte de dados OSM** por decidir (Overpass ao vivo vs dados pré-processados por cidade) — decide-se no spike (ROADMAP #3).
+- **Fonte de dados OSM** por decidir (Overpass ao vivo vs dados pré-processados por cidade) — decide-se no spike (ROADMAP #4).
+- **Voz pt-PT** depende do sistema: no Windows só existe se o pacote de voz português (Portugal) estiver instalado; senão usa outra voz pt (provavelmente pt-BR).
 
 ## Top pending (per ROADMAP §🎯 NEXT)
 
