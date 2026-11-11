@@ -15,6 +15,8 @@ import { Flight } from './flight';
 import { Car } from './car';
 import { createBeggar } from './beggar';
 import { chooseCharacter, createAvatarButton } from './select';
+import { CAT_REWARD, CatTree } from './cattree';
+import { DIFFICULTY_FACTOR, createSettingsButton, showIdlePause } from './ui';
 import { isFree } from './spawn';
 
 const WALK_SPEED = 6.5; // m/s
@@ -60,7 +62,9 @@ const questionAvailable = (id: string) => !solved.has(id) && (save.retryAt[id] ?
 let collectibles = new Collectibles(scene, world.obstacles);
 let npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
 let monsters = new Monsters(scene, world.obstacles);
+monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
 let airport = new Airport(scene, world.obstacles);
+let catTree: CatTree; // assigned by addCityExtras()
 let car = addCityExtras();
 // restore after every obstacle (incl. the airport) exists, so she can never reappear inside something
 player.position.set(SPAWN.x, 0, SPAWN.z);
@@ -69,7 +73,6 @@ if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles
   player.position.set(save.pos.x, 0, save.pos.z);
   player.heading = save.pos.h;
 }
-if (!save.pos) showArrival(city.arrival); // very first start
 
 /** Hand-made interactive situations in every city: a car to drive and someone to give a coin to. */
 function addCityExtras(): Car {
@@ -83,6 +86,9 @@ function addCityExtras(): Car {
   );
   // playground props (swing, fountain, xylophone, cat, dog...) — placed last so they avoid everything else
   world.interactables.push(...createProps(scene, world.obstacles, mulberry32(city.seed * 97 + 1)));
+  catTree = new CatTree(scene, world.obstacles, mulberry32(city.seed * 31 + 5));
+  world.interactables.push(catTree.interactable);
+  if (!save.visited.includes(city.name)) save.visited.push(city.name);
   return c;
 }
 
@@ -99,6 +105,7 @@ function loadCity(): void {
   collectibles = new Collectibles(scene, world.obstacles);
   npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
   monsters = new Monsters(scene, world.obstacles);
+  monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
   airport = new Airport(scene, world.obstacles);
   car = addCityExtras();
   cityPill.textContent = city.name;
@@ -176,26 +183,42 @@ createHomeButton(() => {
   }, 600);
 });
 
+let rescuing = false;
+
+/** Idle detection: any key, click, tap or mouse move counts as activity. */
+const IDLE_MS = 30_000;
+let lastActivity = performance.now();
+for (const ev of ['keydown', 'pointerdown', 'pointermove', 'wheel'] as const) {
+  window.addEventListener(ev, () => (lastActivity = performance.now()), { capture: true, passive: true });
+}
+async function idlePause(): Promise<void> {
+  paused = true;
+  clearTarget();
+  input.releaseAll();
+  await showIdlePause();
+  lastActivity = performance.now();
+  paused = false;
+  canvas.focus();
+}
+
 /** The car the character is driving (null = on foot). */
 let driving: Car | null = null;
 
 function enterCar(): void {
   if (paused || flight || driving) return;
   driving = car;
-  car.enter();
+  car.enter(player.root); // door opens, she climbs in and stays visible at the wheel
   clearTarget();
-  player.root.visible = false;
+  input.releaseAll();
 }
 
 function exitCar(): void {
-  if (!driving) return;
-  const p = driving.exitPoint();
-  driving.exit();
-  driving = null;
-  player.position.set(p.x, 0, p.z);
-  player.root.visible = true;
+  if (!driving || !driving.driving) return;
   clearTarget();
-  savePosition();
+  driving.exit(() => {
+    driving = null;
+    savePosition();
+  });
 }
 
 // Space / Enter gets out of the car (tapping the car does too)
@@ -371,9 +394,12 @@ function tick(time: number): void {
       throttle = dist > 4 ? (Math.abs(diff) > 1.6 ? 0.3 : 0.8) : -1;
       if (dist < 4 && Math.abs(driving.speed) < 0.5) clearTarget();
     }
+    if (driving.busy) {
+      throttle = 0;
+      steer = 0;
+    }
     if (driving.drive(dt, throttle, steer)) clearTarget();
-    player.position.set(driving.position.x, 0, driving.position.z);
-    player.heading = driving.heading;
+    player.heading = driving.heading; // her position is placed by the car (seat / door animation)
     speed = Math.abs(driving.speed);
   } else if (k.up || k.down || k.left || k.right) {
     clearTarget(); // keyboard always takes over from click-to-walk
@@ -421,6 +447,33 @@ function tick(time: number): void {
     }
   }
   world.update(dt);
+
+  // --- kitten stuck in a tree: touch the trunk to climb up and rescue it ---
+  catTree.update(dt, player.position);
+  catTree.idleAfter(dt);
+  if (!paused && !driving && !flight && catTree.waiting) {
+    const tp = catTree.interactable.position;
+    if (Math.hypot(player.position.x - tp.x, player.position.z - tp.z) < 1.75) {
+      paused = true;
+      rescuing = true;
+      clearTarget();
+      input.releaseAll();
+      catTree.begin(player.root, () => addCoins(CAT_REWARD));
+    }
+  }
+  if (rescuing) {
+    player.heading = Math.PI; // facing the trunk (rungs on its -Z side)
+    player.update(dt, catTree.active ? 3 : 0);
+    if (!catTree.active) {
+      rescuing = false;
+      paused = false;
+      player.position.y = 0;
+      canvas.focus();
+    }
+  }
+
+  // --- idle for 30 s → pause (so the creatures don't eat all the coins) ---
+  if (!paused && !flight && performance.now() - lastActivity > IDLE_MS) void idlePause();
   for (const it of world.interactables) it.update?.(dt);
 
   // --- coins & jewels ---
@@ -458,6 +511,8 @@ function tick(time: number): void {
 
   // --- travel: 100 coins -> go to the airport and board the plane ---
   airport.update(dt);
+  car.update(dt);
+  if (!flight) airport.setDoorOpen(readyToTravel()); // door shut until she has 100 coins
   notEnoughCooldown -= dt;
   if (!paused && readyToTravel() && !travelHintGiven) {
     travelHintGiven = true;
@@ -523,6 +578,10 @@ function tick(time: number): void {
       jewelAt: collectibles.jewelPositions(),
       solved: save.solved.length,
       level: save.level,
+      difficulty: save.difficulty,
+      monsterCount: monsters.positions().length,
+      rescuing,
+      catAt: [+catTree.interactable.position.x.toFixed(1), +catTree.interactable.position.z.toFixed(1)],
       flying: !!flight,
       character: save.character,
       things: world.interactables.map((i) => [+i.position.x.toFixed(1), +i.position.z.toFixed(1), i.radius]),
@@ -556,15 +615,57 @@ async function pickCharacter(): Promise<void> {
   paused = true;
   clearTarget();
   input.releaseAll();
-  const id = await chooseCharacter(save.character ?? undefined);
+  const { id } = await chooseCharacter(save.character ?? undefined);
+  applyCharacter(id);
+  paused = false;
+  canvas.focus();
+}
+
+function applyCharacter(id: string): void {
   save.character = id;
   writeSave(save);
   player.setCharacter(id);
   setAvatar(id);
+}
+
+/** "Novo jogo": everything back to zero (keeps the chosen character and the settings). */
+function newGame(): void {
+  Object.assign(save, { coins: 0, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null, visited: [] });
+  solved.clear();
+  hud.set('coins', 0);
+  hud.set('jewels', 0);
+  hud.set('correct', 0);
+  loadCity();
+  writeSave(save);
+  showArrival(city.arrival);
+}
+
+/** Start screen on every launch: pick a character, then continue where you were or start from zero. */
+async function startScreen(): Promise<void> {
+  paused = true;
+  const canContinue = save.character !== null;
+  const { id, mode } = await chooseCharacter(save.character ?? undefined, { canContinue });
+  applyCharacter(id);
+  if (mode === 'new') newGame();
+  lastActivity = performance.now();
   paused = false;
   canvas.focus();
 }
+
 const setAvatar = createAvatarButton(save.character ?? 'princesa', () => {
   if (!paused && !flight && !driving) void pickCharacter();
 });
-if (!save.character) void pickCharacter();
+createSettingsButton(
+  () => save.difficulty,
+  (d) => {
+    save.difficulty = d;
+    monsters.difficulty = DIFFICULTY_FACTOR[d];
+    writeSave(save);
+  },
+  () => !paused && !flight,
+  (open) => {
+    paused = open;
+    if (!open) canvas.focus();
+  },
+);
+void startScreen();

@@ -9,7 +9,7 @@ import type { Obstacle } from './world';
 export const RUNWAY_Z = 34;
 export const RUNWAY_START_X = 20;
 export const RUNWAY_END_X = 148;
-export const PARK_X = 45;
+export const PARK_X = 64; // past the end of the terminal (x 30..54), so the stairs are in plain view from the road
 
 /** Area kept free of buildings by the world generator. */
 export const AIRPORT_ZONE: Obstacle = { minX: 12, maxX: 150, minZ: 13, maxZ: 50 };
@@ -65,7 +65,7 @@ export class Airport {
 
     this.doorPoint = new THREE.Vector3(PARK_X + DOOR_LOCAL_X, DOOR_SILL_Y, RUNWAY_Z - FUSELAGE_R - 0.3);
     this.boardPoint = new THREE.Vector3(PARK_X + DOOR_LOCAL_X, 0, RUNWAY_Z - FUSELAGE_R - STAIRS_LEN - 1.2);
-    this.setDoorOpen(true);
+    this.setDoorOpen(false); // opens only when the character has enough coins to travel
   }
 
   setDoorOpen(open: boolean): void {

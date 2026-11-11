@@ -22,6 +22,15 @@ style.textContent = `
   .select-card img { width: 100%; aspect-ratio: 4/5; display: block; border-radius: 16px; background: linear-gradient(#bfe6ff, #e8f7ff); }
   .select-card b { display: block; margin-top: 8px; font: 900 22px/1 system-ui, sans-serif; color: #3b2a5a; }
   .select-card span { display: block; margin-top: 4px; font: 700 15px/1 system-ui, sans-serif; color: #7c6c99; }
+  .select-actions { display: flex; gap: 16px; justify-content: center; padding: 0 16px 24px; }
+  .select-go {
+    border: 0; border-radius: 999px; padding: 16px 36px; cursor: pointer; color: #fff;
+    font: 900 28px/1 system-ui, sans-serif; box-shadow: 0 6px 0 rgba(0,0,0,.15);
+  }
+  .select-go span { margin-right: 6px; }
+  .select-go.continue { background: #22c55e; }
+  .select-go.new { background: #7c3aed; }
+  .select-go:active { transform: translateY(3px); }
   .avatar-btn {
     position: fixed; top: 150px; right: 16px; width: 64px; height: 64px; border: 0; border-radius: 50%; padding: 0;
     background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.15); cursor: pointer; overflow: hidden;
@@ -65,11 +74,15 @@ function renderThumbs(): Map<string, string> {
   return thumbs;
 }
 
+export type StartMode = 'pick' | 'continue' | 'new';
+
 /**
- * Full-screen character picker. Click/tap a card, or move with the arrows and press Enter/Space.
- * Resolves with the chosen character id.
+ * Full-screen character picker. Move with the arrows or click/tap a card.
+ * - In-game (no `start`): choosing a card closes it right away → mode 'pick'.
+ * - Start screen (`start` given): cards only select; then "Continuar" (keep everything, if a saved game exists)
+ *   or "Novo jogo" (start from zero). Enter = Continuar when possible, else Novo jogo.
  */
-export function chooseCharacter(current?: string): Promise<string> {
+export function chooseCharacter(current?: string, start?: { canContinue: boolean }): Promise<{ id: string; mode: StartMode }> {
   const pics = renderThumbs();
   const box = document.createElement('div');
   box.className = 'select';
@@ -91,33 +104,58 @@ export function chooseCharacter(current?: string): Promise<string> {
     return b;
   });
   wrap.append(title, grid);
+  let continueBtn: HTMLButtonElement | null = null;
+  let newBtn: HTMLButtonElement | null = null;
+  if (start) {
+    const row = document.createElement('div');
+    row.className = 'select-actions';
+    if (start.canContinue) {
+      continueBtn = document.createElement('button');
+      continueBtn.className = 'select-go continue';
+      continueBtn.innerHTML = '<span>▶</span> Continuar';
+      row.appendChild(continueBtn);
+    }
+    newBtn = document.createElement('button');
+    newBtn.className = 'select-go new';
+    newBtn.innerHTML = start.canContinue ? '<span>★</span> Novo jogo' : '<span>▶</span> Jogar';
+    row.appendChild(newBtn);
+    wrap.appendChild(row);
+  }
   box.appendChild(wrap);
   document.body.appendChild(box);
   void speak(['Escolhe a tua personagem!']);
 
   let focus = Math.max(0, CHARACTERS.findIndex((d) => d.id === current));
+  let selected = focus;
   const setFocus = (i: number) => {
     cards[focus].classList.remove('focus');
     focus = (i + cards.length) % cards.length;
     cards[focus].classList.add('focus');
     void speak([`${CHARACTERS[focus].name}. ${CHARACTERS[focus].label}.`]);
+    if (start) select(focus, false);
+  };
+  const select = (i: number, say: boolean) => {
+    selected = i;
+    cards.forEach((c) => c.classList.remove('chosen'));
+    cards[i].classList.add('chosen');
+    if (say) void speak([`${CHARACTERS[i].name}!`]);
   };
   cards[focus].classList.add('focus');
+  if (start) select(focus, false);
 
   return new Promise((resolve) => {
     let done = false;
-    const pick = (i: number) => {
+    const finish = (mode: StartMode) => {
       if (done) return;
       done = true;
       window.removeEventListener('keydown', onKey, true);
-      const def = CHARACTERS[i];
-      cards.forEach((c) => c.classList.remove('chosen'));
-      cards[i].classList.add('chosen');
+      const def = CHARACTERS[selected];
+      cards[selected].classList.add('chosen');
       stopSpeaking();
       void speak([`Vamos lá, ${def.name}!`]);
       setTimeout(() => {
         box.remove();
-        resolve(def.id);
+        resolve({ id: def.id, mode });
       }, 700);
     };
     const cols = () => (window.innerWidth <= 760 ? 3 : 5);
@@ -125,13 +163,31 @@ export function chooseCharacter(current?: string): Promise<string> {
       const k = e.key;
       const moves: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -cols(), ArrowDown: cols() };
       if (k in moves) setFocus(focus + moves[k]);
-      else if (k === 'Enter' || k === ' ') pick(focus);
-      else return;
+      else if (k === 'Enter' || k === ' ') {
+        if (!start) {
+          selected = focus;
+          finish('pick');
+        } else finish(start.canContinue ? 'continue' : 'new');
+      } else return;
       e.preventDefault();
       e.stopImmediatePropagation(); // the game must not move behind the picker
     };
     window.addEventListener('keydown', onKey, true);
-    cards.forEach((c, i) => c.addEventListener('click', () => pick(i)));
+    cards.forEach((c, i) =>
+      c.addEventListener('click', () => {
+        if (!start) {
+          selected = i;
+          finish('pick');
+        } else {
+          cards[focus].classList.remove('focus');
+          focus = i;
+          c.classList.add('focus');
+          select(i, true);
+        }
+      }),
+    );
+    continueBtn?.addEventListener('click', () => finish('continue'));
+    newBtn?.addEventListener('click', () => finish('new'));
   });
 }
 

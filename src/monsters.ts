@@ -7,7 +7,7 @@ const HIT_DIST = 1.15;
 const SEE_DIST = 14;
 const WANDER_SPEED = 1.8;
 const CHASE_SPEED = 4.6; // slower than the character (6.5) so she can always run away
-const MAX_MONSTERS = 8;
+const MAX_MONSTERS = 8; // before the difficulty factor (hard doubles it)
 
 const TAUNTS = [
   'Essas moedas são minhas!',
@@ -50,6 +50,11 @@ const COLORS = [0x8e44ad, 0x27ae60, 0x2c3e50, 0xc0392b, 0x16a085];
 export class Monsters {
   private readonly list: Monster[] = [];
   private tauntCooldown = 3;
+  /** Settings difficulty: 0.5 = easy (half the creatures), 1 = medium, 2 = hard (double). */
+  difficulty = 1;
+  /** The same creature may take coins at most twice in a row. */
+  private lastHitter: Monster | null = null;
+  private streak = 0;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -70,7 +75,7 @@ export class Monsters {
     this.tauntCooldown -= dt;
 
     // keep the population in line with the coins
-    const want = monstersFor(coins);
+    const want = Math.max(1, Math.round(monstersFor(coins) * this.difficulty));
     if (this.count < want) this.spawn(player);
     else if (this.count > want) {
       // the farthest one wanders off
@@ -148,8 +153,11 @@ export class Monsters {
       m.body.scale.set(1 + (1 - hop) * 0.08, 1 - (1 - hop) * 0.08, 1 + (1 - hop) * 0.08);
 
       if (m.state === 'chase' && dist < HIT_DIST && !ev.hit) {
-        ev.hit = g.position.clone();
         this.setState(m, 'retreat');
+        if (m === this.lastHitter && this.streak >= 2) continue; // third time in a row: it just backs off
+        this.streak = m === this.lastHitter ? this.streak + 1 : 1;
+        this.lastHitter = m;
+        ev.hit = g.position.clone();
         ev.say = HIT_TAUNTS[Math.floor(Math.random() * HIT_TAUNTS.length)];
         this.tauntCooldown = 5;
       }

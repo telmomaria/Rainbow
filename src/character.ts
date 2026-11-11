@@ -37,6 +37,12 @@ export class Character {
   /** Move by (dx, dz) in world space, sliding along obstacles. */
   move(dx: number, dz: number, obstacles: Obstacle[]): void {
     const p = this.root.position;
+    // already overlapping something (e.g. an object built where she stood)? let her walk out freely
+    if (collides(p.x, p.z, obstacles)) {
+      p.x += dx;
+      p.z += dz;
+      return;
+    }
     // resolve each axis separately so the character slides along walls
     if (!collides(p.x + dx, p.z, obstacles)) p.x += dx;
     if (!collides(p.x, p.z + dz, obstacles)) p.z += dz;

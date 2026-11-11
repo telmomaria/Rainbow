@@ -163,7 +163,7 @@ export class Flight {
     });
     // 7. roll out and stop at the gate
     this.steps.push({
-      dur: 3.3,
+      dur: ((PARK_X - touchX) * 2) / 14, // decelerate from the 14 m/s touchdown speed to a stop at the gate
       run: (t) => {
         const v0 = (PARK_X - touchX) * 2; // so the integral over 1 unit of t covers the distance
         a.plane.position.x = touchX + v0 * (t - (t * t) / 2) / 1;

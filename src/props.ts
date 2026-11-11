@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Interactable, Obstacle } from './world';
+import { SPAWN, onRoad, type Interactable, type Obstacle } from './world';
 import { AIRPORT_ZONE } from './airport';
 import { tone } from './audio';
 
@@ -168,7 +168,7 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
 
   /* ---- placement ---- */
   const taken: { x: number; z: number; r: number }[] = [
-    { x: 0, z: 0, r: 3 }, // spawn
+    { x: SPAWN.x, z: SPAWN.z, r: 7 }, // spawn: never build on/around the start point
     { x: 6, z: -8, r: 1.5 }, // the street lamp from world.ts
   ];
   const circleHitsBox = (x: number, z: number, r: number, o: Obstacle): boolean => {
@@ -177,7 +177,7 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
     return (x - cx) ** 2 + (z - cz) ** 2 < r * r;
   };
   const isFree = (x: number, z: number, r: number, offRoad = true): boolean => {
-    if (offRoad && (Math.abs(x) < 4.6 + r || Math.abs(z) < 4.6 + r)) return false; // roads + kerb
+    if (offRoad && onRoad(x, z, 0.6 + r)) return false; // roads + kerb
     const a = AIRPORT_ZONE;
     if (x + r + 2 > a.minX && x - r - 2 < a.maxX && z + r + 2 > a.minZ && z - r - 2 < a.maxZ) return false;
     if (Math.abs(x) + r > 140 || Math.abs(z) + r > 140) return false;
@@ -214,7 +214,8 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
     [0.8, (at) => createDog(kit, at)],
     [0.8, (at) => createBalloons(kit, at)],
   ];
-  near.forEach(([r, build], i) => props.push(build(place(r, 8, 14, spin + (i / near.length) * TAU))));
+  // spread over the whole city (client: interactions must not be concentrated in the centre)
+  near.forEach(([r, build], i) => props.push(build(place(r, 18, 120, spin + (i / near.length) * TAU))));
 
   // Traffic light with a button on one kerb corner of the crossroads.
   {
@@ -247,7 +248,7 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
       const s1 = rng() < 0.5 ? -1 : 1; // which side of the road
       const s2 = rng() < 0.5 ? -1 : 1; // which direction along it
       const off = 6 + rng() * 2; // distance from the road centre line
-      const start = 7 + rng() * (i < 150 ? 8 : 40);
+      const start = 25 + rng() * (i < 150 ? 60 : 100);
       const x0 = alongX ? s2 * start : s1 * off;
       const z0 = alongX ? s1 * off : s2 * start;
       const dx = alongX ? s2 * gap : 0;
@@ -272,7 +273,7 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
     [0.6, (at) => createMailbox(kit, at)],
     [1.0, (at) => createWindChimes(kit, at)],
   ];
-  far.forEach(([r, build], i) => props.push(build(place(r, 13, 24, spin + q / 2 + (i / far.length) * TAU))));
+  far.forEach(([r, build], i) => props.push(build(place(r, 30, 130, spin + q / 2 + (i / far.length) * TAU))));
 
   // The first prop also drives the shared particle pool.
   const first = props[0];

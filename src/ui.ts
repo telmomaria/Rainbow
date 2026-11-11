@@ -23,7 +23,13 @@ style.textContent = `
     box-shadow: 0 10px 30px rgba(0,0,0,.25); font-family: system-ui, sans-serif; animation: pop .25s ease-out;
   }
   @keyframes pop { from { transform: translateX(-50%) scale(.8); opacity: 0; } }
-  .quiz-text { font: 700 28px/1.3 system-ui, sans-serif; color: #3b2a5a; margin: 0 0 18px; }
+  .quiz-text { font: 700 28px/1.3 system-ui, sans-serif; color: #3b2a5a; margin: 0 52px 18px; }
+  .quiz-repeat {
+    position: absolute; top: 14px; right: 14px; width: 52px; height: 52px; border: 0; border-radius: 50%;
+    background: #ede9fe; cursor: pointer; display: grid; place-items: center; padding: 0;
+  }
+  .quiz-repeat:hover { background: #ddd6fe; }
+  .quiz-repeat svg { width: 30px; height: 30px; }
   .quiz-opts { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   .quiz-opt {
     flex: 1 1 0; min-width: 150px; min-height: 84px; border: 0; border-radius: 22px; cursor: pointer;
@@ -108,10 +114,16 @@ export function askQuestion(q: Question, reward: number): Promise<boolean> {
     const b = document.createElement('button');
     b.className = 'quiz-opt';
     b.textContent = label;
+    b.addEventListener('mouseenter', () => void speak([label])); // hovering an answer reads it out
     opts.appendChild(b);
     return b;
   });
-  box.append(text, opts);
+  const again = document.createElement('button');
+  again.className = 'quiz-repeat';
+  again.setAttribute('aria-label', 'Repetir a pergunta');
+  again.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="#7c3aed" stroke-width="2.6" stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="#7c3aed" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  again.addEventListener('click', () => void speak([q.text, `${options[0]}? ${options[1]}? Ou ${options[2]}?`]));
+  box.append(again, text, opts);
   document.body.appendChild(box);
 
   speak(['Olá!', q.text, `${options[0]}? ${options[1]}? Ou ${options[2]}?`]);
@@ -331,4 +343,108 @@ export function createHomeButton(onHome: () => void): void {
     onHome();
   });
   document.body.appendChild(btn);
+}
+
+
+const pauseStyle = document.createElement('style');
+pauseStyle.textContent = `
+  .idle {
+    position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; cursor: pointer;
+    background: rgba(59, 42, 90, .45); backdrop-filter: blur(3px); animation: fadein .4s;
+  }
+  .idle-play {
+    width: 150px; height: 150px; border-radius: 50%; background: #fff; display: grid; place-items: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25); animation: breathe 1.6s ease-in-out infinite;
+  }
+  .idle-play svg { width: 70px; height: 70px; margin-left: 10px; }
+  @keyframes breathe { 50% { transform: scale(1.08); } }
+  .gear-btn {
+    position: fixed; top: 224px; right: 16px; width: 64px; height: 64px; border: 0; border-radius: 50%; padding: 0;
+    background: rgba(255,255,255,.9); box-shadow: 0 4px 12px rgba(0,0,0,.15); cursor: pointer; display: grid; place-items: center;
+  }
+  .gear-btn svg { width: 36px; height: 36px; }
+  .settings {
+    position: fixed; inset: 0; z-index: 18; display: grid; place-items: center; background: rgba(59,42,90,.35);
+    font-family: system-ui, sans-serif; animation: fadein .25s;
+  }
+  .settings-box { background: #fff; border-radius: 28px; padding: 24px 28px; box-shadow: 0 10px 30px rgba(0,0,0,.25); text-align: center; }
+  .settings-box h2 { margin: 0 0 6px; font: 900 30px/1.1 system-ui, sans-serif; color: #7c3aed; }
+  .settings-box p { margin: 0 0 16px; font: 700 18px/1.2 system-ui, sans-serif; color: #7c6c99; }
+  .settings-opts { display: flex; gap: 12px; }
+  .settings-opts button {
+    border: 0; border-radius: 20px; padding: 14px 18px; min-width: 130px; cursor: pointer; background: #f3f0ff;
+    font: 900 22px/1.1 system-ui, sans-serif; color: #3b2a5a; box-shadow: 0 5px 0 rgba(124,58,237,.18);
+  }
+  .settings-opts button span { display: block; font-size: 34px; margin-bottom: 6px; }
+  .settings-opts button.on { background: #7c3aed; color: #fff; }
+  .settings-close { margin-top: 18px; border: 0; border-radius: 999px; padding: 12px 40px; background: #22c55e; color: #fff;
+    font: 900 22px/1 system-ui, sans-serif; cursor: pointer; }
+`;
+document.head.appendChild(pauseStyle);
+
+/** Idle pause: dimmed screen with a big play button (no text). Resolves on any key, click or tap. */
+export function showIdlePause(): Promise<void> {
+  const el = document.createElement('div');
+  el.className = 'idle';
+  el.innerHTML = '<div class="idle-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="#7c3aed"/></svg></div>';
+  document.body.appendChild(el);
+  return new Promise((resolve) => {
+    const go = (e: Event) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      window.removeEventListener('keydown', go, true);
+      el.remove();
+      resolve();
+    };
+    window.addEventListener('keydown', go, true);
+    el.addEventListener('pointerdown', go);
+  });
+}
+
+export type Difficulty = 'facil' | 'medio' | 'dificil';
+export const DIFFICULTY_FACTOR: Record<Difficulty, number> = { facil: 0.5, medio: 1, dificil: 2 };
+
+/** Gear button (under the portrait) opening the settings: monster difficulty. */
+export function createSettingsButton(get: () => Difficulty, set: (d: Difficulty) => void, canOpen: () => boolean, onOpen: (open: boolean) => void): void {
+  const btn = document.createElement('button');
+  btn.className = 'gear-btn';
+  btn.setAttribute('aria-label', 'Definições');
+  btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#7c3aed" d="M19.4 13a7.5 7.5 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>';
+  document.body.appendChild(btn);
+  btn.addEventListener('click', () => {
+    btn.blur();
+    if (!canOpen()) return;
+    onOpen(true);
+    const ov = document.createElement('div');
+    ov.className = 'settings';
+    const opts: [Difficulty, string, string][] = [
+      ['facil', '🐢', 'Fácil'],
+      ['medio', '🙂', 'Médio'],
+      ['dificil', '🔥', 'Difícil'],
+    ];
+    ov.innerHTML = '<div class="settings-box"><h2>Definições</h2><p>Monstros</p><div class="settings-opts"></div><button class="settings-close">OK</button></div>';
+    const row = ov.querySelector('.settings-opts')!;
+    const buttons = opts.map(([d, icon, label]) => {
+      const b = document.createElement('button');
+      b.innerHTML = `<span>${icon}</span>${label}`;
+      if (get() === d) b.classList.add('on');
+      b.addEventListener('click', () => {
+        set(d);
+        buttons.forEach((x) => x.classList.remove('on'));
+        b.classList.add('on');
+        void speak([label]);
+      });
+      row.appendChild(b);
+      return b;
+    });
+    const close = () => {
+      ov.remove();
+      onOpen(false);
+    };
+    ov.querySelector('.settings-close')!.addEventListener('click', close);
+    ov.addEventListener('pointerdown', (e) => {
+      if (e.target === ov) close();
+    });
+    document.body.appendChild(ov);
+  });
 }
