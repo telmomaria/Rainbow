@@ -1,6 +1,10 @@
 /** Progress persisted in localStorage. No personal data, no accounts. */
 export interface SaveData {
   coins: number;
+  /** Index into CITIES (0 = Portugal). */
+  level: number;
+  /** The whole journey (last city) is done. */
+  finished: boolean;
   /** Jewels picked up (each is also worth coins). */
   jewels: number;
   /** Questions answered correctly. */
@@ -26,6 +30,8 @@ export function loadSave(): SaveData {
       const d = JSON.parse(raw) as Partial<SaveData> & { asked?: string[] };
       return {
         coins: d.coins ?? 0,
+        level: d.level ?? 0,
+        finished: d.finished ?? false,
         jewels: d.jewels ?? 0,
         correct: d.correct ?? 0,
         solved: Array.isArray(d.solved) ? d.solved : Array.isArray(d.asked) ? d.asked : [],
@@ -36,7 +42,7 @@ export function loadSave(): SaveData {
   } catch {
     // corrupted or blocked storage: start fresh
   }
-  return { coins: 0, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null };
+  return { coins: 0, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null };
 }
 
 export function writeSave(data: SaveData): void {

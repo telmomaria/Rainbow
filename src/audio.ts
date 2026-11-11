@@ -15,6 +15,18 @@ if ('speechSynthesis' in window) {
   speechSynthesis.addEventListener('voiceschanged', pickVoice);
 }
 
+/** A creature's taunt: low funny voice; skipped if anything is already being said. */
+export function taunt(text: string): void {
+  if (!('speechSynthesis' in window) || speechSynthesis.speaking || speechSynthesis.pending) return;
+  spokenLog.push(text);
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'pt-PT';
+  if (voice) u.voice = voice;
+  u.rate = 1.1;
+  u.pitch = 0.3;
+  speechSynthesis.speak(u);
+}
+
 /** Every line handed to speech, in order (read by the ?debug QA bridge). */
 export const spokenLog: string[] = [];
 
@@ -76,6 +88,11 @@ export const sfx = {
   },
   jewel: () => [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, i * 0.07, 0.2, 'triangle')),
   right: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.1, 0.25, 'triangle')),
+  bonk: () => {
+    tone(180, 0, 0.15, 'square', 0.12);
+    tone(120, 0.08, 0.25, 'sawtooth', 0.08);
+  },
+  travel: () => [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, i * 0.12, 0.35, 'triangle')),
   wrong: () => {
     tone(392, 0, 0.25, 'sine');
     tone(330, 0.2, 0.35, 'sine');

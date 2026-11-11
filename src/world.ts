@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { City } from './cities';
 
 /** Axis-aligned obstacle on the XZ plane (used for simple circle-vs-box collision). */
 export interface Obstacle {
@@ -25,15 +26,13 @@ export interface World {
   update(dt: number): void;
 }
 
-const BUILDING_COLORS = [0xff8fab, 0xffc56e, 0x9be37a, 0x7ec8ff, 0xc9a4ff, 0xfff07a];
-
 /**
  * Placeholder world: a park with coloured blocks standing in for buildings.
  * It gets replaced by the OSM-generated city in the next milestone.
  */
-export function createWorld(scene: THREE.Scene): World {
-  scene.background = new THREE.Color(0x8fd3ff);
-  scene.fog = new THREE.Fog(0x8fd3ff, 60, 160);
+export function createWorld(scene: THREE.Scene, city: City): World {
+  scene.background = new THREE.Color(city.sky);
+  scene.fog = new THREE.Fog(city.sky, 60, 160);
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x7fbf6a, 1.6);
   scene.add(hemi);
@@ -47,7 +46,7 @@ export function createWorld(scene: THREE.Scene): World {
 
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(300, 300),
-    new THREE.MeshStandardMaterial({ color: 0x7ccf5b }),
+    new THREE.MeshStandardMaterial({ color: city.ground }),
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
@@ -55,7 +54,7 @@ export function createWorld(scene: THREE.Scene): World {
   scene.add(ground);
 
   // A cross of streets so walking has a sense of direction.
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0xb8b2c4 });
+  const roadMat = new THREE.MeshStandardMaterial({ color: city.road });
   for (const [w, d] of [[300, 8], [8, 300]] as const) {
     const road = new THREE.Mesh(new THREE.PlaneGeometry(w, d), roadMat);
     road.rotation.x = -Math.PI / 2;
@@ -65,7 +64,7 @@ export function createWorld(scene: THREE.Scene): World {
   }
 
   const obstacles: Obstacle[] = [];
-  const rng = mulberry32(7);
+  const rng = mulberry32(city.seed);
   for (let i = 0; i < 40; i++) {
     const w = 4 + rng() * 6;
     const d = 4 + rng() * 6;
@@ -77,7 +76,7 @@ export function createWorld(scene: THREE.Scene): World {
     if (Math.abs(z) < 10 + d / 2) z += Math.sign(z || 1) * 14;
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(w, h, d),
-      new THREE.MeshStandardMaterial({ color: BUILDING_COLORS[i % BUILDING_COLORS.length] }),
+      new THREE.MeshStandardMaterial({ color: city.buildings[i % city.buildings.length] }),
     );
     mesh.position.set(x, h / 2, z);
     mesh.castShadow = true;

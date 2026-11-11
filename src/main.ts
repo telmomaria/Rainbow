@@ -5,8 +5,10 @@ import { createWorld, type Interactable } from './world';
 import { Collectibles } from './collectibles';
 import { Npcs, type QuestionNpc } from './npcs';
 import { loadSave, writeSave } from './save';
-import { Hud, askQuestion } from './ui';
-import { sfx, spokenLog } from './audio';
+import { Hud, askQuestion, showArrival, showCityName, showTravel } from './ui';
+import { sfx, spokenLog, taunt } from './audio';
+import { CITIES, COINS_PER_LEVEL, cityAt } from './cities';
+import { Monsters } from './monsters';
 import { isFree } from './spawn';
 
 const WALK_SPEED = 6.5; // m/s
@@ -20,6 +22,10 @@ if (DEBUG) {
     player.position.set(x, 0, z);
     player.heading = h;
   });
+  window.addEventListener('rainbow-coins', (e) => {
+    save.coins = (e as CustomEvent<number>).detail;
+    hud.set('coins', save.coins);
+  });
 }
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -30,14 +36,17 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
-const world = createWorld(scene);
+const save = loadSave();
+let city = cityAt(save.level);
+let world = createWorld(scene, city);
 const player = new Character();
 scene.add(player.root);
 const input = new Input(canvas);
 canvas.focus();
+const cityPill = showCityName(city.name);
 
 const QUESTION_REWARD = 10;
-const save = loadSave();
+const HIT_COST = 3; // coins lost when a creature catches the character
 const RETRY_DELAY_MS = 3 * 60 * 1000; // a missed question comes back after ~3 minutes
 const solved = new Set(save.solved);
 const hud = new Hud(save);
@@ -45,13 +54,56 @@ if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles
   player.position.set(save.pos.x, 0, save.pos.z);
   player.heading = save.pos.h;
 }
-const collectibles = new Collectibles(scene, world.obstacles);
-const npcs = new Npcs(
-  scene,
-  world.obstacles,
-  (id) => !solved.has(id) && (save.retryAt[id] ?? 0) <= Date.now(),
-  player.position,
-);
+const questionAvailable = (id: string) => !solved.has(id) && (save.retryAt[id] ?? 0) <= Date.now();
+let collectibles = new Collectibles(scene, world.obstacles);
+let npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
+let monsters = new Monsters(scene, world.obstacles);
+if (!save.pos) showArrival(city.arrival); // very first start
+
+/** Rebuild everything for the current level's city (in place, no page reload). */
+function loadCity(): void {
+  scene.clear();
+  city = cityAt(save.level);
+  world = createWorld(scene, city);
+  scene.add(player.root, marker);
+  player.position.set(0, 0, 0);
+  player.heading = 0;
+  camYaw = 0;
+  insideInteractable.clear();
+  collectibles = new Collectibles(scene, world.obstacles);
+  npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
+  monsters = new Monsters(scene, world.obstacles);
+  cityPill.textContent = city.name;
+}
+
+let traveling = false;
+async function travel(): Promise<void> {
+  traveling = true;
+  paused = true;
+  clearTarget();
+  input.releaseAll();
+  sfx.travel();
+  const last = save.level >= CITIES.length - 1;
+  await showTravel(last ? null : cityAt(save.level + 1).name);
+  if (last) {
+    save.finished = true;
+  } else {
+    save.coins -= COINS_PER_LEVEL;
+    save.level += 1;
+    save.pos = null;
+    hud.set('coins', save.coins);
+    loadCity();
+    showArrival(city.arrival);
+  }
+  writeSave(save);
+  paused = false;
+  traveling = false;
+  canvas.focus();
+}
+
+// creature hits: brief knockback + blinking, during which she can't be hit again
+const knock = new THREE.Vector3();
+let invulnerable = 0;
 
 /** Remember where the character is, so a reload continues from the same spot. */
 function savePosition(): void {
@@ -254,6 +306,29 @@ function tick(time: number): void {
     else sfx.coin();
   }
 
+  // --- creatures ---
+  const ev = monsters.update(dt, player.position, save.coins, paused);
+  if (ev.say && !paused) taunt(ev.say);
+  if (ev.hit && invulnerable <= 0 && !paused) {
+    const lost = Math.min(HIT_COST, save.coins);
+    if (lost > 0) addCoins(-lost);
+    sfx.bonk();
+    knock.set(player.position.x - ev.hit.x, 0, player.position.z - ev.hit.z).setLength(11);
+    invulnerable = 1.5;
+    clearTarget();
+  }
+  if (knock.lengthSq() > 0.05) {
+    player.move(knock.x * dt, knock.z * dt, world.obstacles);
+    knock.multiplyScalar(Math.exp(-7 * dt));
+  }
+  if (invulnerable > 0) {
+    invulnerable -= dt;
+    player.root.visible = invulnerable <= 0 || Math.floor(invulnerable * 10) % 2 === 0;
+  }
+
+  // --- next city at 100 coins ---
+  if (!paused && !traveling && save.coins >= COINS_PER_LEVEL && !save.finished) void travel();
+
   // --- question characters ---
   const met = npcs.update(dt, player.position);
   if (met && !paused) void meet(met);
@@ -286,6 +361,10 @@ function tick(time: number): void {
       correct: save.correct,
       jewelAt: collectibles.jewelPositions(),
       solved: save.solved.length,
+      level: save.level,
+      city: city.name,
+      monsters: monsters.positions(),
+      invulnerable: +invulnerable.toFixed(2),
       retry: Object.keys(save.retryAt),
       spoken: spokenLog,
       paused,

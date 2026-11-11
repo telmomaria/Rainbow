@@ -17,6 +17,7 @@ Pelo caminho encontra roupas e acessórios para trocar.
 - **Scaffold v7** gerado (CLAUDE.md, ROADMAP, memory/, docs trindade, SKILLS/, .gitignore, .env.example, .mcp.json vazio).
 - **Bootstrap jogável:** cena placeholder, personagem placeholder, setas + rato/toque, colisões, candeeiro interativo (src/main.ts · input.ts · character.ts · world.ts). `?debug` expõe estado em `body[data-debug]` para QA no browser.
 - **Moedas/joias + perguntas faladas** (collectibles.ts · npcs.ts · questions.ts · ui.ts · audio.ts · save.ts). Moeda 1 · joia 5 · certa 10; progresso em localStorage (`rainbow.save.v1`).
+- **Cidades + bichos maus** (cities.ts · monsters.ts): 100 moedas → viagem; bichos escalam com as moedas.
 
 ## What's broken / blocked
 
@@ -26,7 +27,7 @@ Pelo caminho encontra roupas e acessórios para trocar.
 ## Top pending (per ROADMAP §🎯 NEXT)
 
 1. **Telmo testa moedas + perguntas** — Telmo · S · none.
-2. **Subida de nível + bichos maus** — agent · M · none.
+2. **Seleção de personagem / mais interatividade** — agent · M · none.
 3. **Spike OSM Lisboa** — agent · M · fonte de dados.
 
 ## Quick references

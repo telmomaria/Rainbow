@@ -162,3 +162,90 @@ function shuffle<T>(a: T[]): T[] {
 }
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+const travelStyle = document.createElement('style');
+travelStyle.textContent = `
+  .city-pill {
+    position: fixed; top: 16px; right: 16px; padding: 10px 20px; border-radius: 999px;
+    background: rgba(255,255,255,.85); font: 800 26px/1 system-ui, sans-serif; color: #3b2a5a;
+    box-shadow: 0 4px 12px rgba(0,0,0,.15); pointer-events: none; user-select: none;
+  }
+  .arrival {
+    position: fixed; top: 18%; left: 50%; transform: translateX(-50%); padding: 18px 36px; border-radius: 28px;
+    background: rgba(255,255,255,.92); font: 900 44px/1.1 system-ui, sans-serif; color: #7c3aed; text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.2); pointer-events: none; animation: arrive 3.5s ease-in-out forwards;
+  }
+  @keyframes arrive { 0% { opacity: 0; transform: translateX(-50%) scale(.6); } 12%, 80% { opacity: 1; transform: translateX(-50%) scale(1); } 100% { opacity: 0; } }
+  .travel {
+    position: fixed; inset: 0; display: grid; place-items: center; z-index: 10;
+    background: linear-gradient(160deg, #ff8fd0, #a78bfa 45%, #60c5fa); animation: fadein .4s;
+    font-family: system-ui, sans-serif; color: #fff; text-align: center;
+  }
+  @keyframes fadein { from { opacity: 0; } }
+  .travel h1 { font: 900 56px/1.1 system-ui, sans-serif; margin: 0 0 8px; text-shadow: 0 4px 0 rgba(0,0,0,.15); }
+  .travel p { font: 700 34px/1.3 system-ui, sans-serif; margin: 0 0 28px; }
+  .travel .plane { font-size: 90px; display: inline-block; animation: fly 2s ease-in-out infinite; }
+  @keyframes fly { 50% { transform: translate(18px, -14px) rotate(-6deg); } }
+  .travel button {
+    border: 0; border-radius: 999px; padding: 18px 56px; background: #fff; color: #7c3aed; cursor: pointer;
+    font: 900 40px/1 system-ui, sans-serif; box-shadow: 0 8px 0 rgba(0,0,0,.18);
+  }
+  .travel button:active { transform: translateY(4px); box-shadow: 0 4px 0 rgba(0,0,0,.18); }
+`;
+document.head.appendChild(travelStyle);
+
+/** City name, top-right. */
+export function showCityName(name: string): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'city-pill';
+  el.textContent = name;
+  document.body.appendChild(el);
+  return el;
+}
+
+/** Big banner + spoken line when arriving in a city. */
+export function showArrival(text: string): void {
+  const el = document.createElement('div');
+  el.className = 'arrival';
+  el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3600);
+  void speak([text]);
+}
+
+/**
+ * Full-screen "100 coins — let's travel!" moment. `next` null = the whole journey is done.
+ * Resolves when the child presses the button (click/tap, Enter, Space or any arrow).
+ */
+export function showTravel(next: string | null): Promise<void> {
+  const box = document.createElement('div');
+  box.className = 'travel';
+  const title = next ? 'Juntaste 100 moedas!' : 'Fizeste a viagem toda!';
+  const line = next ? `Próxima paragem: ${next}` : 'Visitaste todas as cidades. És incrível!';
+  box.innerHTML = `<div><div class="plane">✈️</div><h1></h1><p></p><button></button></div>`;
+  box.querySelector('h1')!.textContent = title;
+  box.querySelector('p')!.textContent = line;
+  const btn = box.querySelector('button')!;
+  btn.textContent = next ? 'Vamos!' : 'Continuar';
+  document.body.appendChild(box);
+  void speak(next ? ['Boa! Juntaste cem moedas!', `Vamos viajar para ${next}!`] : [title, line]);
+
+  return new Promise((resolve) => {
+    const go = () => {
+      window.removeEventListener('keydown', onKey, true);
+      stopSpeaking();
+      box.remove();
+      resolve();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (['Enter', ' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        go();
+      }
+    };
+    // small delay so a key held while walking doesn't skip the screen instantly
+    setTimeout(() => window.addEventListener('keydown', onKey, true), 1200);
+    btn.addEventListener('click', go);
+  });
+}

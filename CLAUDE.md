@@ -34,9 +34,11 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   Acertou → moedas e a pergunta fica resolvida para sempre. (Regra revista pelo Telmo a 2026-11-11.)
 - **Valores:** moeda = 1 · joia = 5 (e conta no contador de joias) · resposta certa = 10 (e conta no contador ?). Moedas em rastos de 3, espalhadas (~36 no mundo) para não se chegar aos 100 depressa demais. Ao mostrar a pergunta já fica em espera de 3 min (recarregar a página não dá tentativa imediata).
 - **Posição da personagem é gravada** (a cada 2 s e ao sair): recarregar a página continua no mesmo sítio.
-- **Bichos maus:** quantidade/frequência escala com as moedas da personagem; falam e atrapalham; podem bater
-  (perder moedas, nunca "morte" violenta — tom infantil).
-- **Nível:** 100 moedas → próxima cidade. Ordem: Portugal (morada nas Definições) → Roma → Madrid → Londres →
+- **Bichos maus:** quantidade = 1 + moedas/15 (máx. 8); perseguem a 4,6 m/s (sempre mais lentos que a personagem,
+  6,5 m/s, para se poder fugir); provocam com voz grave; tocar = empurrão + perde 3 moedas + 1,5 s a piscar sem
+  poder ser apanhada. Nunca "morte" violenta — tom infantil. Ficam parados durante perguntas e viagens.
+- **Nível:** 100 moedas → ecrã de viagem → próxima cidade (gastam-se 100, o resto passa). Troca de cidade é feita
+  no mesmo ecrã (sem recarregar a página). Ordem: Portugal (morada nas Definições) → Roma → Madrid → Londres →
   Paris → Varsóvia → Vilnius → Moscovo → Pequim → Rio de Janeiro → Cidade do México → Reiquiavique → Nuuk.
 - **Personagens: só originais.** Arquétipos pedidos (princesa, unicórnio, 3 caçadoras-cantoras K-pop,
   extraterrestre fofo, guerreira de ~1500 d.C., jogadora de vólei, bailarina, karateca) com nomes, visual e

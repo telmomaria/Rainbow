@@ -13,10 +13,10 @@ Aplicar no Session End Protocol.
 | # | Action | Owner | Blocker |
 |---|---|---|---|
 | 1 | Telmo testa moedas + perguntas (voz, dificuldade, recompensas) e valida o banco de 36 perguntas em src/questions.ts | Telmo | none |
-| 2 | Subida de nível aos 100 moedas → ecrã de viagem para a cidade seguinte | agent | none |
-| 3 | Bichos maus (spawn em função das moedas, falam, empurram e fazem perder moedas) | agent | none |
-| 4 | Spike OSM: carregar um quarteirão real (Lisboa) → ruas + edifícios low-poly com colisões | agent | decidir fonte de dados (Overpass vs pré-processado) |
-| 5 | Seleção de personagem (1.ª personagem original modelada) | agent | none |
+| 2 | Spike OSM: carregar um quarteirão real (Lisboa) → ruas + edifícios low-poly com colisões | agent | decidir fonte de dados (Overpass vs pré-processado) |
+| 3 | Seleção de personagem (1.ª personagem original modelada) | agent | none |
+| 4 | Mais interatividade sem UI (carro para conduzir, dar moeda a um pobre) | agent | none |
+| 5 | Roupas e acessórios para encontrar e trocar | agent | #3 |
 
 ---
 
@@ -27,8 +27,8 @@ Aplicar no Session End Protocol.
 - ⬜ Morada de início nas Definições (geocoding com cache; respeitar política Nominatim)
 - ⬜ Seleção de personagem: 10 personagens originais (princesa · unicórnio · 3 caçadoras-cantoras K-pop · extraterrestre · guerreira ~1500 d.C. · voleibolista · bailarina · karateca)
 - 🔄 Personagens-NPC com perguntas — base feita (36 perguntas, voz, 3 opções, sem repetição); errar → volta em ~3 min sem revelar; falta banco maior e voz pt-PT garantida
-- ⬜ Bichos maus: spawn em função das moedas, falam, atrapalham, batem (perde moedas)
-- ⬜ Subida de nível aos 100 moedas → próxima cidade (Portugal → Roma → Madrid → Londres → Paris → Varsóvia → Vilnius → Moscovo → Pequim → Rio → Cidade do México → Reiquiavique → Nuuk)
+- ✅ Bichos maus: spawn em função das moedas, falam, atrapalham, batem (perde moedas)
+- 🔄 Subida de nível aos 100 moedas → próxima cidade — viagem feita; cidades ainda são o mundo provisório com palete própria (falta OSM) (Portugal → Roma → Madrid → Londres → Paris → Varsóvia → Vilnius → Moscovo → Pequim → Rio → Cidade do México → Reiquiavique → Nuuk)
 - ⬜ Atribuição "© OpenStreetMap contributors" visível
 
 ### 🟡 Important
@@ -53,6 +53,7 @@ Aplicar no Session End Protocol.
 - ✅ Perguntas faladas: 5 personagens com pergunta, 3 opções (clique · 1/2/3 · ←↑→), certo = +10, errado mostra a certa e a pergunta nunca se repete (2026-11-11)
 - ✅ Contadores no ecrã: moedas · joias apanhadas · respostas certas (ícone ?), gravados em localStorage; áudio desbloqueado no 1.º gesto (2026-11-11)
 - ✅ Errar não revela a resposta e a pergunta volta ~3 min depois; moedas mais espalhadas (36, rastos de 3); posição gravada (reload não volta ao início); THREE.Timer + PCFShadowMap (2026-11-11)
+- ✅ Viagem aos 100 moedas (ecrã + chegada falada, 13 cidades, nome da cidade no canto) e bichos maus (perseguem, provocam, empurram, -3 moedas) (2026-11-11)
 
 ---
 
@@ -65,3 +66,4 @@ Aplicar no Session End Protocol.
 | v1.2 | 2026-11-11 | Moedas, joias, contador, gravação; perguntas faladas com 3 opções |
 | v1.3 | 2026-11-11 | Contadores de joias e respostas certas |
 | v1.4 | 2026-11-11 | Repetir perguntas erradas mais tarde, moedas espalhadas, posição gravada |
+| v1.5 | 2026-11-11 | Viagem entre cidades aos 100 moedas; bichos maus |
