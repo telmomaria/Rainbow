@@ -40,3 +40,8 @@
 ## 2026-11-11 — compras por clique, inventário, dia/noite
 - Lojas só vendem com clique/Enter; inventário lateral (doces comem-se ao tocar; pão para os pombos); definições no ecrã inicial.
 - Subagente: luz pela hora local real (Open-Meteo sunrise/sunset) + 114 candeeiros de rua (instanced, 6 PointLights). QA 13h/17h36/22h OK.
+
+## 2026-11-11 — menu principal acessível + definições
+- Retrato abre a página principal completa (Continuar/Novo jogo/Definições), também no hospital. Dificuldade dentro de "⚙ Definições".
+- Personagem de pergunta dentro do hospital: atores passaram a nascer depois de todos os edifícios (npcsInside = 0 verificado).
+- Bug: classe CSS "settings" do botão colidia com o overlay das definições — renomeada.

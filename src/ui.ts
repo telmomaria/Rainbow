@@ -364,7 +364,7 @@ pauseStyle.textContent = `
   }
   .gear-btn svg { width: 36px; height: 36px; }
   .settings {
-    position: fixed; inset: 0; z-index: 18; display: grid; place-items: center; background: rgba(59,42,90,.35);
+    position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(59,42,90,.35);
     font-family: system-ui, sans-serif; animation: fadein .25s;
   }
   .settings-box { background: #fff; border-radius: 28px; padding: 24px 28px; box-shadow: 0 10px 30px rgba(0,0,0,.25); text-align: center; }
@@ -403,6 +403,43 @@ export function showIdlePause(): Promise<void> {
 
 export type Difficulty = 'facil' | 'medio' | 'dificil';
 export const DIFFICULTY_FACTOR: Record<Difficulty, number> = { facil: 0.5, medio: 1, dificil: 2 };
+
+/** Settings window (monster difficulty). Resolves when closed. */
+export function openSettings(get: () => Difficulty, set: (d: Difficulty) => void): Promise<void> {
+  const ov = document.createElement('div');
+  ov.className = 'settings';
+  const opts: [Difficulty, string, string][] = [
+    ['facil', '🐢', 'Fácil'],
+    ['medio', '🙂', 'Médio'],
+    ['dificil', '🔥', 'Difícil'],
+  ];
+  ov.innerHTML = '<div class="settings-box"><h2>Definições</h2><p>Monstros</p><div class="settings-opts"></div><button class="settings-close">OK</button></div>';
+  const row = ov.querySelector('.settings-opts')!;
+  const buttons = opts.map(([d, icon, label]) => {
+    const b = document.createElement('button');
+    b.innerHTML = `<span>${icon}</span>${label}`;
+    if (get() === d) b.classList.add('on');
+    b.addEventListener('click', () => {
+      set(d);
+      buttons.forEach((x) => x.classList.remove('on'));
+      b.classList.add('on');
+      void speak([label]);
+    });
+    row.appendChild(b);
+    return b;
+  });
+  document.body.appendChild(ov);
+  return new Promise((resolve) => {
+    const close = () => {
+      ov.remove();
+      resolve();
+    };
+    ov.querySelector('.settings-close')!.addEventListener('click', close);
+    ov.addEventListener('pointerdown', (e) => {
+      if (e.target === ov) close();
+    });
+  });
+}
 
 /** Gear button (under the portrait) opening the settings: monster difficulty. */
 export function createSettingsButton(get: () => Difficulty, set: (d: Difficulty) => void, canOpen: () => boolean, onOpen: (open: boolean) => void): void {

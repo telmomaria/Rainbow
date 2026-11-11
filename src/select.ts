@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CHARACTERS, characterById } from './characters';
 import { speak, stopSpeaking } from './audio';
+import { openSettings } from './ui';
 
 const style = document.createElement('style');
 style.textContent = `
@@ -37,6 +38,7 @@ style.textContent = `
   .select-go span { margin-right: 6px; }
   .select-go.continue { background: #22c55e; }
   .select-go.new { background: #7c3aed; }
+  .select-go.cfg { background: #fff; color: #7c3aed; }
   .select-go:active { transform: translateY(3px); }
   .avatar-btn {
     position: fixed; top: 150px; right: 16px; width: 64px; height: 64px; border: 0; border-radius: 50%; padding: 0;
@@ -117,29 +119,6 @@ export function chooseCharacter(
   let continueBtn: HTMLButtonElement | null = null;
   let newBtn: HTMLButtonElement | null = null;
   if (start) {
-    // settings live on the main page: monster difficulty
-    const set = document.createElement('div');
-    set.className = 'select-settings';
-    set.innerHTML = '<b>Monstros</b>';
-    const diffs: ['facil' | 'medio' | 'dificil', string, string][] = [
-      ['facil', '🐢', 'Fácil'],
-      ['medio', '🙂', 'Médio'],
-      ['dificil', '🔥', 'Difícil'],
-    ];
-    const dbtns = diffs.map(([d, icon, label]) => {
-      const b = document.createElement('button');
-      b.className = 'select-diff' + (start.difficulty === d ? ' on' : '');
-      b.innerHTML = `<span>${icon}</span> ${label}`;
-      b.addEventListener('click', () => {
-        dbtns.forEach((x) => x.classList.remove('on'));
-        b.classList.add('on');
-        start.onDifficulty(d);
-        void speak([`Monstros: ${label}`]);
-      });
-      set.appendChild(b);
-      return b;
-    });
-    wrap.appendChild(set);
     const row = document.createElement('div');
     row.className = 'select-actions';
     if (start.canContinue) {
@@ -152,6 +131,15 @@ export function chooseCharacter(
     newBtn.className = 'select-go new';
     newBtn.innerHTML = start.canContinue ? '<span>★</span> Novo jogo' : '<span>▶</span> Jogar';
     row.appendChild(newBtn);
+    // settings (monster difficulty...) behind their own button on the main page
+    const setBtn = document.createElement('button');
+    setBtn.className = 'select-go cfg';
+    setBtn.innerHTML = '<span>⚙</span> Definições';
+    setBtn.addEventListener('click', () => void openSettings(() => start.difficulty, (d) => {
+      start.difficulty = d;
+      start.onDifficulty(d);
+    }));
+    row.appendChild(setBtn);
     wrap.appendChild(row);
   }
   box.appendChild(wrap);
@@ -193,6 +181,7 @@ export function chooseCharacter(
     };
     const cols = () => (window.innerWidth <= 760 ? 3 : 5);
     const onKey = (e: KeyboardEvent) => {
+      if (document.querySelector('.settings')) return;
       const k = e.key;
       const moves: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -cols(), ArrowDown: cols() };
       if (k in moves) setFocus(focus + moves[k]);

@@ -74,10 +74,10 @@ const RETRY_DELAY_MS = 3 * 60 * 1000; // a missed question comes back after ~3 m
 const solved = new Set(save.solved);
 const hud = new Hud(save);
 const questionAvailable = (id: string) => !solved.has(id) && (save.retryAt[id] ?? 0) <= Date.now();
-let collectibles = new Collectibles(scene, world.obstacles);
-let npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
-let monsters = new Monsters(scene, world.obstacles);
-monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
+// created after the city extras (see below) so they never spawn inside the hospital, shops, stadium...
+let collectibles!: Collectibles;
+let npcs!: Npcs;
+let monsters!: Monsters;
 let airport = new Airport(scene, world.obstacles);
 let catTree: CatTree; // assigned by addCityExtras()
 let trouble: Trouble;
@@ -176,6 +176,15 @@ function hurt(from: THREE.Vector3, cost: number): boolean {
   return true;
 }
 let car = addCityExtras();
+spawnActors();
+
+/** Coins, question characters and creatures — always after every building/object exists. */
+function spawnActors(): void {
+  collectibles = new Collectibles(scene, world.obstacles);
+  npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
+  monsters = new Monsters(scene, world.obstacles);
+  monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
+}
 // restore after every obstacle (incl. the airport) exists, so she can never reappear inside something
 player.position.set(SPAWN.x, 0, SPAWN.z);
 player.heading = SPAWN.h;
@@ -218,12 +227,9 @@ function loadCity(): void {
   player.heading = SPAWN.h;
   camYaw = SPAWN.h;
   insideInteractable.clear();
-  collectibles = new Collectibles(scene, world.obstacles);
-  npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
-  monsters = new Monsters(scene, world.obstacles);
-  monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
   airport = new Airport(scene, world.obstacles);
   car = addCityExtras();
+  spawnActors();
   cityPill.textContent = city.name;
   weather.setLights({ hemi: world.hemi, sun: world.sun });
   void weather.setCity(city.name);
@@ -823,6 +829,7 @@ function tick(time: number): void {
       level: save.level,
       difficulty: save.difficulty,
       monsterCount: monsters.positions().length,
+      npcsInside: npcs.list.filter((n) => !isFree(n.group.position.x, n.group.position.z, 0.6, world.obstacles)).length,
       rescuing,
       hospital: hospitalPhase,
       hospitalLeft: Math.max(0, save.hospitalUntil - Date.now()),
@@ -865,16 +872,6 @@ function tick(time: number): void {
 requestAnimationFrame(tick);
 
 
-async function pickCharacter(): Promise<void> {
-  paused = true;
-  clearTarget();
-  input.releaseAll();
-  const { id } = await chooseCharacter(save.character ?? undefined);
-  applyCharacter(id);
-  paused = false;
-  canvas.focus();
-}
-
 function applyCharacter(id: string): void {
   save.character = id;
   writeSave(save);
@@ -886,6 +883,12 @@ function applyCharacter(id: string): void {
 function newGame(): void {
   hospitalPhase = 'none';
   player.root.rotation.x = 0;
+  hospital?.setAmbulanceLights(false);
+  driving = null; // the old car is thrown away with the city
+  player.root.scale.setScalar(1);
+  player.root.visible = true;
+  rescuing = false;
+  buyTarget = null;
   holdItem(null);
   Object.assign(save, { bag: {}, hospitalUntil: 0, coins: 0, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null, visited: [] });
   solved.clear();
@@ -902,15 +905,7 @@ function newGame(): void {
 async function startScreen(): Promise<void> {
   paused = true;
   const canContinue = save.character !== null;
-  const { id, mode } = await chooseCharacter(save.character ?? undefined, {
-    canContinue,
-    difficulty: save.difficulty,
-    onDifficulty: (d) => {
-      save.difficulty = d;
-      monsters.difficulty = DIFFICULTY_FACTOR[d];
-      writeSave(save);
-    },
-  });
+  const { id, mode } = await chooseCharacter(save.character ?? undefined, mainPageOptions(canContinue));
   applyCharacter(id);
   if (mode === 'new') newGame();
   lastActivity = performance.now();
@@ -918,9 +913,44 @@ async function startScreen(): Promise<void> {
   canvas.focus();
 }
 
+let menuOpen = false;
 const setAvatar = createAvatarButton(save.character ?? 'princesa', () => {
-  if (!paused && !flight && !driving) void pickCharacter();
+  // the main page is reachable from anywhere (also from the hospital bed) — except mid-flight or mid-question
+  if (menuOpen || flight || document.querySelector('.quiz')) return;
+  void openMainPage();
 });
+
+/** In-game: back to the main page. "Continuar" resumes exactly where she was; "Novo jogo" restarts. */
+async function openMainPage(): Promise<void> {
+  menuOpen = true;
+  const wasPaused = paused;
+  paused = true;
+  clearTarget();
+  input.releaseAll();
+  const { id, mode } = await chooseCharacter(save.character ?? undefined, mainPageOptions(true));
+  applyCharacter(id);
+  if (mode === 'new') {
+    newGame();
+    paused = false;
+  } else {
+    paused = wasPaused || hospitalPhase === 'bed';
+  }
+  menuOpen = false;
+  lastActivity = performance.now();
+  canvas.focus();
+}
+
+function mainPageOptions(canContinue: boolean) {
+  return {
+    canContinue,
+    difficulty: save.difficulty,
+    onDifficulty: (d: 'facil' | 'medio' | 'dificil') => {
+      save.difficulty = d;
+      monsters.difficulty = DIFFICULTY_FACTOR[d];
+      writeSave(save);
+    },
+  };
+}
 // settings (monster difficulty) live on the start page
 void startScreen().then(() => {
   if (save.hospitalUntil > Date.now()) {
