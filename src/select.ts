@@ -93,7 +93,7 @@ export type StartMode = 'pick' | 'continue' | 'new';
  */
 export function chooseCharacter(
   current?: string,
-  start?: { canContinue: boolean; difficulty: 'facil' | 'medio' | 'dificil'; onDifficulty: (d: 'facil' | 'medio' | 'dificil') => void },
+  start?: { canContinue: boolean; difficulty: 'zero' | 'facil' | 'medio' | 'dificil'; onDifficulty: (d: 'zero' | 'facil' | 'medio' | 'dificil') => void },
 ): Promise<{ id: string; mode: StartMode }> {
   const pics = renderThumbs();
   const box = document.createElement('div');

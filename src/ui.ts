@@ -401,14 +401,15 @@ export function showIdlePause(): Promise<void> {
   });
 }
 
-export type Difficulty = 'facil' | 'medio' | 'dificil';
-export const DIFFICULTY_FACTOR: Record<Difficulty, number> = { facil: 0.5, medio: 1, dificil: 2 };
+export type Difficulty = 'zero' | 'facil' | 'medio' | 'dificil';
+export const DIFFICULTY_FACTOR: Record<Difficulty, number> = { zero: 0, facil: 0.5, medio: 1, dificil: 2 };
 
 /** Settings window (monster difficulty). Resolves when closed. */
 export function openSettings(get: () => Difficulty, set: (d: Difficulty) => void): Promise<void> {
   const ov = document.createElement('div');
   ov.className = 'settings';
   const opts: [Difficulty, string, string][] = [
+    ['zero', '🌈', 'Zero'],
     ['facil', '🐢', 'Fácil'],
     ['medio', '🙂', 'Médio'],
     ['dificil', '🔥', 'Difícil'],
@@ -455,7 +456,8 @@ export function createSettingsButton(get: () => Difficulty, set: (d: Difficulty)
     const ov = document.createElement('div');
     ov.className = 'settings';
     const opts: [Difficulty, string, string][] = [
-      ['facil', '🐢', 'Fácil'],
+      ['zero', '🌈', 'Zero'],
+    ['facil', '🐢', 'Fácil'],
       ['medio', '🙂', 'Médio'],
       ['dificil', '🔥', 'Difícil'],
     ];

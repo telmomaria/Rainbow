@@ -6,7 +6,7 @@ export interface SaveData {
   /** Epoch ms until which she must stay in hospital (0 = not in hospital). */
   hospitalUntil: number;
   /** Monster difficulty from the settings. */
-  difficulty: 'facil' | 'medio' | 'dificil';
+  difficulty: 'zero' | 'facil' | 'medio' | 'dificil';
   /** Cities already visited (names), in order. */
   visited: string[];
   /** Chosen character id (characters.ts); null until the first pick. */

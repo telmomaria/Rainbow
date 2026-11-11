@@ -944,7 +944,7 @@ function mainPageOptions(canContinue: boolean) {
   return {
     canContinue,
     difficulty: save.difficulty,
-    onDifficulty: (d: 'facil' | 'medio' | 'dificil') => {
+    onDifficulty: (d: 'zero' | 'facil' | 'medio' | 'dificil') => {
       save.difficulty = d;
       monsters.difficulty = DIFFICULTY_FACTOR[d];
       writeSave(save);

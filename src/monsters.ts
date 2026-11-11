@@ -75,7 +75,8 @@ export class Monsters {
     this.tauntCooldown -= dt;
 
     // keep the population in line with the coins
-    const want = Math.max(1, Math.round(monstersFor(coins) * this.difficulty));
+    // difficulty 0 = "Zero": no creatures at all; otherwise at least one
+    const want = this.difficulty === 0 ? 0 : Math.max(1, Math.round(monstersFor(coins) * this.difficulty));
     if (this.count < want) this.spawn(player);
     else if (this.count > want) {
       // the farthest one wanders off
