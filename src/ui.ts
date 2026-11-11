@@ -91,7 +91,7 @@ function el(tag: string, className: string): HTMLElement {
 /**
  * Show a spoken question with three big options.
  * Answer by click/tap, by keys 1/2/3, or by arrows ← ↑ → (left / middle / right).
- * Resolves true if the answer was right. The question can only be answered once.
+ * Resolves true if the answer was right. One try per meeting; a wrong answer is not corrected.
  */
 export function askQuestion(q: Question, reward: number): Promise<boolean> {
   const options = shuffle([...q.answers]);
@@ -125,8 +125,8 @@ export function askQuestion(q: Question, reward: number): Promise<boolean> {
       box.classList.add('done');
       const ok = options[i] === correct;
       buttons.forEach((b, j) => {
-        if (options[j] === correct) b.classList.add('right');
-        else if (j === i) b.classList.add('wrong');
+        // a wrong answer never reveals the right one: the question comes back later for another try
+        if (j === i) b.classList.add(ok ? 'right' : 'wrong');
         else b.classList.add('dim');
       });
       if (ok) {
@@ -134,7 +134,7 @@ export function askQuestion(q: Question, reward: number): Promise<boolean> {
         await Promise.all([speak([`Muito bem! Ganhaste ${reward} moedas!`]), wait(1800)]);
       } else {
         sfx.wrong();
-        await Promise.all([speak([`Oh! Não faz mal. A resposta certa era: ${correct}.`]), wait(2500)]);
+        await Promise.all([speak(['Oh! Não é essa. Mais tarde voltas a tentar!']), wait(2200)]);
       }
       stopSpeaking();
       box.remove();

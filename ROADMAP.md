@@ -26,7 +26,7 @@ Aplicar no Session End Protocol.
 - ⬜ Mundo OSM estilizado por cidade (13 cidades) com cache local dos dados
 - ⬜ Morada de início nas Definições (geocoding com cache; respeitar política Nominatim)
 - ⬜ Seleção de personagem: 10 personagens originais (princesa · unicórnio · 3 caçadoras-cantoras K-pop · extraterrestre · guerreira ~1500 d.C. · voleibolista · bailarina · karateca)
-- 🔄 Personagens-NPC com perguntas — base feita (36 perguntas, voz, 3 opções, sem repetição); falta banco maior e voz pt-PT garantida
+- 🔄 Personagens-NPC com perguntas — base feita (36 perguntas, voz, 3 opções, sem repetição); errar → volta em ~3 min sem revelar; falta banco maior e voz pt-PT garantida
 - ⬜ Bichos maus: spawn em função das moedas, falam, atrapalham, batem (perde moedas)
 - ⬜ Subida de nível aos 100 moedas → próxima cidade (Portugal → Roma → Madrid → Londres → Paris → Varsóvia → Vilnius → Moscovo → Pequim → Rio → Cidade do México → Reiquiavique → Nuuk)
 - ⬜ Atribuição "© OpenStreetMap contributors" visível
@@ -52,6 +52,7 @@ Aplicar no Session End Protocol.
 - ✅ Velocidade +30% (6,5 m/s); moedas (1) em rastos de 5 + joias (5) com respawn; contador; localStorage (2026-11-11)
 - ✅ Perguntas faladas: 5 personagens com pergunta, 3 opções (clique · 1/2/3 · ←↑→), certo = +10, errado mostra a certa e a pergunta nunca se repete (2026-11-11)
 - ✅ Contadores no ecrã: moedas · joias apanhadas · respostas certas (ícone ?), gravados em localStorage; áudio desbloqueado no 1.º gesto (2026-11-11)
+- ✅ Errar não revela a resposta e a pergunta volta ~3 min depois; moedas mais espalhadas (36, rastos de 3); posição gravada (reload não volta ao início); THREE.Timer + PCFShadowMap (2026-11-11)
 
 ---
 
@@ -63,3 +64,4 @@ Aplicar no Session End Protocol.
 | v1.1 | 2026-11-11 | Bootstrap jogável: cena, personagem placeholder, setas + rato, colisões, 1.º objeto interativo |
 | v1.2 | 2026-11-11 | Moedas, joias, contador, gravação; perguntas faladas com 3 opções |
 | v1.3 | 2026-11-11 | Contadores de joias e respostas certas |
+| v1.4 | 2026-11-11 | Repetir perguntas erradas mais tarde, moedas espalhadas, posição gravada |

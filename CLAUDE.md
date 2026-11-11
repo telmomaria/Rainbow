@@ -30,8 +30,10 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   setas, contornos nem "prima E". Descobre-se por movimento/contacto (aproximar, tocar, entrar). Feedback só
   no mundo (som, animação, luz).
 - **Perguntas:** matemática · estudo do meio · português, nível 2.º ano (programa PT). Sempre 3 opções.
-  Errou → aquela pergunta/personagem não se repete. Acertou → moedas.
-- **Valores:** moeda = 1 · joia = 5 (e conta no contador de joias) · resposta certa = 10 (e conta no contador ?). Moedas aparecem em rastos de 5. Pergunta é retirada no momento em que é feita (recarregar a página não dá 2.ª tentativa).
+  Errou → **não se revela a resposta certa**; a pergunta volta mais tarde (~3 min) para nova tentativa.
+  Acertou → moedas e a pergunta fica resolvida para sempre. (Regra revista pelo Telmo a 2026-11-11.)
+- **Valores:** moeda = 1 · joia = 5 (e conta no contador de joias) · resposta certa = 10 (e conta no contador ?). Moedas em rastos de 3, espalhadas (~36 no mundo) para não se chegar aos 100 depressa demais. Ao mostrar a pergunta já fica em espera de 3 min (recarregar a página não dá tentativa imediata).
+- **Posição da personagem é gravada** (a cada 2 s e ao sair): recarregar a página continua no mesmo sítio.
 - **Bichos maus:** quantidade/frequência escala com as moedas da personagem; falam e atrapalham; podem bater
   (perder moedas, nunca "morte" violenta — tom infantil).
 - **Nível:** 100 moedas → próxima cidade. Ordem: Portugal (morada nas Definições) → Roma → Madrid → Londres →

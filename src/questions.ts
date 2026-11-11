@@ -1,7 +1,7 @@
 /**
  * Question bank — 2.º ano do 1.º ciclo (7–8 anos), PT-PT.
  * `answers[0]` is always the correct one; options are shuffled when shown.
- * Ids are stable: they are stored in the save so a question is never asked twice.
+ * Ids are stable: they are stored in the save (solved ones retire; wrong ones come back later).
  */
 export type Subject = 'matematica' | 'estudo-do-meio' | 'portugues';
 
@@ -56,9 +56,9 @@ export const QUESTIONS: Question[] = [
   { id: 'p12', subject: 'portugues', text: 'Qual é o plural de pão?', answers: ['Pães', 'Pãos', 'Pões'] },
 ];
 
-/** Pick a random question that has not been asked yet; null when the bank is exhausted. */
-export function nextQuestion(asked: Set<string>, reserved: Set<string>): Question | null {
-  const pool = QUESTIONS.filter((q) => !asked.has(q.id) && !reserved.has(q.id));
+/** Pick a random available question not already held by a character; null if none right now. */
+export function nextQuestion(available: (id: string) => boolean, reserved: Set<string>): Question | null {
+  const pool = QUESTIONS.filter((q) => available(q.id) && !reserved.has(q.id));
   if (pool.length === 0) return null;
   return pool[Math.floor(Math.random() * pool.length)];
 }

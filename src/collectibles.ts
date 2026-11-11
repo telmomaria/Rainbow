@@ -5,9 +5,9 @@ import type { Obstacle } from './world';
 export const COIN_VALUE = 1;
 export const JEWEL_VALUE = 5;
 const PICKUP_RADIUS = 1.1;
-const TARGET_COINS = 120;
-const TRAIL = 5; // coins are laid out in short trails, easy to follow and satisfying to collect
-const TARGET_JEWELS = 5;
+const TARGET_COINS = 36;
+const TRAIL = 3; // coins are laid out in short trails, easy to follow and satisfying to collect
+const TARGET_JEWELS = 3;
 
 interface Item {
   mesh: THREE.Mesh;
@@ -44,24 +44,24 @@ export class Collectibles {
     private readonly obstacles: Obstacle[],
   ) {
     // a first trail straight ahead of the spawn point, so the goal is obvious from second one
-    for (let i = 0; i < TRAIL; i++) this.place('coin', new THREE.Vector3(0, 0, -4 - i * 1.6));
+    for (let i = 0; i < TRAIL; i++) this.place('coin', new THREE.Vector3(0, 0, -4 - i * 2));
     for (let i = 1; i < TARGET_COINS / TRAIL; i++) this.spawnTrail();
     for (let i = 0; i < TARGET_JEWELS; i++) this.spawn('jewel');
   }
 
   /** A short straight line of coins starting at a free spot (stops early at walls). */
   private spawnTrail(avoid?: THREE.Vector3): void {
-    const start = randomFreeSpot(this.obstacles, { radius: 0.8, avoid, minDist: avoid ? 12 : 3, center: avoid, range: avoid ? 45 : 70 });
+    const start = randomFreeSpot(this.obstacles, { radius: 0.8, avoid, minDist: avoid ? 25 : 8, center: avoid, range: avoid ? 70 : 110 });
     const a = Math.random() * Math.PI * 2;
     for (let i = 0; i < TRAIL; i++) {
-      const p = start.clone().add(new THREE.Vector3(Math.cos(a) * i * 1.6, 0, Math.sin(a) * i * 1.6));
+      const p = start.clone().add(new THREE.Vector3(Math.cos(a) * i * 2, 0, Math.sin(a) * i * 2));
       if (!isFree(p.x, p.z, 0.6, this.obstacles)) break;
       this.place('coin', p);
     }
   }
 
   private spawn(kind: Item['kind'], avoid?: THREE.Vector3): void {
-    this.place(kind, randomFreeSpot(this.obstacles, { radius: 0.8, avoid, minDist: avoid ? 15 : 3 }));
+    this.place(kind, randomFreeSpot(this.obstacles, { radius: 0.8, avoid, minDist: avoid ? 30 : 15, range: 110 }));
   }
 
   private place(kind: Item['kind'], p: THREE.Vector3): void {
@@ -121,7 +121,7 @@ export class Collectibles {
       const coins = this.items.filter((i) => i.kind === 'coin' && i.taken === null).length;
       const jewels = this.items.filter((i) => i.kind === 'jewel' && i.taken === null).length;
       if (coins <= TARGET_COINS - TRAIL) this.spawnTrail(player);
-      if (jewels < TARGET_JEWELS && Math.random() < 0.25) this.spawn('jewel', player);
+      if (jewels < TARGET_JEWELS && Math.random() < 0.1) this.spawn('jewel', player);
     }
     return { value, kinds };
   }

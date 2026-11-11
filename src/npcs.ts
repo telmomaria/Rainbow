@@ -28,15 +28,15 @@ export class Npcs {
   constructor(
     private readonly scene: THREE.Scene,
     private readonly obstacles: Obstacle[],
-    private readonly asked: Set<string>,
+    private readonly available: (id: string) => boolean,
     player: THREE.Vector3,
   ) {
     for (let i = 0; i < MAX_NPCS; i++) this.spawn(player, 8);
   }
 
   private spawn(player: THREE.Vector3, minDist: number): void {
-    const q = nextQuestion(this.asked, this.reserved);
-    if (!q) return; // question bank exhausted
+    const q = nextQuestion(this.available, this.reserved);
+    if (!q) return; // nothing available right now (all solved or cooling down) - retried by the timer
     this.reserved.add(q.id);
     const p = randomFreeSpot(this.obstacles, { radius: 1.2, avoid: player, minDist, range: 60 });
     const group = buildNpc();
@@ -87,7 +87,7 @@ export class Npcs {
     return met;
   }
 
-  /** The question was asked (right or wrong): this NPC leaves and the question is retired. */
+  /** The question was asked (right or wrong): this NPC leaves; the save decides if it comes back. */
   dismiss(n: QuestionNpc): void {
     n.leaving = 0;
     this.reserved.delete(n.question.id);

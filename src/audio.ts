@@ -15,11 +15,18 @@ if ('speechSynthesis' in window) {
   speechSynthesis.addEventListener('voiceschanged', pickVoice);
 }
 
+/** Every line handed to speech, in order (read by the ?debug QA bridge). */
+export const spokenLog: string[] = [];
+
 /** Speak a sequence of sentences; resolves when finished (or immediately if speech is unavailable). */
 export function speak(lines: string[]): Promise<void> {
   if (!('speechSynthesis' in window)) return Promise.resolve();
   speechSynthesis.cancel();
+  spokenLog.push(...lines);
   return new Promise((resolve) => {
+    // Safety net: some browsers never fire onend (missing voice, Chrome quirks) — never block the game on it.
+    const chars = lines.reduce((n, l) => n + l.length, 0);
+    setTimeout(resolve, 2500 + chars * 110);
     lines.forEach((text, i) => {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'pt-PT';

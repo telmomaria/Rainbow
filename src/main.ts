@@ -1,12 +1,13 @@
 import * as THREE from 'three';
-import { Character } from './character';
+import { CHARACTER_RADIUS, Character } from './character';
 import { Input } from './input';
 import { createWorld, type Interactable } from './world';
 import { Collectibles } from './collectibles';
 import { Npcs, type QuestionNpc } from './npcs';
 import { loadSave, writeSave } from './save';
 import { Hud, askQuestion } from './ui';
-import { sfx } from './audio';
+import { sfx, spokenLog } from './audio';
+import { isFree } from './spawn';
 
 const WALK_SPEED = 6.5; // m/s
 const TURN_SPEED = 2.6; // rad/s (arrow keys)
@@ -25,7 +26,7 @@ const canvas = document.getElementById('game') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
@@ -37,10 +38,28 @@ canvas.focus();
 
 const QUESTION_REWARD = 10;
 const save = loadSave();
-const asked = new Set(save.asked);
+const RETRY_DELAY_MS = 3 * 60 * 1000; // a missed question comes back after ~3 minutes
+const solved = new Set(save.solved);
 const hud = new Hud(save);
+if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles)) {
+  player.position.set(save.pos.x, 0, save.pos.z);
+  player.heading = save.pos.h;
+}
 const collectibles = new Collectibles(scene, world.obstacles);
-const npcs = new Npcs(scene, world.obstacles, asked, player.position);
+const npcs = new Npcs(
+  scene,
+  world.obstacles,
+  (id) => !solved.has(id) && (save.retryAt[id] ?? 0) <= Date.now(),
+  player.position,
+);
+
+/** Remember where the character is, so a reload continues from the same spot. */
+function savePosition(): void {
+  save.pos = { x: +player.position.x.toFixed(2), z: +player.position.z.toFixed(2), h: +player.heading.toFixed(3) };
+  writeSave(save);
+}
+setInterval(savePosition, 2000);
+window.addEventListener('pagehide', savePosition);
 /** True while a question is on screen: the character stands still. */
 let paused = false;
 
@@ -58,11 +77,14 @@ async function meet(npc: QuestionNpc): Promise<void> {
   const dx = npc.group.position.x - player.position.x;
   const dz = npc.group.position.z - player.position.z;
   player.heading = Math.atan2(-dx, -dz);
-  asked.add(npc.question.id);
-  save.asked = [...asked];
-  writeSave(save); // retired immediately: reloading the page can't give a second try
+  const id = npc.question.id;
+  save.retryAt[id] = Date.now() + RETRY_DELAY_MS; // set now: reloading mid-question can't give an instant retry
+  writeSave(save);
   const ok = await askQuestion(npc.question, QUESTION_REWARD);
   if (ok) {
+    solved.add(id);
+    save.solved = [...solved];
+    delete save.retryAt[id];
     save.correct += 1;
     hud.set('correct', save.correct);
     addCoins(QUESTION_REWARD);
@@ -146,11 +168,13 @@ function isDescendant(obj: THREE.Object3D, root: THREE.Object3D): boolean {
   return false;
 }
 
-const clock = new THREE.Clock();
+const timer = new THREE.Timer();
+timer.connect(document); // pauses the clock while the tab is hidden
 let elapsed = 0;
 
-function tick(): void {
-  const dt = Math.min(clock.getDelta(), 0.05);
+function tick(time: number): void {
+  timer.update(time);
+  const dt = Math.min(timer.getDelta(), 0.05);
   elapsed += dt;
 
   const taps = input.consumeTaps();
@@ -261,7 +285,9 @@ function tick(): void {
       jewels: save.jewels,
       correct: save.correct,
       jewelAt: collectibles.jewelPositions(),
-      asked: save.asked.length,
+      solved: save.solved.length,
+      retry: Object.keys(save.retryAt),
+      spoken: spokenLog,
       paused,
       npcs: npcs.list
         .filter((n) => n.leaving === null)
