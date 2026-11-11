@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { City } from './cities';
+import { AIRPORT_ZONE } from './airport';
 
 /** Axis-aligned obstacle on the XZ plane (used for simple circle-vs-box collision). */
 export interface Obstacle {
@@ -74,6 +75,8 @@ export function createWorld(scene: THREE.Scene, city: City): World {
     // keep the streets and the spawn area clear
     if (Math.abs(x) < 10 + w / 2) x += Math.sign(x || 1) * 14;
     if (Math.abs(z) < 10 + d / 2) z += Math.sign(z || 1) * 14;
+    const z0 = AIRPORT_ZONE;
+    if (x + w / 2 > z0.minX && x - w / 2 < z0.maxX && z + d / 2 > z0.minZ && z - d / 2 < z0.maxZ) continue; // airport
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(w, h, d),
       new THREE.MeshStandardMaterial({ color: city.buildings[i % city.buildings.length] }),
@@ -83,6 +86,21 @@ export function createWorld(scene: THREE.Scene, city: City): World {
     mesh.receiveShadow = true;
     scene.add(mesh);
     obstacles.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
+  }
+
+  // fluffy clouds high up (seen when flying between cities)
+  const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
+  const puff = new THREE.SphereGeometry(1, 12, 10);
+  for (let i = 0; i < 30; i++) {
+    const cloud = new THREE.Group();
+    for (let k = 0; k < 5; k++) {
+      const s = new THREE.Mesh(puff, cloudMat);
+      s.scale.setScalar(3 + rng() * 3);
+      s.position.set((k - 2) * 3.2, rng() * 1.5, (rng() - 0.5) * 3);
+      cloud.add(s);
+    }
+    cloud.position.set((rng() - 0.5) * 300, 42 + rng() * 6, (rng() - 0.5) * 300);
+    scene.add(cloud);
   }
 
   const interactables: Interactable[] = [createLamp(scene, new THREE.Vector3(6, 0, -8), obstacles)];

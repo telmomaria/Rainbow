@@ -5,10 +5,12 @@ import { createWorld, type Interactable } from './world';
 import { Collectibles } from './collectibles';
 import { Npcs, type QuestionNpc } from './npcs';
 import { loadSave, writeSave } from './save';
-import { Hud, askQuestion, showArrival, showCityName, showTravel } from './ui';
-import { sfx, spokenLog, taunt } from './audio';
+import { Hud, askQuestion, setCompass, setFade, showArrival, showBanner, showCityName, showTravel } from './ui';
+import { speak, sfx, spokenLog, taunt, voiceInfo } from './audio';
 import { CITIES, COINS_PER_LEVEL, cityAt } from './cities';
 import { Monsters } from './monsters';
+import { Airport } from './airport';
+import { Flight } from './flight';
 import { isFree } from './spawn';
 
 const WALK_SPEED = 6.5; // m/s
@@ -50,14 +52,16 @@ const HIT_COST = 3; // coins lost when a creature catches the character
 const RETRY_DELAY_MS = 3 * 60 * 1000; // a missed question comes back after ~3 minutes
 const solved = new Set(save.solved);
 const hud = new Hud(save);
-if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles)) {
-  player.position.set(save.pos.x, 0, save.pos.z);
-  player.heading = save.pos.h;
-}
 const questionAvailable = (id: string) => !solved.has(id) && (save.retryAt[id] ?? 0) <= Date.now();
 let collectibles = new Collectibles(scene, world.obstacles);
 let npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
 let monsters = new Monsters(scene, world.obstacles);
+let airport = new Airport(scene, world.obstacles);
+// restore after every obstacle (incl. the airport) exists, so she can never reappear inside something
+if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles)) {
+  player.position.set(save.pos.x, 0, save.pos.z);
+  player.heading = save.pos.h;
+}
 if (!save.pos) showArrival(city.arrival); // very first start
 
 /** Rebuild everything for the current level's city (in place, no page reload). */
@@ -73,31 +77,62 @@ function loadCity(): void {
   collectibles = new Collectibles(scene, world.obstacles);
   npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
   monsters = new Monsters(scene, world.obstacles);
+  airport = new Airport(scene, world.obstacles);
   cityPill.textContent = city.name;
 }
 
-let traveling = false;
-async function travel(): Promise<void> {
-  traveling = true;
+/** Travel = walk to the airport, board the plane, fly, land in the next city. */
+let flight: Flight | null = null;
+let travelHintGiven = false;
+let notEnoughCooldown = 0;
+const lastLevel = () => save.level >= CITIES.length - 1;
+const readyToTravel = () => save.coins >= COINS_PER_LEVEL && !lastLevel();
+
+function startFlight(): void {
   paused = true;
   clearTarget();
   input.releaseAll();
   sfx.travel();
-  const last = save.level >= CITIES.length - 1;
-  await showTravel(last ? null : cityAt(save.level + 1).name);
-  if (last) {
-    save.finished = true;
-  } else {
-    save.coins -= COINS_PER_LEVEL;
-    save.level += 1;
-    save.pos = null;
-    hud.set('coins', save.coins);
-    loadCity();
-    showArrival(city.arrival);
-  }
+  const next = cityAt(save.level + 1);
+  flight = new Flight(
+    airport,
+    player,
+    () => {
+      save.coins -= COINS_PER_LEVEL;
+      save.level += 1;
+      save.pos = null;
+      writeSave(save);
+      hud.set('coins', save.coins);
+      loadCity();
+      player.root.visible = false;
+      return airport;
+    },
+    setFade,
+    () => showBanner(`A voar para ${next.name}  ✈️`, 4000),
+  );
+}
+
+function endFlight(): void {
+  flight = null;
+  paused = false;
+  travelHintGiven = false;
+  // face the city (towards -X), camera behind her, clear of the plane and the terminal
+  player.heading = Math.PI / 2;
+  camYaw = Math.PI / 2;
+  savePosition();
+  showArrival(city.arrival);
+  canvas.focus();
+}
+
+/** Last city: the whole journey is done. */
+async function finishJourney(): Promise<void> {
+  paused = true;
+  input.releaseAll();
+  sfx.travel();
+  await showTravel(null);
+  save.finished = true;
   writeSave(save);
   paused = false;
-  traveling = false;
   canvas.focus();
 }
 
@@ -107,6 +142,7 @@ let invulnerable = 0;
 
 /** Remember where the character is, so a reload continues from the same spot. */
 function savePosition(): void {
+  if (flight) return; // mid-flight positions (stairs, cabin) are not places to resume from
   save.pos = { x: +player.position.x.toFixed(2), z: +player.position.z.toFixed(2), h: +player.heading.toFixed(3) };
   writeSave(save);
 }
@@ -245,7 +281,7 @@ function tick(time: number): void {
   let speed = 0;
   const before = player.position.clone();
   if (paused) {
-    // standing still while talking
+    // standing still while talking / flying
   } else if (k.up || k.down || k.left || k.right) {
     clearTarget(); // keyboard always takes over from click-to-walk
     if (k.left) player.heading += TURN_SPEED * dt;
@@ -277,7 +313,7 @@ function tick(time: number): void {
       if (stuckTime > 0.4) clearTarget();
     }
   }
-  player.update(dt, speed);
+  if (!flight) player.update(dt, speed);
 
   // --- touch-to-interact (edge triggered: fires once when the character reaches the object) ---
   for (const it of world.interactables) {
@@ -326,8 +362,31 @@ function tick(time: number): void {
     player.root.visible = invulnerable <= 0 || Math.floor(invulnerable * 10) % 2 === 0;
   }
 
-  // --- next city at 100 coins ---
-  if (!paused && !traveling && save.coins >= COINS_PER_LEVEL && !save.finished) void travel();
+  // --- travel: 100 coins -> go to the airport and board the plane ---
+  airport.update(dt);
+  notEnoughCooldown -= dt;
+  if (!paused && readyToTravel() && !travelHintGiven) {
+    travelHintGiven = true;
+    const next = cityAt(save.level + 1).name;
+    showBanner('Vai ao aeroporto!  ✈️', 4000);
+    void speak(['Boa! Juntaste cem moedas!', `Vai ao aeroporto e apanha o avião para ${next}!`]);
+  }
+  if (!paused && lastLevel() && save.coins >= COINS_PER_LEVEL && !save.finished) void finishJourney();
+  if (!paused && !flight) {
+    const b = airport.boardPoint;
+    if (Math.hypot(player.position.x - b.x, player.position.z - b.z) < 1.4) {
+      if (readyToTravel()) startFlight();
+      else if (!lastLevel() && notEnoughCooldown <= 0) {
+        notEnoughCooldown = 8;
+        void speak([`Para viajar precisas de ${COINS_PER_LEVEL} moedas. Tens ${save.coins}!`]);
+      }
+    }
+  }
+  setCompass(
+    readyToTravel() && !flight
+      ? Math.atan2(airport.boardPoint.x - player.position.x, airport.boardPoint.z - player.position.z) - camYaw
+      : null,
+  );
 
   // --- question characters ---
   const met = npcs.update(dt, player.position);
@@ -340,6 +399,12 @@ function tick(time: number): void {
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     camYaw += diff * Math.min(1, dt * 2.5);
   }
+  if (flight) {
+    const shot = flight.update(dt);
+    camera.position.lerp(shot.pos, Math.min(1, dt * 4));
+    camera.lookAt(shot.look);
+    if (flight.done) endFlight();
+  } else {
   const target = player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
   camera.position.set(
     target.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist,
@@ -347,6 +412,7 @@ function tick(time: number): void {
     target.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist,
   );
   camera.lookAt(target);
+  }
 
   if (DEBUG) {
     const lamp = world.interactables[0].object.children.find((c) => c instanceof THREE.PointLight);
@@ -362,6 +428,10 @@ function tick(time: number): void {
       jewelAt: collectibles.jewelPositions(),
       solved: save.solved.length,
       level: save.level,
+      flying: !!flight,
+      board: [airport.boardPoint.x, airport.boardPoint.z],
+      plane: [+airport.plane.position.x.toFixed(1), +airport.plane.position.y.toFixed(1)],
+      voices: voiceInfo(),
       city: city.name,
       monsters: monsters.positions(),
       invulnerable: +invulnerable.toFixed(2),

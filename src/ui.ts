@@ -249,3 +249,56 @@ export function showTravel(next: string | null): Promise<void> {
     btn.addEventListener('click', go);
   });
 }
+
+const extraStyle = document.createElement('style');
+extraStyle.textContent = `
+  .compass {
+    position: fixed; top: 90px; left: 16px; width: 76px; height: 76px; border-radius: 50%;
+    background: rgba(255,255,255,.9); box-shadow: 0 4px 12px rgba(0,0,0,.15); display: none;
+    place-items: center; pointer-events: none; font-size: 30px;
+  }
+  .compass .arrow {
+    position: absolute; inset: 6px; display: grid; justify-items: center; align-items: start;
+    font: 900 26px/1 system-ui, sans-serif; color: #7c3aed;
+  }
+  .fade { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .8s; z-index: 5; }
+  .fade.on { opacity: 1; }
+`;
+document.head.appendChild(extraStyle);
+
+const compass = document.createElement('div');
+compass.className = 'compass';
+compass.innerHTML = '<span>✈️</span><div class="arrow">▲</div>';
+document.body.appendChild(compass);
+const compassArrow = compass.querySelector('.arrow') as HTMLElement;
+
+/**
+ * Airport direction, relative to the camera (radians, 0 = straight ahead into the screen), or null to hide.
+ * This is navigation help, not an interaction hint.
+ */
+export function setCompass(angle: number | null): void {
+  if (angle === null) {
+    compass.style.display = 'none';
+    return;
+  }
+  compass.style.display = 'grid';
+  // world angle measured from +Z; the camera looks towards -Z when camYaw = 0, so flip by PI
+  compassArrow.style.transform = `rotate(${Math.PI - angle}rad)`;
+}
+
+const fadeEl = document.createElement('div');
+fadeEl.className = 'fade';
+document.body.appendChild(fadeEl);
+export function setFade(opaque: boolean): void {
+  fadeEl.classList.toggle('on', opaque);
+}
+
+/** Short banner without speech (speech is handled by the caller). */
+export function showBanner(text: string, ms = 3500): void {
+  const el = document.createElement('div');
+  el.className = 'arrival';
+  el.style.animationDuration = `${ms}ms`;
+  el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), ms + 100);
+}

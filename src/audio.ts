@@ -1,13 +1,37 @@
 /** Speech (pt-PT) and tiny synthesized sound effects — no audio files needed. */
 
+/** Narrator (questions, travel): a friendly female pt-PT voice. */
 let voice: SpeechSynthesisVoice | null = null;
+/** Creatures: a male pt-PT voice when the system has one, else the narrator voice pitched way down. */
+let monsterVoice: SpeechSynthesisVoice | null = null;
+let monsterIsMale = false;
+
+// Browsers don't expose a voice's gender, so go by known voice names.
+// pt-PT: Edge ships "Microsoft Duarte Online (Natural)" (male) and Raquel/Fernanda (female);
+// Windows itself only installs "Microsoft Helia" (female).
+const MALE_PT_PT = /duarte|cristiano|joaquim|tiago/i;
+const MALE_PT = /duarte|cristiano|antonio|antónio|daniel|fabio|fábio|julio|júlio|donato|humberto|nicolau|valerio|valério/i;
+const FEMALE = /helia|raquel|fernanda|francisca|luciana|maria|joana|female|feminin/i;
 
 function pickVoice(): void {
   const voices = speechSynthesis.getVoices();
+  const ptPT = voices.filter((v) => v.lang.toLowerCase().replace('_', '-') === 'pt-pt');
+  const pt = voices.filter((v) => v.lang.toLowerCase().startsWith('pt'));
   voice =
-    voices.find((v) => v.lang.toLowerCase() === 'pt-pt') ??
-    voices.find((v) => v.lang.toLowerCase().startsWith('pt')) ??
+    ptPT.find((v) => FEMALE.test(v.name)) ??
+    ptPT.find((v) => !MALE_PT.test(v.name)) ??
+    ptPT[0] ??
+    pt.find((v) => !MALE_PT.test(v.name)) ??
+    pt[0] ??
     null;
+  const male = ptPT.find((v) => MALE_PT_PT.test(v.name)) ?? ptPT.find((v) => MALE_PT.test(v.name)) ?? null;
+  monsterIsMale = male !== null;
+  monsterVoice = male ?? voice;
+}
+
+/** Which voices were chosen (for the ?debug bridge). */
+export function voiceInfo(): { narrator: string | null; monster: string | null; monsterIsMale: boolean } {
+  return { narrator: voice?.name ?? null, monster: monsterVoice?.name ?? null, monsterIsMale };
 }
 
 if ('speechSynthesis' in window) {
@@ -21,9 +45,10 @@ export function taunt(text: string): void {
   spokenLog.push(text);
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'pt-PT';
-  if (voice) u.voice = voice;
-  u.rate = 1.1;
-  u.pitch = 0.3;
+  if (monsterVoice) u.voice = monsterVoice;
+  // a real male voice only needs a little growl; a female fallback needs the lowest pitch to sound like a big creature
+  u.rate = monsterIsMale ? 1.05 : 0.9;
+  u.pitch = monsterIsMale ? 0.6 : 0;
   speechSynthesis.speak(u);
 }
 
