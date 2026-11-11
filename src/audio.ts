@@ -124,3 +124,8 @@ export const sfx = {
     tone(330, 0.2, 0.35, 'sine');
   },
 };
+
+/** The shared AudioContext once the first user gesture unlocked it (null before) — for ambient sounds. */
+export function audioContext(): AudioContext | null {
+  return ctx && ctx.state === 'running' ? ctx : null;
+}

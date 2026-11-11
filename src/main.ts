@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CHARACTER_RADIUS, Character } from './character';
 import { Input } from './input';
-import { createWorld, mulberry32, type Interactable } from './world';
+import { SPAWN, createWorld, mulberry32, type Interactable } from './world';
 import { createProps } from './props';
 import { Collectibles } from './collectibles';
 import { Npcs, type QuestionNpc } from './npcs';
@@ -63,6 +63,8 @@ let monsters = new Monsters(scene, world.obstacles);
 let airport = new Airport(scene, world.obstacles);
 let car = addCityExtras();
 // restore after every obstacle (incl. the airport) exists, so she can never reappear inside something
+player.position.set(SPAWN.x, 0, SPAWN.z);
+player.heading = SPAWN.h;
 if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles)) {
   player.position.set(save.pos.x, 0, save.pos.z);
   player.heading = save.pos.h;
@@ -71,7 +73,7 @@ if (!save.pos) showArrival(city.arrival); // very first start
 
 /** Hand-made interactive situations in every city: a car to drive and someone to give a coin to. */
 function addCityExtras(): Car {
-  const c = new Car(scene, world.obstacles, new THREE.Vector3(-14, 0, 0), Math.PI / 2, city.buildings[0], () => enterCar());
+  const c = new Car(scene, world.obstacles, new THREE.Vector3(-16, 0, 7), Math.PI / 2, city.buildings[0], () => enterCar());
   world.interactables.push(c.interactable);
   world.interactables.push(
     createBeggar(scene, world.obstacles, new THREE.Vector3(-8, 0, -8), {
@@ -90,9 +92,9 @@ function loadCity(): void {
   city = cityAt(save.level);
   world = createWorld(scene, city);
   scene.add(player.root, marker);
-  player.position.set(0, 0, 0);
-  player.heading = 0;
-  camYaw = 0;
+  player.position.set(SPAWN.x, 0, SPAWN.z);
+  player.heading = SPAWN.h;
+  camYaw = SPAWN.h;
   insideInteractable.clear();
   collectibles = new Collectibles(scene, world.obstacles);
   npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
@@ -165,9 +167,9 @@ createHomeButton(() => {
     clearTarget();
     input.releaseAll();
     knock.set(0, 0, 0);
-    player.position.set(0, 0, 0);
-    player.heading = 0;
-    camYaw = 0;
+    player.position.set(SPAWN.x, 0, SPAWN.z);
+    player.heading = SPAWN.h;
+    camYaw = SPAWN.h;
     savePosition();
     setFade(false);
     canvas.focus();
@@ -261,7 +263,7 @@ marker.visible = false;
 scene.add(marker);
 
 // --- camera rig (third person, orbit by dragging) ---
-let camYaw = player.heading;
+let camYaw = player.heading; // set after the spawn/restore above
 let camPitch = 0.45;
 let camDist = 9;
 let lastDragTime = -Infinity;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { isFree, randomFreeSpot } from './spawn';
-import type { Obstacle } from './world';
+import { SPAWN, type Obstacle } from './world';
 
 export const COIN_VALUE = 1;
 export const JEWEL_VALUE = 5;
@@ -44,7 +44,7 @@ export class Collectibles {
     private readonly obstacles: Obstacle[],
   ) {
     // a first trail straight ahead of the spawn point, so the goal is obvious from second one
-    for (let i = 0; i < TRAIL; i++) this.place('coin', new THREE.Vector3(0, 0, -4 - i * 2));
+    for (let i = 0; i < TRAIL; i++) this.place('coin', new THREE.Vector3(SPAWN.x + 4 + i * 2, 0, SPAWN.z));
     for (let i = 1; i < TARGET_COINS / TRAIL; i++) this.spawnTrail();
     for (let i = 0; i < TARGET_JEWELS; i++) this.spawn('jewel');
   }

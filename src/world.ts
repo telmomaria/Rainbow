@@ -28,8 +28,26 @@ export interface InteractCtx {
   player: THREE.Vector3;
 }
 
+/**
+ * Street grid of the placeholder world. Roads are straight, 8 m wide, two lanes (±2 m from the centre line),
+ * running the whole map (±150). Vertical roads at x ∈ xs, horizontal at z ∈ zs. Kept clear of the airport.
+ */
+export const ROADS = { width: 8, xs: [-80, 0], zs: [-70, 0, 75], extent: 150 } as const;
+
+/** Start point of every city: on the pavement (not on the road), facing +X towards the airport. */
+export const SPAWN = { x: 7, z: 7, h: -Math.PI / 2 } as const;
+
+/** True if (x, z) is on a road surface, with an optional margin (m). */
+export function onRoad(x: number, z: number, margin = 0): boolean {
+  const half = ROADS.width / 2 + margin;
+  return ROADS.xs.some((rx) => Math.abs(x - rx) < half) || ROADS.zs.some((rz) => Math.abs(z - rz) < half);
+}
+
 export interface World {
   ground: THREE.Mesh;
+  /** Scene lights (the weather system adjusts them). */
+  hemi: THREE.HemisphereLight;
+  sun: THREE.DirectionalLight;
   obstacles: Obstacle[];
   interactables: Interactable[];
   update(dt: number): void;
@@ -62,27 +80,39 @@ export function createWorld(scene: THREE.Scene, city: City): World {
   ground.name = 'ground';
   scene.add(ground);
 
-  // A cross of streets so walking has a sense of direction.
+  // Street grid (see ROADS) with dashed centre lines.
   const roadMat = new THREE.MeshStandardMaterial({ color: city.road });
-  for (const [w, d] of [[300, 8], [8, 300]] as const) {
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(w, d), roadMat);
+  const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const L = ROADS.extent * 2;
+  const addRoad = (vertical: boolean, at: number) => {
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(vertical ? ROADS.width : L, vertical ? L : ROADS.width), roadMat);
     road.rotation.x = -Math.PI / 2;
-    road.position.y = 0.01;
+    road.position.set(vertical ? at : 0, 0.01, vertical ? 0 : at);
     road.receiveShadow = true;
     scene.add(road);
-  }
+    for (let t = -ROADS.extent + 3; t < ROADS.extent; t += 8) {
+      const dash = new THREE.Mesh(new THREE.PlaneGeometry(vertical ? 0.25 : 3, vertical ? 3 : 0.25), lineMat);
+      dash.rotation.x = -Math.PI / 2;
+      dash.position.set(vertical ? at : t, 0.015, vertical ? t : at);
+      scene.add(dash);
+    }
+  };
+  for (const x of ROADS.xs) addRoad(true, x);
+  for (const z of ROADS.zs) addRoad(false, z);
 
   const obstacles: Obstacle[] = [];
   const rng = mulberry32(city.seed);
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 70; i++) {
     const w = 4 + rng() * 6;
     const d = 4 + rng() * 6;
     const h = 3 + rng() * 10;
-    let x = (rng() - 0.5) * 140;
-    let z = (rng() - 0.5) * 140;
-    // keep the streets and the spawn area clear
-    if (Math.abs(x) < 10 + w / 2) x += Math.sign(x || 1) * 14;
-    if (Math.abs(z) < 10 + d / 2) z += Math.sign(z || 1) * 14;
+    const x = (rng() - 0.5) * 270;
+    const z = (rng() - 0.5) * 270;
+    // keep the streets (+ pavement), the spawn area and the airport clear
+    const corners = [[x - w / 2, z - d / 2], [x + w / 2, z - d / 2], [x - w / 2, z + d / 2], [x + w / 2, z + d / 2], [x, z]];
+    const hitsRoad =
+      ROADS.xs.some((rx) => x + w / 2 > rx - 6 && x - w / 2 < rx + 6) || ROADS.zs.some((rz) => z + d / 2 > rz - 6 && z - d / 2 < rz + 6);
+    if (hitsRoad || corners.some(([cx, cz]) => Math.hypot(cx - SPAWN.x, cz - SPAWN.z) < 9)) continue;
     const z0 = AIRPORT_ZONE;
     if (x + w / 2 > z0.minX && x - w / 2 < z0.maxX && z + d / 2 > z0.minZ && z - d / 2 < z0.maxZ) continue; // airport
     const mesh = new THREE.Mesh(
@@ -113,7 +143,7 @@ export function createWorld(scene: THREE.Scene, city: City): World {
 
   const interactables: Interactable[] = [createLamp(scene, new THREE.Vector3(6, 0, -8), obstacles)];
 
-  return { ground, obstacles, interactables, update: () => {} };
+  return { ground, hemi, sun, obstacles, interactables, update: () => {} };
 }
 
 /** Street lamp with a button on its post: touch it and the light switches on/off. */
