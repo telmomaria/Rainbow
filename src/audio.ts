@@ -92,7 +92,8 @@ function unlockAudio(): void {
 }
 for (const ev of ['pointerdown', 'keydown'] as const) window.addEventListener(ev, unlockAudio, { capture: true });
 
-function tone(freq: number, start: number, dur: number, type: OscillatorType = 'sine', gain = 0.15): void {
+/** Play one synthesized note (silent until the first user gesture). start/dur in seconds. */
+export function tone(freq: number, start: number, dur: number, type: OscillatorType = 'sine', gain = 0.15): void {
   if (!ctx || ctx.state !== 'running') return; // not unlocked yet: stay silent rather than warn
   const t = ctx.currentTime + start;
   const osc = ctx.createOscillator();

@@ -302,3 +302,33 @@ export function showBanner(text: string, ms = 3500): void {
   document.body.appendChild(el);
   setTimeout(() => el.remove(), ms + 100);
 }
+
+const homeStyle = document.createElement('style');
+homeStyle.textContent = `
+  .home-btn {
+    position: fixed; top: 76px; right: 16px; width: 64px; height: 64px; border: 0; border-radius: 50%;
+    background: rgba(255,255,255,.9); box-shadow: 0 4px 12px rgba(0,0,0,.15); cursor: pointer;
+    display: grid; place-items: center; padding: 0; touch-action: manipulation;
+  }
+  .home-btn:active { transform: scale(.92); }
+  .home-btn svg { width: 38px; height: 38px; }
+`;
+document.head.appendChild(homeStyle);
+
+/** "Casa" button (top-right, under the city name): takes the character back to the starting point. */
+export function createHomeButton(onHome: () => void): void {
+  const btn = document.createElement('button');
+  btn.className = 'home-btn';
+  btn.setAttribute('aria-label', 'Casa');
+  btn.title = 'Casa';
+  btn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M3 11.2 12 3.5l9 7.7" fill="none" stroke="#7c3aed" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M5.5 10v10h13V10" fill="#ff8fc8" stroke="#7c3aed" stroke-width="2.2" stroke-linejoin="round"/>
+    <rect x="10" y="14" width="4" height="6" rx="1" fill="#7c3aed"/>
+  </svg>`;
+  btn.addEventListener('click', () => {
+    btn.blur(); // keep arrow keys going to the game
+    onHome();
+  });
+  document.body.appendChild(btn);
+}

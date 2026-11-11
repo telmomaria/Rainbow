@@ -5,7 +5,7 @@ import { createWorld, type Interactable } from './world';
 import { Collectibles } from './collectibles';
 import { Npcs, type QuestionNpc } from './npcs';
 import { loadSave, writeSave } from './save';
-import { Hud, askQuestion, setCompass, setFade, showArrival, showBanner, showCityName, showTravel } from './ui';
+import { Hud, askQuestion, createHomeButton, setCompass, setFade, showArrival, showBanner, showCityName, showTravel } from './ui';
 import { speak, sfx, spokenLog, taunt, voiceInfo } from './audio';
 import { CITIES, COINS_PER_LEVEL, cityAt } from './cities';
 import { Monsters } from './monsters';
@@ -135,6 +135,23 @@ async function finishJourney(): Promise<void> {
   paused = false;
   canvas.focus();
 }
+
+/** Casa: back to the city's starting point (quick white blink so the jump isn't confusing). */
+createHomeButton(() => {
+  if (paused || flight) return; // not during a question or a flight
+  setFade(true);
+  setTimeout(() => {
+    clearTarget();
+    input.releaseAll();
+    knock.set(0, 0, 0);
+    player.position.set(0, 0, 0);
+    player.heading = 0;
+    camYaw = 0;
+    savePosition();
+    setFade(false);
+    canvas.focus();
+  }, 600);
+});
 
 // creature hits: brief knockback + blinking, during which she can't be hit again
 const knock = new THREE.Vector3();
@@ -321,13 +338,14 @@ function tick(time: number): void {
     if (d < it.radius) {
       if (!insideInteractable.has(it)) {
         insideInteractable.add(it);
-        it.interact();
+        it.interact({ player: player.position });
       }
     } else if (d > it.radius + 0.5) {
       insideInteractable.delete(it);
     }
   }
   world.update(dt);
+  for (const it of world.interactables) it.update?.(dt);
 
   // --- coins & jewels ---
   const got = collectibles.update(dt, player.position);

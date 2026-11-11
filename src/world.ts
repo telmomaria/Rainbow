@@ -17,7 +17,15 @@ export interface Interactable {
   position: THREE.Vector3;
   /** How close (metres) the character must be for the interaction to fire. */
   radius: number;
-  interact(): void;
+  /** Fired once each time the character comes within radius (edge-triggered). */
+  interact(ctx: InteractCtx): void;
+  /** Optional per-frame animation. */
+  update?(dt: number): void;
+}
+
+export interface InteractCtx {
+  /** Character position (read-only use). */
+  player: THREE.Vector3;
 }
 
 export interface World {

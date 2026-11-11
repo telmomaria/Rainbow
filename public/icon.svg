@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Rainbow game icon: star painted with diagonal rainbow stripes -->
+  <defs>
+    <pattern id="stripes" width="294" height="294" patternUnits="userSpaceOnUse" patternTransform="rotate(-45 256 256)">
+      <rect x="0"   width="42" height="294" fill="#ff3b30"/>
+      <rect x="42"  width="42" height="294" fill="#ff9500"/>
+      <rect x="84"  width="42" height="294" fill="#ffcc00"/>
+      <rect x="126" width="42" height="294" fill="#34c759"/>
+      <rect x="168" width="42" height="294" fill="#0a84ff"/>
+      <rect x="210" width="42" height="294" fill="#5e5ce6"/>
+      <rect x="252" width="42" height="294" fill="#bf5af2"/>
+    </pattern>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#3b2a5a" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <polygon filter="url(#shadow)"
+    points="256.0,36.0 314.8,187.1 476.6,196.3 351.1,298.9 392.4,455.7 256.0,368.0 119.6,455.7 160.9,298.9 35.4,196.3 197.2,187.1"
+    fill="url(#stripes)" stroke="#fff" stroke-width="22" stroke-linejoin="round" paint-order="stroke"/>
+  <polygon
+    points="256.0,36.0 314.8,187.1 476.6,196.3 351.1,298.9 392.4,455.7 256.0,368.0 119.6,455.7 160.9,298.9 35.4,196.3 197.2,187.1"
+    fill="none" stroke="#3b2a5a" stroke-opacity=".18" stroke-width="4" stroke-linejoin="round"/>
+</svg>
