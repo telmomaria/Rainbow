@@ -21,6 +21,12 @@ const JEWEL_COLORS = [0xff3b7f, 0x3bc9ff, 0x7dff6b, 0xb06bff, 0xffe14d];
 /** Coins and jewels lying around; collected by walking into them, respawned to keep the world full. */
 export class Collectibles {
   private readonly items: Item[] = [];
+  /** Positions of jewels still lying in the world (debug/QA). */
+  jewelPositions(): { x: number; z: number }[] {
+    return this.items
+      .filter((i) => i.kind === 'jewel' && i.taken === null)
+      .map((i) => ({ x: +i.mesh.position.x.toFixed(1), z: +i.mesh.position.z.toFixed(1) }));
+  }
   private readonly coinGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.08, 24);
   private readonly coinMat = new THREE.MeshStandardMaterial({
     color: 0xffd23f,

@@ -3,8 +3,9 @@ import type { Question } from './questions';
 
 const style = document.createElement('style');
 style.textContent = `
+  .hud { position: fixed; top: 16px; left: 16px; display: flex; gap: 12px; pointer-events: none; }
   .hud-coins {
-    position: fixed; top: 16px; left: 16px; display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 10px;
     padding: 8px 18px 8px 10px; border-radius: 999px; background: rgba(255,255,255,.85);
     font: 800 32px/1 system-ui, sans-serif; color: #7a4b00; box-shadow: 0 4px 12px rgba(0,0,0,.15);
     user-select: none; pointer-events: none; transition: transform .15s;
@@ -12,6 +13,10 @@ style.textContent = `
   .hud-coins.bump { transform: scale(1.18); }
   .hud-coin { width: 38px; height: 38px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff3a8, #ffc81e 45%, #d99a00);
     box-shadow: inset 0 0 0 4px #e0a800; }
+  .hud-jewel { width: 30px; height: 30px; margin: 4px; transform: rotate(45deg); border-radius: 6px;
+    background: linear-gradient(135deg, #ffd1e8, #ff3b7f 45%, #b0005a); box-shadow: inset 0 0 0 3px rgba(255,255,255,.5); }
+  .hud-question { width: 38px; height: 38px; border-radius: 50%; background: #7c6cff; color: #fff;
+    display: grid; place-items: center; font: 900 28px/1 system-ui, sans-serif; }
   .quiz {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(92vw, 760px);
     background: rgba(255,255,255,.95); border-radius: 28px; padding: 22px 22px 26px; text-align: center;
@@ -37,24 +42,50 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-export class CoinHud {
-  private readonly el = document.createElement('div');
-  private readonly num = document.createElement('span');
+type HudCounter = 'coins' | 'jewels' | 'correct';
 
-  constructor(value: number) {
-    this.el.className = 'hud-coins';
-    const icon = document.createElement('div');
-    icon.className = 'hud-coin';
-    this.el.append(icon, this.num);
-    document.body.appendChild(this.el);
-    this.num.textContent = String(value);
+/** Top-left counters: coins · jewels · right answers (question-mark icon). */
+export class Hud {
+  private readonly nums = {} as Record<HudCounter, HTMLSpanElement>;
+  private readonly pills = {} as Record<HudCounter, HTMLDivElement>;
+
+  constructor(values: Record<HudCounter, number>) {
+    const bar = document.createElement('div');
+    bar.className = 'hud';
+    const icons: Record<HudCounter, () => HTMLElement> = {
+      coins: () => el('div', 'hud-coin'),
+      jewels: () => el('div', 'hud-jewel'),
+      correct: () => {
+        const q = el('div', 'hud-question');
+        q.textContent = '?';
+        return q;
+      },
+    };
+    for (const key of ['coins', 'jewels', 'correct'] as const) {
+      const pill = el('div', 'hud-coins') as HTMLDivElement;
+      pill.dataset.counter = key;
+      const num = el('span', '') as HTMLSpanElement;
+      num.textContent = String(values[key]);
+      pill.append(icons[key](), num);
+      bar.appendChild(pill);
+      this.nums[key] = num;
+      this.pills[key] = pill;
+    }
+    document.body.appendChild(bar);
   }
 
-  set(value: number): void {
-    this.num.textContent = String(value);
-    this.el.classList.add('bump');
-    setTimeout(() => this.el.classList.remove('bump'), 150);
+  set(key: HudCounter, value: number): void {
+    this.nums[key].textContent = String(value);
+    const pill = this.pills[key];
+    pill.classList.add('bump');
+    setTimeout(() => pill.classList.remove('bump'), 150);
   }
+}
+
+function el(tag: string, className: string): HTMLElement {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  return e;
 }
 
 /**

@@ -51,6 +51,7 @@ Aplicar no Session End Protocol.
 - ✅ Controlos setas + rato/toque (clicar-para-andar, arrastar câmara, roda/pinça zoom), colisões; candeeiro que acende ao tocar — verificado no browser (2026-11-11)
 - ✅ Velocidade +30% (6,5 m/s); moedas (1) em rastos de 5 + joias (5) com respawn; contador; localStorage (2026-11-11)
 - ✅ Perguntas faladas: 5 personagens com pergunta, 3 opções (clique · 1/2/3 · ←↑→), certo = +10, errado mostra a certa e a pergunta nunca se repete (2026-11-11)
+- ✅ Contadores no ecrã: moedas · joias apanhadas · respostas certas (ícone ?), gravados em localStorage; áudio desbloqueado no 1.º gesto (2026-11-11)
 
 ---
 
@@ -61,3 +62,4 @@ Aplicar no Session End Protocol.
 | v1 | 2026-11-11 | #NP: scaffold, stack Three.js+Vite+TS, mapa OSM estilizado, regras de jogo e controlos (setas + rato) |
 | v1.1 | 2026-11-11 | Bootstrap jogável: cena, personagem placeholder, setas + rato, colisões, 1.º objeto interativo |
 | v1.2 | 2026-11-11 | Moedas, joias, contador, gravação; perguntas faladas com 3 opções |
+| v1.3 | 2026-11-11 | Contadores de joias e respostas certas |

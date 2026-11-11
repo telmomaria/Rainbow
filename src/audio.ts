@@ -41,8 +41,15 @@ export function stopSpeaking(): void {
 
 let ctx: AudioContext | null = null;
 
-function tone(freq: number, start: number, dur: number, type: OscillatorType = 'sine', gain = 0.15): void {
+/** Browsers only allow audio after a user gesture: create/resume the context on the first one. */
+function unlockAudio(): void {
   ctx ??= new AudioContext();
+  if (ctx.state === 'suspended') void ctx.resume();
+}
+for (const ev of ['pointerdown', 'keydown'] as const) window.addEventListener(ev, unlockAudio, { capture: true });
+
+function tone(freq: number, start: number, dur: number, type: OscillatorType = 'sine', gain = 0.15): void {
+  if (!ctx || ctx.state !== 'running') return; // not unlocked yet: stay silent rather than warn
   const t = ctx.currentTime + start;
   const osc = ctx.createOscillator();
   const g = ctx.createGain();

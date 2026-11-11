@@ -31,7 +31,7 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   no mundo (som, animação, luz).
 - **Perguntas:** matemática · estudo do meio · português, nível 2.º ano (programa PT). Sempre 3 opções.
   Errou → aquela pergunta/personagem não se repete. Acertou → moedas.
-- **Valores:** moeda = 1 · joia = 5 · resposta certa = 10. Moedas aparecem em rastos de 5. Pergunta é retirada no momento em que é feita (recarregar a página não dá 2.ª tentativa).
+- **Valores:** moeda = 1 · joia = 5 (e conta no contador de joias) · resposta certa = 10 (e conta no contador ?). Moedas aparecem em rastos de 5. Pergunta é retirada no momento em que é feita (recarregar a página não dá 2.ª tentativa).
 - **Bichos maus:** quantidade/frequência escala com as moedas da personagem; falam e atrapalham; podem bater
   (perder moedas, nunca "morte" violenta — tom infantil).
 - **Nível:** 100 moedas → próxima cidade. Ordem: Portugal (morada nas Definições) → Roma → Madrid → Londres →

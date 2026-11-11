@@ -5,7 +5,7 @@ import { createWorld, type Interactable } from './world';
 import { Collectibles } from './collectibles';
 import { Npcs, type QuestionNpc } from './npcs';
 import { loadSave, writeSave } from './save';
-import { CoinHud, askQuestion } from './ui';
+import { Hud, askQuestion } from './ui';
 import { sfx } from './audio';
 
 const WALK_SPEED = 6.5; // m/s
@@ -38,7 +38,7 @@ canvas.focus();
 const QUESTION_REWARD = 10;
 const save = loadSave();
 const asked = new Set(save.asked);
-const hud = new CoinHud(save.coins);
+const hud = new Hud(save);
 const collectibles = new Collectibles(scene, world.obstacles);
 const npcs = new Npcs(scene, world.obstacles, asked, player.position);
 /** True while a question is on screen: the character stands still. */
@@ -46,7 +46,7 @@ let paused = false;
 
 function addCoins(n: number): void {
   save.coins += n;
-  hud.set(save.coins);
+  hud.set('coins', save.coins);
   writeSave(save);
 }
 
@@ -62,7 +62,11 @@ async function meet(npc: QuestionNpc): Promise<void> {
   save.asked = [...asked];
   writeSave(save); // retired immediately: reloading the page can't give a second try
   const ok = await askQuestion(npc.question, QUESTION_REWARD);
-  if (ok) addCoins(QUESTION_REWARD);
+  if (ok) {
+    save.correct += 1;
+    hud.set('correct', save.correct);
+    addCoins(QUESTION_REWARD);
+  }
   npcs.dismiss(npc);
   paused = false;
   canvas.focus();
@@ -216,6 +220,11 @@ function tick(): void {
   // --- coins & jewels ---
   const got = collectibles.update(dt, player.position);
   if (got.value > 0) {
+    const jewels = got.kinds.filter((k) => k === 'jewel').length;
+    if (jewels > 0) {
+      save.jewels += jewels;
+      hud.set('jewels', save.jewels);
+    }
     addCoins(got.value);
     if (got.kinds.includes('jewel')) sfx.jewel();
     else sfx.coin();
@@ -249,6 +258,9 @@ function tick(): void {
       camYaw: +camYaw.toFixed(2),
       lamp: (lamp as THREE.PointLight | undefined)?.intensity ?? null,
       coins: save.coins,
+      jewels: save.jewels,
+      correct: save.correct,
+      jewelAt: collectibles.jewelPositions(),
       asked: save.asked.length,
       paused,
       npcs: npcs.list
