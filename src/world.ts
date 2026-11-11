@@ -163,7 +163,7 @@ function createLamp(scene: THREE.Scene, at: THREE.Vector3, obstacles: Obstacle[]
 }
 
 /** Small deterministic PRNG so the placeholder layout is stable between reloads. */
-function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): () => number {
   return () => {
     seed |= 0;
     seed = (seed + 0x6d2b79f5) | 0;

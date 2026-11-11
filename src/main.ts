@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { CHARACTER_RADIUS, Character } from './character';
 import { Input } from './input';
-import { createWorld, type Interactable } from './world';
+import { createWorld, mulberry32, type Interactable } from './world';
+import { createProps } from './props';
 import { Collectibles } from './collectibles';
 import { Npcs, type QuestionNpc } from './npcs';
 import { loadSave, writeSave } from './save';
@@ -78,6 +79,8 @@ function addCityExtras(): Car {
       giveCoin: () => addCoins(-1),
     }),
   );
+  // playground props (swing, fountain, xylophone, cat, dog...) — placed last so they avoid everything else
+  world.interactables.push(...createProps(scene, world.obstacles, mulberry32(city.seed * 97 + 1)));
   return c;
 }
 
@@ -520,6 +523,7 @@ function tick(time: number): void {
       level: save.level,
       flying: !!flight,
       character: save.character,
+      things: world.interactables.map((i) => [+i.position.x.toFixed(1), +i.position.z.toFixed(1), i.radius]),
       driving: !!driving,
       car: [+car.position.x.toFixed(1), +car.position.z.toFixed(1), +car.speed.toFixed(1)],
       visible: player.root.visible,

@@ -24,3 +24,10 @@
 - 13 cidades (palete/seed por cidade no mundo provisório), ecrã de viagem aos 100 moedas, chegada falada, nome da cidade no canto; troca em-ecrã (sem reload).
 - Bichos maus: 1 + moedas/15 (máx. 8), perseguem a 4,6 m/s, provocam, empurram, -3 moedas, 1,5 s invulnerável.
 - QA browser: 1 bicho a 0 moedas → 4 a 45; apanhada → -3 moedas + "Toma lá!"; 104 moedas → ecrã → Roma com 4 moedas; persiste após reload. 0 erros.
+
+## 2026-11-11 — aeroporto, personagens, interatividade (#SUB)
+- Subagentes: characters.ts (10 personagens originais) e props.ts (12 adereços); master: aeroporto/voo, voz dos monstros, ícone, Casa, carro, pobre, ecrã de escolha, integração.
+- Bug apanhado no QA: bloco do ecrã de escolha inserido dentro de tick() (criava ecrãs a cada frame) — corrigido.
+- Bug apanhado no QA: posição gravada a meio do voo e reposta dentro do avião — corrigido.
+- QA browser: escolha por setas/Enter, carro (entrar/conduzir/sair), pobre (-1 moeda + agradece), 22 interativos na cidade, Casa → (0,0), voo Portugal → Roma completo. 0 erros.
+- Voz masculina pt-PT: não existe no Windows (só Helia); funciona no Edge (Duarte).

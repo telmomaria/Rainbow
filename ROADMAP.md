@@ -14,9 +14,9 @@ Aplicar no Session End Protocol.
 |---|---|---|---|
 | 1 | Telmo testa moedas + perguntas (voz, dificuldade, recompensas) e valida o banco de 36 perguntas em src/questions.ts | Telmo | none |
 | 2 | Spike OSM: carregar um quarteirão real (Lisboa) → ruas + edifícios low-poly com colisões | agent | decidir fonte de dados (Overpass vs pré-processado) |
-| 3 | Seleção de personagem (1.ª personagem original modelada) | agent | none |
-| 4 | Mais interatividade sem UI (carro para conduzir, dar moeda a um pobre) | agent | none |
-| 5 | Roupas e acessórios para encontrar e trocar | agent | #3 |
+| 3 | Roupas e acessórios (óculos, chapéus) para encontrar e trocar | agent | none |
+| 4 | Morada de início nas Definições | agent | spike OSM |
+| 5 | Mais situações: semáforo que pára o trânsito, porta que toca à campainha, loja de gelados | agent | none |
 
 ---
 
@@ -25,14 +25,14 @@ Aplicar no Session End Protocol.
 ### 🔴 Critical
 - ⬜ Mundo OSM estilizado por cidade (13 cidades) com cache local dos dados
 - ⬜ Morada de início nas Definições (geocoding com cache; respeitar política Nominatim)
-- ⬜ Seleção de personagem: 10 personagens originais (princesa · unicórnio · 3 caçadoras-cantoras K-pop · extraterrestre · guerreira ~1500 d.C. · voleibolista · bailarina · karateca)
+- ✅ Seleção de personagem: 10 personagens originais (princesa · unicórnio · 3 caçadoras-cantoras K-pop · extraterrestre · guerreira ~1500 d.C. · voleibolista · bailarina · karateca)
 - 🔄 Personagens-NPC com perguntas — base feita (36 perguntas, voz, 3 opções, sem repetição); errar → volta em ~3 min sem revelar; falta banco maior e voz pt-PT garantida
 - ✅ Bichos maus: spawn em função das moedas, falam, atrapalham, batem (perde moedas)
 - 🔄 Subida de nível aos 100 moedas → próxima cidade — viagem feita; cidades ainda são o mundo provisório com palete própria (falta OSM) (Portugal → Roma → Madrid → Londres → Paris → Varsóvia → Vilnius → Moscovo → Pequim → Rio → Cidade do México → Reiquiavique → Nuuk)
 - ⬜ Atribuição "© OpenStreetMap contributors" visível
 
 ### 🟡 Important
-- ⬜ Interatividade sem UI: botão→luz, entrar/conduzir carro, dar moeda a um pobre, + outros objetos por cidade
+- ✅ Interatividade sem UI: botão→luz, entrar/conduzir carro, dar moeda a um pobre, + 12 adereços por cidade
 - ⬜ Roupas e acessórios (óculos, chapéus) para encontrar e trocar
 - ⬜ Áudio: músicas/sons originais por personagem e cidade
 - ⬜ Desempenho ≥30 fps em tablet médio (LOD, instancing, culling)
@@ -54,6 +54,8 @@ Aplicar no Session End Protocol.
 - ✅ Contadores no ecrã: moedas · joias apanhadas · respostas certas (ícone ?), gravados em localStorage; áudio desbloqueado no 1.º gesto (2026-11-11)
 - ✅ Errar não revela a resposta e a pergunta volta ~3 min depois; moedas mais espalhadas (36, rastos de 3); posição gravada (reload não volta ao início); THREE.Timer + PCFShadowMap (2026-11-11)
 - ✅ Viagem aos 100 moedas (ecrã + chegada falada, 13 cidades, nome da cidade no canto) e bichos maus (perseguem, provocam, empurram, -3 moedas) (2026-11-11)
+- ✅ Aeroporto + voo animado entre cidades; voz masculina p/ monstros quando existe; ícone (estrela arco-íris) + manifest; botão Casa (2026-11-11)
+- ✅ 10 personagens originais + ecrã de escolha; carro conduzível; pobre; 12 adereços interativos (2026-11-11)
 
 ---
 
@@ -67,3 +69,4 @@ Aplicar no Session End Protocol.
 | v1.3 | 2026-11-11 | Contadores de joias e respostas certas |
 | v1.4 | 2026-11-11 | Repetir perguntas erradas mais tarde, moedas espalhadas, posição gravada |
 | v1.5 | 2026-11-11 | Viagem entre cidades aos 100 moedas; bichos maus |
+| v1.6 | 2026-11-11 | Aeroporto e voo, ícone, Casa, 10 personagens, carro, pobre, 12 adereços |

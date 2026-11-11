@@ -37,8 +37,20 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
 - **Bichos maus:** quantidade = 1 + moedas/15 (máx. 8); perseguem a 4,6 m/s (sempre mais lentos que a personagem,
   6,5 m/s, para se poder fugir); provocam com voz grave; tocar = empurrão + perde 3 moedas + 1,5 s a piscar sem
   poder ser apanhada. Nunca "morte" violenta — tom infantil. Ficam parados durante perguntas e viagens.
-- **Nível:** 100 moedas → ecrã de viagem → próxima cidade (gastam-se 100, o resto passa). Troca de cidade é feita
-  no mesmo ecrã (sem recarregar a página). Ordem: Portugal (morada nas Definições) → Roma → Madrid → Londres →
+- **Viagem:** 100 moedas → aviso falado + bússola ✈️ → ir ao aeroporto → tocar nas escadas do avião → cena animada
+  (sobe, porta fecha, descola, nuvens, aterra na cidade seguinte, sai). Gastam-se 100 moedas, o resto passa. Sem
+  moedas, o avião diz quantas faltam. Troca de cidade sem recarregar a página. Última cidade (Nuuk) → ecrã final.
+- **Personagens (src/characters.ts):** Lia (princesa) · Estrela (unicórnio) · Bia, Nina, Inês (cantoras K-pop) ·
+  Zuca (extraterrestre) · Leonor (guerreira) · Rita (voleibolista) · Clara (bailarina) · Tomás (karateca).
+  Escolha no 1.º arranque e no botão com o retrato (canto superior direito).
+- **Objetos/situações por cidade:** candeeiro, carro (entra ao tocar; conduz com setas ou tocando no chão; sai com
+  Espaço/Enter ou tocando no carro), pobre (aceita 1 moeda por cidade, agradece), e 12 adereços em src/props.ts
+  (baloiço, fonte, xilofone de chão, gato, balões, flores, caixa de correio, árvore, espanta-espíritos, cão,
+  cogumelo, semáforo). Todos só reagem ao toque, sem UI.
+- **Botões fixos:** Casa (volta ao ponto de partida da cidade) e retrato (mudar de personagem).
+- **Vozes:** narradora = voz feminina pt-PT (Helia no Windows); monstros = voz masculina pt-PT se existir (Duarte
+  no Edge), senão a mesma voz com tom muito grave. O Windows não instala vozes masculinas pt-PT.
+- **Ordem das cidades:** Portugal (morada nas Definições) → Roma → Madrid → Londres →
   Paris → Varsóvia → Vilnius → Moscovo → Pequim → Rio de Janeiro → Cidade do México → Reiquiavique → Nuuk.
 - **Personagens: só originais.** Arquétipos pedidos (princesa, unicórnio, 3 caçadoras-cantoras K-pop,
   extraterrestre fofo, guerreira de ~1500 d.C., jogadora de vólei, bailarina, karateca) com nomes, visual e
