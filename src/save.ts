@@ -1,6 +1,8 @@
 /** Progress persisted in localStorage. No personal data, no accounts. */
 export interface SaveData {
   coins: number;
+  /** Chosen character id (characters.ts); null until the first pick. */
+  character: string | null;
   /** Index into CITIES (0 = Portugal). */
   level: number;
   /** The whole journey (last city) is done. */
@@ -30,6 +32,7 @@ export function loadSave(): SaveData {
       const d = JSON.parse(raw) as Partial<SaveData> & { asked?: string[] };
       return {
         coins: d.coins ?? 0,
+        character: d.character ?? null,
         level: d.level ?? 0,
         finished: d.finished ?? false,
         jewels: d.jewels ?? 0,
@@ -42,7 +45,7 @@ export function loadSave(): SaveData {
   } catch {
     // corrupted or blocked storage: start fresh
   }
-  return { coins: 0, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null };
+  return { coins: 0, character: null, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null };
 }
 
 export function writeSave(data: SaveData): void {

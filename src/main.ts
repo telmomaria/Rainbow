@@ -11,6 +11,9 @@ import { CITIES, COINS_PER_LEVEL, cityAt } from './cities';
 import { Monsters } from './monsters';
 import { Airport } from './airport';
 import { Flight } from './flight';
+import { Car } from './car';
+import { createBeggar } from './beggar';
+import { chooseCharacter, createAvatarButton } from './select';
 import { isFree } from './spawn';
 
 const WALK_SPEED = 6.5; // m/s
@@ -41,7 +44,7 @@ const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
 const save = loadSave();
 let city = cityAt(save.level);
 let world = createWorld(scene, city);
-const player = new Character();
+const player = new Character(save.character ?? 'princesa');
 scene.add(player.root);
 const input = new Input(canvas);
 canvas.focus();
@@ -57,12 +60,26 @@ let collectibles = new Collectibles(scene, world.obstacles);
 let npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
 let monsters = new Monsters(scene, world.obstacles);
 let airport = new Airport(scene, world.obstacles);
+let car = addCityExtras();
 // restore after every obstacle (incl. the airport) exists, so she can never reappear inside something
 if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles)) {
   player.position.set(save.pos.x, 0, save.pos.z);
   player.heading = save.pos.h;
 }
 if (!save.pos) showArrival(city.arrival); // very first start
+
+/** Hand-made interactive situations in every city: a car to drive and someone to give a coin to. */
+function addCityExtras(): Car {
+  const c = new Car(scene, world.obstacles, new THREE.Vector3(-14, 0, 0), Math.PI / 2, city.buildings[0], () => enterCar());
+  world.interactables.push(c.interactable);
+  world.interactables.push(
+    createBeggar(scene, world.obstacles, new THREE.Vector3(-8, 0, -8), {
+      coins: () => save.coins,
+      giveCoin: () => addCoins(-1),
+    }),
+  );
+  return c;
+}
 
 /** Rebuild everything for the current level's city (in place, no page reload). */
 function loadCity(): void {
@@ -78,6 +95,7 @@ function loadCity(): void {
   npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
   monsters = new Monsters(scene, world.obstacles);
   airport = new Airport(scene, world.obstacles);
+  car = addCityExtras();
   cityPill.textContent = city.name;
 }
 
@@ -138,7 +156,7 @@ async function finishJourney(): Promise<void> {
 
 /** Casa: back to the city's starting point (quick white blink so the jump isn't confusing). */
 createHomeButton(() => {
-  if (paused || flight) return; // not during a question or a flight
+  if (paused || flight || driving) return; // not during a question, a flight or a drive
   setFade(true);
   setTimeout(() => {
     clearTarget();
@@ -151,6 +169,36 @@ createHomeButton(() => {
     setFade(false);
     canvas.focus();
   }, 600);
+});
+
+/** The car the character is driving (null = on foot). */
+let driving: Car | null = null;
+
+function enterCar(): void {
+  if (paused || flight || driving) return;
+  driving = car;
+  car.enter();
+  clearTarget();
+  player.root.visible = false;
+}
+
+function exitCar(): void {
+  if (!driving) return;
+  const p = driving.exitPoint();
+  driving.exit();
+  driving = null;
+  player.position.set(p.x, 0, p.z);
+  player.root.visible = true;
+  clearTarget();
+  savePosition();
+}
+
+// Space / Enter gets out of the car (tapping the car does too)
+window.addEventListener('keydown', (e) => {
+  if (driving && (e.key === ' ' || e.key === 'Enter')) {
+    e.preventDefault();
+    exitCar();
+  }
 });
 
 // creature hits: brief knockback + blinking, during which she can't be hit again
@@ -234,6 +282,10 @@ resize();
 function handleTap(x: number, y: number): void {
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
+  if (driving && raycaster.intersectObject(driving.group, true).length > 0) {
+    exitCar();
+    return;
+  }
   // Objects and characters first: tapping one walks the character up to it (touching it uses it).
   const targets = [
     ...world.interactables.map((i) => ({ object: i.object as THREE.Object3D, position: i.position })),
@@ -299,6 +351,25 @@ function tick(time: number): void {
   const before = player.position.clone();
   if (paused) {
     // standing still while talking / flying
+  } else if (driving) {
+    let throttle = (k.up ? 1 : 0) - (k.down ? 1 : 0);
+    let steer = (k.left ? 1 : 0) - (k.right ? 1 : 0);
+    if (throttle || steer) clearTarget();
+    else if (walkTarget) {
+      // tap-to-drive: steer towards the tapped spot, slow down and stop near it
+      const dx = walkTarget.x - driving.position.x;
+      const dz = walkTarget.z - driving.position.z;
+      const dist = Math.hypot(dx, dz);
+      let diff = Math.atan2(-dx, -dz) - driving.heading;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      steer = THREE.MathUtils.clamp(diff * 2, -1, 1);
+      throttle = dist > 4 ? (Math.abs(diff) > 1.6 ? 0.3 : 0.8) : -1;
+      if (dist < 4 && Math.abs(driving.speed) < 0.5) clearTarget();
+    }
+    if (driving.drive(dt, throttle, steer)) clearTarget();
+    player.position.set(driving.position.x, 0, driving.position.z);
+    player.heading = driving.heading;
+    speed = Math.abs(driving.speed);
   } else if (k.up || k.down || k.left || k.right) {
     clearTarget(); // keyboard always takes over from click-to-walk
     if (k.left) player.heading += TURN_SPEED * dt;
@@ -330,7 +401,7 @@ function tick(time: number): void {
       if (stuckTime > 0.4) clearTarget();
     }
   }
-  if (!flight) player.update(dt, speed);
+  if (!flight) player.update(dt, driving ? 0 : speed);
 
   // --- touch-to-interact (edge triggered: fires once when the character reaches the object) ---
   for (const it of world.interactables) {
@@ -363,7 +434,7 @@ function tick(time: number): void {
   // --- creatures ---
   const ev = monsters.update(dt, player.position, save.coins, paused);
   if (ev.say && !paused) taunt(ev.say);
-  if (ev.hit && invulnerable <= 0 && !paused) {
+  if (ev.hit && invulnerable <= 0 && !paused && !driving) {
     const lost = Math.min(HIT_COST, save.coins);
     if (lost > 0) addCoins(-lost);
     sfx.bonk();
@@ -390,7 +461,7 @@ function tick(time: number): void {
     void speak(['Boa! Juntaste cem moedas!', `Vai ao aeroporto e apanha o avião para ${next}!`]);
   }
   if (!paused && lastLevel() && save.coins >= COINS_PER_LEVEL && !save.finished) void finishJourney();
-  if (!paused && !flight) {
+  if (!paused && !flight && !driving) {
     const b = airport.boardPoint;
     if (Math.hypot(player.position.x - b.x, player.position.z - b.z) < 1.4) {
       if (readyToTravel()) startFlight();
@@ -408,7 +479,7 @@ function tick(time: number): void {
 
   // --- question characters ---
   const met = npcs.update(dt, player.position);
-  if (met && !paused) void meet(met);
+  if (met && !paused && !driving) void meet(met);
 
   // --- camera follows behind the character, unless the player is looking around ---
   const turning = k.left || k.right;
@@ -424,10 +495,11 @@ function tick(time: number): void {
     if (flight.done) endFlight();
   } else {
   const target = player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
+  const dist = driving ? Math.max(camDist, 12) : camDist;
   camera.position.set(
-    target.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist,
-    target.y + Math.sin(camPitch) * camDist,
-    target.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist,
+    target.x + Math.sin(camYaw) * Math.cos(camPitch) * dist,
+    target.y + Math.sin(camPitch) * dist,
+    target.z + Math.cos(camYaw) * Math.cos(camPitch) * dist,
   );
   camera.lookAt(target);
   }
@@ -447,6 +519,10 @@ function tick(time: number): void {
       solved: save.solved.length,
       level: save.level,
       flying: !!flight,
+      character: save.character,
+      driving: !!driving,
+      car: [+car.position.x.toFixed(1), +car.position.z.toFixed(1), +car.speed.toFixed(1)],
+      visible: player.root.visible,
       board: [airport.boardPoint.x, airport.boardPoint.z],
       plane: [+airport.plane.position.x.toFixed(1), +airport.plane.position.y.toFixed(1)],
       voices: voiceInfo(),
@@ -468,3 +544,21 @@ function tick(time: number): void {
 }
 
 requestAnimationFrame(tick);
+
+
+async function pickCharacter(): Promise<void> {
+  paused = true;
+  clearTarget();
+  input.releaseAll();
+  const id = await chooseCharacter(save.character ?? undefined);
+  save.character = id;
+  writeSave(save);
+  player.setCharacter(id);
+  setAvatar(id);
+  paused = false;
+  canvas.focus();
+}
+const setAvatar = createAvatarButton(save.character ?? 'princesa', () => {
+  if (!paused && !flight && !driving) void pickCharacter();
+});
+if (!save.character) void pickCharacter();
