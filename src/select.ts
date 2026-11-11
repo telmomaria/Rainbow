@@ -30,7 +30,7 @@ style.textContent = `
     font: 800 20px/1 system-ui, sans-serif; box-shadow: 0 4px 0 rgba(124,58,237,.18);
   }
   .select-diff.on { background: #7c3aed; color: #fff; }
-  .select-actions { display: flex; gap: 16px; justify-content: center; padding: 0 16px 24px; }
+  .select-actions { display: flex; gap: 16px; justify-content: center; padding: 0 16px 24px; margin-top: 28px; }
   .select-go {
     border: 0; border-radius: 999px; padding: 16px 36px; cursor: pointer; color: #fff;
     font: 900 28px/1 system-ui, sans-serif; box-shadow: 0 6px 0 rgba(0,0,0,.15);
