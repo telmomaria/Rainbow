@@ -6,7 +6,12 @@ import { audioContext } from './audio';
  * sky/fog/light colours, low drifting clouds, rain/drizzle/snow around the camera, storm flashes,
  * night (deep blue sky, stars, moon) and a quiet rain/wind ambience. No DOM/UI.
  *
- * Testing: `?weather=<kind>` (and optionally `&night=1`) forces a state (source 'forced').
+ * Time of day follows the city's REAL local clock (UTC offset + sunrise/sunset from Open-Meteo, with an
+ * astronomical fallback when offline): `daylight` goes smoothly 0 (night) → 1 (day) with ~1 h twilight
+ * ramps around sunrise/sunset (warm orange-pink tints), recomputed every 30 s while the game runs.
+ *
+ * Testing: `?weather=<kind>` forces a weather state (source 'forced'); `?hour=21.5` forces the local clock
+ * (fractional hour, frozen). Legacy `&night=1` / `&night=0` = hour 23 / 13 when `?hour` is absent.
  */
 
 export type WeatherKind = 'clear' | 'partly' | 'overcast' | 'fog' | 'drizzle' | 'rain' | 'snow' | 'storm';
@@ -58,9 +63,62 @@ interface Reading {
   wind: number; // km/h
   windDir: number; // degrees, meteorological (where it blows FROM)
   precip: number; // mm
+  /** City clock: seconds east of UTC (from Open-Meteo, DST-aware). Missing in old caches. */
+  utcOffset?: number;
+  /** Local sunrise/sunset as fractional hours (0..24). Missing in old caches. */
+  sunrise?: number;
+  sunset?: number;
 }
 
 const DEFAULT_READING: Reading = { code: 0, isDay: true, tempC: 18, cloud: 10, wind: 8, windDir: 250, precip: 0 };
+
+/** Fallback standard UTC offsets (hours) until live data arrives. Live data (DST-aware) wins. */
+const TZ_FALLBACK: Record<string, number> = {
+  Portugal: 0, Lisboa: 0, Roma: 1, Madrid: 1, Londres: 0, Paris: 1, 'Varsóvia': 1, Vilnius: 2, Moscovo: 3,
+  Pequim: 8, 'Rio de Janeiro': -3, 'Cidade do México': -6, Reiquiavique: 0, Nuuk: -2,
+};
+
+/** "2026-11-11T07:14" → 7.233 (local hours). */
+function isoHour(s: unknown): number | undefined {
+  if (typeof s !== 'string') return undefined;
+  const m = /T(\d{1,2}):(\d{2})/.exec(s);
+  return m ? Number(m[1]) + Number(m[2]) / 60 : undefined;
+}
+
+/** Approximate local sunrise/sunset (hours) from latitude/longitude/UTC offset (±15 min is plenty here). */
+function solarTimes(lat: number, lon: number, offsetH: number, nowMs: number): [number, number] {
+  const start = Date.UTC(new Date(nowMs).getUTCFullYear(), 0, 0);
+  const day = (nowMs - start) / 86400000;
+  const decl = ((23.44 * Math.PI) / 180) * Math.sin((2 * Math.PI * (284 + day)) / 365);
+  const phi = (lat * Math.PI) / 180;
+  const cosW = (Math.sin((-0.833 * Math.PI) / 180) - Math.sin(phi) * Math.sin(decl)) / (Math.cos(phi) * Math.cos(decl));
+  const noon = 12 - lon / 15 + offsetH;
+  if (cosW >= 1) return [noon, noon]; // polar night
+  if (cosW <= -1) return [noon - 11.99, noon + 11.99]; // midnight sun
+  const half = (Math.acos(cosW) * 180) / Math.PI / 15;
+  return [noon - half, noon + half];
+}
+
+const smooth = (e0: number, e1: number, x: number) => {
+  const t = Math.min(Math.max((x - e0) / (e1 - e0), 0), 1);
+  return t * t * (3 - 2 * t);
+};
+const mod24 = (h: number) => ((h % 24) + 24) % 24;
+
+/**
+ * 0 at night → 1 in full day. Ramps from 45 min before sunrise to 1 h after it (mirrored at sunset),
+ * so at the sunrise/sunset moment itself daylight ≈ 0.4.
+ */
+export function daylightAt(hour: number, sunrise: number, sunset: number): number {
+  const len = sunset - sunrise;
+  if (len < 0.05) return 0;
+  if (len > 23.9) return 1;
+  let h = mod24(hour - sunrise); // hours since sunrise, 0..24
+  if (h > 12 + len / 2) h -= 24; // the hours just before sunrise count as negative
+  const up = smooth(-0.75, 1, h);
+  const down = 1 - smooth(len - 1, len + 0.75, h);
+  return Math.max(0, Math.min(up, down));
+}
 
 /** WMO weather code → our kinds. */
 export function kindFromCode(code: number): WeatherKind {
@@ -101,13 +159,18 @@ function writeCache(city: string, r: Reading): void {
 async function fetchReading(lat: number, lon: number): Promise<Reading> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    '&current=temperature_2m,weather_code,is_day,cloud_cover,wind_speed_10m,wind_direction_10m,precipitation&timezone=auto';
+    '&current=temperature_2m,weather_code,is_day,cloud_cover,wind_speed_10m,wind_direction_10m,precipitation' +
+    '&daily=sunrise,sunset&forecast_days=1&timezone=auto';
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(url, { signal: ctrl.signal });
     if (!res.ok) throw new Error(`open-meteo ${res.status}`);
-    const json = (await res.json()) as { current?: Record<string, number> };
+    const json = (await res.json()) as {
+      current?: Record<string, number>;
+      utc_offset_seconds?: number;
+      daily?: { sunrise?: string[]; sunset?: string[] };
+    };
     const c = json.current;
     if (!c || typeof c.weather_code !== 'number') throw new Error('open-meteo: no current data');
     return {
@@ -118,19 +181,34 @@ async function fetchReading(lat: number, lon: number): Promise<Reading> {
       wind: c.wind_speed_10m ?? 0,
       windDir: c.wind_direction_10m ?? DEFAULT_READING.windDir,
       precip: c.precipitation ?? 0,
+      utcOffset: typeof json.utc_offset_seconds === 'number' ? json.utc_offset_seconds : undefined,
+      sunrise: isoHour(json.daily?.sunrise?.[0]),
+      sunset: isoHour(json.daily?.sunset?.[0]),
     };
   } finally {
     clearTimeout(timer);
   }
 }
 
-function forcedFromUrl(): { kind: WeatherKind; night: boolean } | null {
+function forcedFromUrl(): { kind: WeatherKind } | null {
+  try {
+    const k = new URLSearchParams(window.location.search).get('weather') as WeatherKind | null;
+    return k && KINDS.includes(k) ? { kind: k } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `?hour=21.5` (or legacy `?night=1|0`) → frozen local hour; null = follow the real clock. */
+function forcedHourFromUrl(): number | null {
   try {
     const q = new URLSearchParams(window.location.search);
-    const k = q.get('weather') as WeatherKind | null;
-    if (!k || !KINDS.includes(k)) return null;
+    const h = q.get('hour');
+    if (h !== null && h.trim() !== '' && Number.isFinite(Number(h))) return mod24(Number(h));
     const n = q.get('night');
-    return { kind: k, night: n === '1' || n === 'true' };
+    if (n === '1' || n === 'true') return 23;
+    if (n === '0' || n === 'false') return 13;
+    return null;
   } catch {
     return null;
   }
@@ -195,6 +273,17 @@ const DAY: Record<WeatherKind, {
 };
 
 const NIGHT_SKY = new THREE.Color(0x1f2f6b);
+// twilight tints (dawn a bit pinker, dusk a bit more orange)
+const DAWN_SKY = new THREE.Color(0xff9db0);
+const DUSK_SKY = new THREE.Color(0xff8a45);
+const TWILIGHT_FOG = new THREE.Color(0xffa877);
+const TWILIGHT_SUN = new THREE.Color(0xff9447);
+const TWILIGHT_HEMI = new THREE.Color(0xffc7a6);
+const TWILIGHT_CLOUD = new THREE.Color(0xffb59a);
+/** How much of the warm twilight tint shows through each kind of weather. */
+const WARMTH: Record<WeatherKind, number> = {
+  clear: 1, partly: 0.85, overcast: 0.35, fog: 0.3, drizzle: 0.3, rain: 0.22, snow: 0.4, storm: 0.12,
+};
 const NIGHT_FOG = new THREE.Color(0x283b75);
 const NIGHT_HEMI = new THREE.Color(0xa3b5ff);
 const NIGHT_GROUND = new THREE.Color(0x34406a);
@@ -339,6 +428,8 @@ const PART_HEIGHT = 24;
 const STARS = 260;
 const SKY_R = 300; // stars/moon distance (camera far plane is 400)
 const NIGHT_SUN_DIR = new THREE.Vector3(-0.62, 0.42, -0.66).normalize();
+const CLOCK_EVERY_S = 30;
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 const DOWN = new THREE.Vector3(0, -1, 0);
 const ORIGIN = new THREE.Vector3();
@@ -359,7 +450,21 @@ export class Weather {
   private st: WeatherState = { kind: 'clear', night: false, tempC: DEFAULT_READING.tempC, wind: DEFAULT_READING.wind, source: 'default' };
   private reading: Reading = { ...DEFAULT_READING };
   private readonly forced = forcedFromUrl();
+  private readonly forcedHour = forcedHourFromUrl();
   private token = 0;
+
+  // --- local clock / time of day
+  private cityName = 'Portugal';
+  private utcOffset = 0; // seconds east of UTC
+  private sunriseH = 7;
+  private sunsetH = 19;
+  private hourNow = 12;
+  private day = 1; // daylight 0..1
+  private clockT = 0;
+  private dayLook = newLook();
+  private nightLook = newLook();
+  private skyMixCol = new THREE.Color();
+  private sunPathDir = new THREE.Vector3();
 
   private from = newLook();
   private to = newLook();
@@ -487,6 +592,7 @@ export class Weather {
     this.moon.renderOrder = -1;
     this.root.add(this.moon);
 
+    this.updateClock();
     this.setLights(lights);
     if (this.forced) this.setState({ ...this.forcedReading() }, 'forced', true);
     else this.setState({ ...DEFAULT_READING }, 'default', true);
@@ -495,6 +601,16 @@ export class Weather {
   /** Current weather (read-only snapshot). */
   get state(): Readonly<WeatherState> {
     return this.st;
+  }
+
+  /** 0 = night … 1 = full day, following the city's local clock (smooth twilight ramps). */
+  get daylight(): number {
+    return this.day;
+  }
+
+  /** The city's local time, fractional hours 0..24 (frozen when `?hour=` is set). */
+  get localHour(): number {
+    return this.hourNow;
   }
 
   /** Call again after the world was rebuilt (new lights, new city sky). */
@@ -510,6 +626,7 @@ export class Weather {
     }
     this.hemi = lights.hemi;
     this.sun = lights.sun;
+    this.updateSunPath();
     this.captureSceneBase();
     this.computeTarget();
     this.ensureAttached();
@@ -518,6 +635,7 @@ export class Weather {
   /** Fetch (or reuse) the real weather of a city and transition to it. */
   async setCity(cityName: string): Promise<void> {
     const my = ++this.token;
+    this.cityName = cityName;
     this.captureSceneBase();
     if (this.forced) {
       this.setState(this.forcedReading(), 'forced', true);
@@ -549,6 +667,11 @@ export class Weather {
     this.time += dt;
     this.ensureAttached();
     this.captureSceneBase();
+    this.clockT += dt;
+    if (this.clockT >= CLOCK_EVERY_S) {
+      this.clockT = 0;
+      if (this.updateClock()) this.computeTarget();
+    }
 
     if (this.t < 1) {
       this.t = Math.min(1, this.t + dt / TRANSITION_S);
@@ -593,7 +716,7 @@ export class Weather {
     this.hemi.intensity = L.hemiI + f * 2.2;
     this.sun.color.copy(L.sunColor);
     this.sun.intensity = L.sunI + f * 1.5;
-    const dir = this.tmpV.copy(this.daySunDir).lerp(NIGHT_SUN_DIR, L.night).normalize();
+    const dir = this.tmpV.copy(this.sunPathDir).lerp(NIGHT_SUN_DIR, L.night).normalize();
     this.sun.position.copy(this.sun.target.position).addScaledVector(dir, this.sunDist);
 
     // --- where the particles live: a box around a point a bit ahead of the camera
@@ -642,7 +765,7 @@ export class Weather {
     const code = { clear: 0, partly: 2, overcast: 3, fog: 45, drizzle: 53, rain: 63, snow: 73, storm: 95 }[k];
     return {
       code,
-      isDay: !this.forced!.night,
+      isDay: true,
       tempC: k === 'snow' ? -2 : k === 'clear' ? 22 : 12,
       cloud: { clear: 5, partly: 45, overcast: 100, fog: 100, drizzle: 90, rain: 100, snow: 95, storm: 100 }[k],
       wind: k === 'storm' ? 45 : k === 'rain' ? 22 : 10,
@@ -653,7 +776,8 @@ export class Weather {
 
   private setState(r: Reading, source: WeatherState['source'], snap: boolean): void {
     this.reading = { ...r };
-    this.st = { kind: kindFromCode(r.code), night: !r.isDay, tempC: r.tempC, wind: r.wind, source };
+    this.st = { kind: kindFromCode(r.code), night: false, tempC: r.tempC, wind: r.wind, source };
+    this.updateClock();
     if (!snap) copyLook(this.from, this.cur);
     this.computeTarget();
     if (snap) {
@@ -665,15 +789,72 @@ export class Weather {
     }
   }
 
-  /** Builds `to` from the current state and the city's base colours. */
+  /**
+   * Recomputes the city's local hour and `daylight` from the real clock (or `?hour=`).
+   * Returns true when daylight changed (→ rebuild the target look).
+   */
+  private updateClock(): boolean {
+    const r = this.reading;
+    const coords = COORDS[this.cityName] ?? COORDS.Portugal;
+    const fallbackOffsetH = TZ_FALLBACK[this.cityName] ?? Math.round(coords[1] / 15);
+    this.utcOffset = typeof r.utcOffset === 'number' ? r.utcOffset : fallbackOffsetH * 3600;
+    const now = Date.now();
+    if (typeof r.sunrise === 'number' && typeof r.sunset === 'number' && r.sunset > r.sunrise) {
+      this.sunriseH = r.sunrise;
+      this.sunsetH = r.sunset;
+    } else {
+      [this.sunriseH, this.sunsetH] = solarTimes(coords[0], coords[1], this.utcOffset / 3600, now);
+    }
+    this.hourNow = this.forcedHour ?? mod24((now / 1000 + this.utcOffset) / 3600);
+    const prev = this.day;
+    this.day = daylightAt(this.hourNow, this.sunriseH, this.sunsetH);
+    this.st.night = this.day < 0.3;
+    this.updateSunPath();
+    return Math.abs(this.day - prev) > 1e-5;
+  }
+
+  /** Sun direction over the day: low on one side after sunrise, the world's own sun at solar noon, low again at sunset. */
+  private updateSunPath(): void {
+    const len = Math.max(0.5, this.sunsetH - this.sunriseH);
+    const p = Math.min(Math.max((this.hourNow - this.sunriseH) / len, 0), 1); // 0 sunrise … 1 sunset
+    const d = this.sunPathDir.copy(this.daySunDir).applyAxisAngle(Y_AXIS, (p - 0.5) * 1.9); // ±~55° azimuth swing
+    const noonEl = Math.asin(Math.min(1, Math.max(0, this.daySunDir.y)));
+    const el = Math.max(0.32, noonEl * Math.sin(Math.PI * p)); // never below ~18° (shadows stay sane)
+    const horiz = Math.hypot(d.x, d.z) || 1;
+    d.set((d.x / horiz) * Math.cos(el), Math.sin(el), (d.z / horiz) * Math.cos(el));
+  }
+
+  /** Builds `to` from the current weather, the time of day and the city's base colours. */
   private computeTarget(): void {
-    const { kind, night } = this.st;
+    this.buildLook(this.dayLook, false);
+    this.buildLook(this.nightLook, true);
+    const d = this.day;
+    const L = this.to;
+    lerpLook(L, this.nightLook, this.dayLook, d);
+    // stars and moon fade out faster than the sky brightens
+    const nd = (1 - d) * (1 - d);
+    L.stars = this.nightLook.stars * nd;
+    L.moon = this.nightLook.moon * nd;
+    L.night = 1 - d;
+    // warm twilight tint, strongest around daylight ≈ 0.45 (the sunrise/sunset moment)
+    const w = Math.pow(Math.max(0, 1 - Math.abs(d - 0.45) / 0.45), 1.3) * WARMTH[this.st.kind];
+    if (w > 0.001) {
+      L.sky.lerp(this.hourNow < 12 ? DAWN_SKY : DUSK_SKY, Math.min(1, Math.sqrt(w) * 0.8));
+      L.fog.lerp(TWILIGHT_FOG, w * 0.8);
+      L.sunColor.lerp(TWILIGHT_SUN, Math.min(1, w * 1.1));
+      L.hemiSky.lerp(TWILIGHT_HEMI, w * 0.5);
+      L.cloudColor.lerp(TWILIGHT_CLOUD, w * 0.45);
+    }
+  }
+
+  /** One weather look for full day (`night` false) or full night (true). */
+  private buildLook(L: Look, night: boolean): void {
+    const { kind } = this.st;
     const p = DAY[kind];
     const r = this.reading;
-    const L = this.to;
 
     if (p.sky === null) L.sky.copy(this.baseSky);
-    else if (p.skyMix !== undefined) L.sky.copy(this.baseSky).lerp(new THREE.Color(p.sky), p.skyMix);
+    else if (p.skyMix !== undefined) L.sky.copy(this.baseSky).lerp(this.skyMixCol.setHex(p.sky), p.skyMix);
     else L.sky.setHex(p.sky);
     if (p.fog !== undefined) L.fog.setHex(p.fog);
     else L.fog.copy(L.sky);

@@ -21,6 +21,7 @@ import { Trouble } from './trouble';
 import { Traffic } from './traffic';
 import { createHospital, type Hospital } from './hospital';
 import { Weather } from './weather';
+import { StreetLights } from './streetlights';
 import type { GameCtx } from './gamectx';
 import { DIFFICULTY_FACTOR, createBag, showIdlePause } from './ui';
 import { isFree } from './spawn';
@@ -80,6 +81,7 @@ monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
 let airport = new Airport(scene, world.obstacles);
 let catTree: CatTree; // assigned by addCityExtras()
 let trouble: Trouble;
+let streetLights: StreetLights;
 let traffic: Traffic;
 let hospital: Hospital;
 const HIT_FLASH = 1.5;
@@ -184,6 +186,8 @@ if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles
 
 /** Hand-made interactive situations in every city: a car to drive and someone to give a coin to. */
 function addCityExtras(): Car {
+  // street lamps first (along the roads) so everything placed after avoids them
+  streetLights = new StreetLights(scene, world.obstacles);
   const c = new Car(scene, world.obstacles, new THREE.Vector3(-16, 0, 7), Math.PI / 2, city.buildings[0], () => enterCar());
   world.interactables.push(c.interactable);
   world.interactables.push(
@@ -722,6 +726,7 @@ function tick(time: number): void {
   traffic.update(dt);
   updateHospital(dt);
   weather.update(dt);
+  streetLights.update(dt, weather.daylight, camera);
   if (knock.lengthSq() > 0.05) {
     player.move(knock.x * dt, knock.z * dt, world.obstacles);
     knock.multiplyScalar(Math.exp(-7 * dt));
@@ -824,6 +829,9 @@ function tick(time: number): void {
       carried: carriedKind,
       bag: save.bag,
       weather: weather.state,
+      daylight: +weather.daylight.toFixed(2),
+      hour: +weather.localHour.toFixed(2),
+      lamps: [streetLights.litCount(), streetLights.count()],
       traffic: traffic.positions().slice(0, 3),
       trouble: trouble.positions(),
       sites: trouble.sites(),

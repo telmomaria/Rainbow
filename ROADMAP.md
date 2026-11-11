@@ -57,6 +57,7 @@ Aplicar no Session End Protocol.
 - ✅ Aeroporto + voo animado entre cidades; voz masculina p/ monstros quando existe; ícone (estrela arco-íris) + manifest; botão Casa (2026-11-11)
 - ✅ 10 personagens originais + ecrã de escolha; carro conduzível; pobre; 12 adereços interativos (2026-11-11)
 - ✅ Gato na árvore, carro com porta/condutor visível, padaria+pombos, doces, adeptos, bar, trânsito+hospital, tempo real, ecrã inicial, definições, pausa por inatividade (2026-11-11)
+- ✅ Compras só com clique/Enter, inventário lateral, definições no ecrã inicial, luz pela hora local + candeeiros de rua (2026-11-11)
 
 ---
 
@@ -72,3 +73,4 @@ Aplicar no Session End Protocol.
 | v1.5 | 2026-11-11 | Viagem entre cidades aos 100 moedas; bichos maus |
 | v1.6 | 2026-11-11 | Aeroporto e voo, ícone, Casa, 10 personagens, carro, pobre, 12 adereços |
 | v1.7 | 2026-11-11 | Cidade viva: lojas, pombos, adeptos, bar, trânsito, hospital, tempo real, gato na árvore; ecrã inicial e definições |
+| v1.8 | 2026-11-11 | Compra por clique, inventário, definições no início, dia/noite real com candeeiros |

@@ -47,12 +47,13 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   Espaço/Enter ou tocando no carro), pobre (aceita 1 moeda por cidade, agradece), e 12 adereços em src/props.ts
   (baloiço, fonte, xilofone de chão, gato, balões, flores, caixa de correio, árvore, espanta-espíritos, cão,
   cogumelo, semáforo). Todos só reagem ao toque, sem UI.
-- **Botões fixos:** Casa (ponto de partida), retrato (mudar de personagem), roda dentada (Definições: monstros Fácil ×0.5 / Médio / Difícil ×2).
+- **Botões fixos:** Casa (ponto de partida), retrato (mudar de personagem). **Definições** (monstros Fácil ×0.5 / Médio / Difícil ×2) estão no ecrã inicial.
 - **Arranque:** ecrã de escolha com "Continuar" (tudo como estava) e "Novo jogo" (tudo a zero, mantém personagem e definições).
 - **Situações por cidade (só movimento, sem texto):** gato na árvore (+5), padaria (pão = 2) → pombos, gelado 3 / chocolate 2 / chupa 1,
   adeptos do estádio (-20), dois homens à porta do bar (-10), trânsito (atropelada = -30 + hospital 5 min; o tempo persiste em reload).
   Tudo espalhado pela cidade, nunca no centro nem no ponto de partida (SPAWN em world.ts).
-- **Tempo real:** Open-Meteo (sem chave), por cidade, cache 15 min; `?weather=rain&night=1` força um estado para testes.
+- **Tempo real + hora local:** Open-Meteo (sem chave), por cidade, cache 15 min; luz segue a hora local real (nascer/pôr do sol); candeeiros de rua (src/streetlights.ts) acendem um a um quando escurece. Testes: `?weather=rain`, `?hour=21.5`.
+- **Compras:** só com clique/toque na loja (ou Enter junto ao balcão); itens vão para o inventário (lateral esquerda); tocar num doce = comer; tocar no pão = segurá-lo para os pombos.
 - **Pausa:** 30 s sem tocar em nada → pausa (ecrã com ▶). O mesmo monstro só tira moedas 2 vezes seguidas.
 - **Vozes:** narradora = voz feminina pt-PT (Helia no Windows); monstros = voz masculina pt-PT se existir (Duarte
   no Edge), senão a mesma voz com tom muito grave. O Windows não instala vozes masculinas pt-PT.

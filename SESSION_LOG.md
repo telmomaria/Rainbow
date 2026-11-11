@@ -36,3 +36,7 @@
 - Subagentes (lojas, adeptos/bar, trânsito/hospital, tempo) pararam no limite de 5 h a meio da verificação; os módulos compilavam → integrados e verificados pelo master.
 - Um subagente tinha deixado SPAWN alterado em world.ts (fora do âmbito) — reposto.
 - Novo: gato na árvore (+5), carro com porta e condutor visível, padaria (pão 2) → pombos, gelado 3/chocolate 2/chupa 1, adeptos (-20), bar (-10), trânsito com atropelamento (-30 + hospital 5 min, persiste em reload), tempo real Open-Meteo por cidade, ecrã inicial Continuar/Novo jogo, definições (monstros ×0.5/×1/×2), pergunta com repetir + hover, pausa aos 30 s parado, mesmo monstro máx. 2 hits seguidos, câmara não entra em edifícios, nunca fica presa.
+
+## 2026-11-11 — compras por clique, inventário, dia/noite
+- Lojas só vendem com clique/Enter; inventário lateral (doces comem-se ao tocar; pão para os pombos); definições no ecrã inicial.
+- Subagente: luz pela hora local real (Open-Meteo sunrise/sunset) + 114 candeeiros de rua (instanced, 6 PointLights). QA 13h/17h36/22h OK.
