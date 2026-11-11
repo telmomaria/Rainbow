@@ -31,3 +31,8 @@
 - Bug apanhado no QA: posição gravada a meio do voo e reposta dentro do avião — corrigido.
 - QA browser: escolha por setas/Enter, carro (entrar/conduzir/sair), pobre (-1 moeda + agradece), 22 interativos na cidade, Casa → (0,0), voo Portugal → Roma completo. 0 erros.
 - Voz masculina pt-PT: não existe no Windows (só Helia); funciona no Edge (Duarte).
+
+## 2026-11-11 — cidade viva (lojas, adeptos, trânsito, hospital, tempo real) + ajustes
+- Subagentes (lojas, adeptos/bar, trânsito/hospital, tempo) pararam no limite de 5 h a meio da verificação; os módulos compilavam → integrados e verificados pelo master.
+- Um subagente tinha deixado SPAWN alterado em world.ts (fora do âmbito) — reposto.
+- Novo: gato na árvore (+5), carro com porta e condutor visível, padaria (pão 2) → pombos, gelado 3/chocolate 2/chupa 1, adeptos (-20), bar (-10), trânsito com atropelamento (-30 + hospital 5 min, persiste em reload), tempo real Open-Meteo por cidade, ecrã inicial Continuar/Novo jogo, definições (monstros ×0.5/×1/×2), pergunta com repetir + hover, pausa aos 30 s parado, mesmo monstro máx. 2 hits seguidos, câmara não entra em edifícios, nunca fica presa.

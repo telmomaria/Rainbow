@@ -16,6 +16,12 @@ import { Car } from './car';
 import { createBeggar } from './beggar';
 import { chooseCharacter, createAvatarButton } from './select';
 import { CAT_REWARD, CatTree } from './cattree';
+import { createShops } from './shops';
+import { Trouble } from './trouble';
+import { Traffic } from './traffic';
+import { createHospital, type Hospital } from './hospital';
+import { Weather } from './weather';
+import type { GameCtx } from './gamectx';
 import { DIFFICULTY_FACTOR, createSettingsButton, showIdlePause } from './ui';
 import { isFree } from './spawn';
 
@@ -24,11 +30,19 @@ const TURN_SPEED = 2.6; // rad/s (arrow keys)
 const ARRIVE_DIST = 0.6;
 /** `?debug` exposes state on <body data-debug> and accepts teleports, for automated browser checks. */
 const DEBUG = new URLSearchParams(location.search).has('debug');
+/** Debug-only aerial camera (null = normal camera). */
+let aerial: { x: number; z: number; h: number } | null = null;
 if (DEBUG) {
   window.addEventListener('rainbow-teleport', (e) => {
     const { x, z, h } = (e as CustomEvent<{ x: number; z: number; h: number }>).detail;
     player.position.set(x, 0, z);
     player.heading = h;
+  });
+  window.addEventListener('rainbow-aerial', (e) => {
+    aerial = (e as CustomEvent<null | { x: number; z: number; h: number }>).detail;
+  });
+  window.addEventListener('rainbow-hospital-end', () => {
+    save.hospitalUntil = Date.now();
   });
   window.addEventListener('rainbow-coins', (e) => {
     save.coins = (e as CustomEvent<number>).detail;
@@ -65,6 +79,53 @@ let monsters = new Monsters(scene, world.obstacles);
 monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
 let airport = new Airport(scene, world.obstacles);
 let catTree: CatTree; // assigned by addCityExtras()
+let trouble: Trouble;
+let traffic: Traffic;
+let hospital: Hospital;
+const HIT_FLASH = 1.5;
+const RUN_OVER_COST = 30;
+const HOSPITAL_MS = 5 * 60 * 1000;
+
+/** Item in her hand (bread, ice cream...), attached to the character in the world. */
+let carriedObj: THREE.Object3D | null = null;
+let carriedKind: string | null = null;
+
+/** What gameplay modules may ask of the game (see gamectx.ts). */
+const gameCtx: GameCtx = {
+  get player() {
+    return player.position;
+  },
+  heading: () => player.heading,
+  coins: () => save.coins,
+  addCoins: (n) => addCoins(n),
+  hurt: (from, cost) => hurt(from, cost),
+  setCarried(item, kind) {
+    if (carriedObj) carriedObj.parent?.remove(carriedObj);
+    carriedObj = item;
+    carriedKind = item ? (kind ?? 'item') : null;
+    if (item) {
+      item.position.set(0.42, 1.0, -0.32); // in front of her right hand
+      player.root.add(item);
+    }
+  },
+  carried: () => carriedKind,
+  isDriving: () => !!driving,
+  isPaused: () => paused,
+};
+
+/** Knock her away from `from`, flash, lose `cost` coins. False if she can't be hurt right now. */
+function hurt(from: THREE.Vector3, cost: number): boolean {
+  if (paused || driving || flight || invulnerable > 0) return false;
+  const lost = Math.min(cost, save.coins);
+  if (lost > 0) addCoins(-lost);
+  sfx.bonk();
+  knock.set(player.position.x - from.x, 0, player.position.z - from.z);
+  if (knock.lengthSq() < 1e-4) knock.set(1, 0, 0);
+  knock.setLength(11);
+  invulnerable = HIT_FLASH;
+  clearTarget();
+  return true;
+}
 let car = addCityExtras();
 // restore after every obstacle (incl. the airport) exists, so she can never reappear inside something
 player.position.set(SPAWN.x, 0, SPAWN.z);
@@ -87,6 +148,10 @@ function addCityExtras(): Car {
   // playground props (swing, fountain, xylophone, cat, dog...) — placed last so they avoid everything else
   world.interactables.push(...createProps(scene, world.obstacles, mulberry32(city.seed * 97 + 1)));
   catTree = new CatTree(scene, world.obstacles, mulberry32(city.seed * 31 + 5));
+  hospital = createHospital(scene, world.obstacles, mulberry32(city.seed * 41 + 9));
+  world.interactables.push(...createShops(scene, world.obstacles, mulberry32(city.seed * 13 + 7), gameCtx));
+  trouble = new Trouble(scene, world.obstacles, mulberry32(city.seed * 17 + 3), gameCtx);
+  traffic = new Traffic(scene, world.obstacles, gameCtx, (carPos) => runOver(carPos));
   world.interactables.push(catTree.interactable);
   if (!save.visited.includes(city.name)) save.visited.push(city.name);
   return c;
@@ -109,6 +174,9 @@ function loadCity(): void {
   airport = new Airport(scene, world.obstacles);
   car = addCityExtras();
   cityPill.textContent = city.name;
+  weather.setLights({ hemi: world.hemi, sun: world.sun });
+  void weather.setCity(city.name);
+  gameCtx.setCarried(null);
 }
 
 /** Travel = walk to the airport, board the plane, fly, land in the next city. */
@@ -185,6 +253,75 @@ createHomeButton(() => {
 
 let rescuing = false;
 
+/** Real weather of the current city (Open-Meteo), re-applied on every city change. */
+const weather = new Weather(scene, { hemi: world.hemi, sun: world.sun }, camera);
+void weather.setCity(city.name);
+
+/** Hospital: run over → fall → white fade → lying in the hospital bed while the clock fills (5 min). */
+let hospitalPhase: 'none' | 'fall' | 'bed' = 'none';
+let hospitalT = 0;
+function runOver(carPos: THREE.Vector3): void {
+  if (paused || driving || flight || hospitalPhase !== 'none') return;
+  addCoins(-RUN_OVER_COST);
+  sfx.bonk();
+  paused = true;
+  clearTarget();
+  input.releaseAll();
+  gameCtx.setCarried(null);
+  hospitalPhase = 'fall';
+  hospitalT = 0;
+  knock.set(player.position.x - carPos.x, 0, player.position.z - carPos.z).setLength(6);
+  save.hospitalUntil = Date.now() + HOSPITAL_MS;
+  writeSave(save);
+}
+function enterBed(): void {
+  hospitalPhase = 'bed';
+  player.root.rotation.order = 'YXZ';
+  player.position.copy(hospital.bed.pos);
+  player.heading = hospital.bed.heading + Math.PI; // lying on her back, head towards the pillow
+  player.root.rotation.x = Math.PI / 2;
+  hospital.setAmbulanceLights(true);
+}
+function leaveHospital(): void {
+  hospitalPhase = 'none';
+  save.hospitalUntil = 0;
+  player.root.rotation.x = 0;
+  player.position.copy(hospital.exit);
+  player.position.y = 0;
+  hospital.setClock(0);
+  hospital.setAmbulanceLights(false);
+  paused = false;
+  lastActivity = performance.now();
+  savePosition();
+  canvas.focus();
+}
+function updateHospital(dt: number): void {
+  if (hospitalPhase === 'fall') {
+    hospitalT += dt;
+    player.root.rotation.order = 'YXZ';
+    player.root.rotation.x = -Math.min(1, hospitalT * 3) * (Math.PI / 2) * 0.9; // tips over
+    player.move(knock.x * dt, knock.z * dt, world.obstacles);
+    knock.multiplyScalar(Math.exp(-6 * dt));
+    if (hospitalT > 0.9 && hospitalT - dt <= 0.9) setFade(true);
+    if (hospitalT > 1.8) {
+      setFade(false);
+      enterBed();
+    }
+  } else if (hospitalPhase === 'bed') {
+    const left = save.hospitalUntil - Date.now();
+    hospital.setClock(1 - Math.max(0, left) / HOSPITAL_MS);
+    player.root.rotation.x = Math.PI / 2;
+    if (left <= 0) leaveHospital();
+  }
+}
+/** Camera for the hospital: from the open side of the ward, looking at the bed and the clock. */
+function hospitalShot(): { pos: THREE.Vector3; look: THREE.Vector3 } {
+  return {
+    pos: hospital.group.localToWorld(new THREE.Vector3(7.6, 4.2, 10.5)),
+    look: hospital.group.localToWorld(new THREE.Vector3(7.6, 1.4, -2)),
+  };
+}
+
 /** Idle detection: any key, click, tap or mouse move counts as activity. */
 const IDLE_MS = 30_000;
 let lastActivity = performance.now();
@@ -245,7 +382,7 @@ window.addEventListener('pagehide', savePosition);
 let paused = false;
 
 function addCoins(n: number): void {
-  save.coins += n;
+  save.coins = Math.max(0, save.coins + n);
   hud.set('coins', save.coins);
   writeSave(save);
 }
@@ -289,6 +426,7 @@ scene.add(marker);
 let camYaw = player.heading; // set after the spawn/restore above
 let camPitch = 0.45;
 let camDist = 9;
+let camDistSmooth = 9;
 let lastDragTime = -Infinity;
 
 let walkTarget: THREE.Vector3 | null = null;
@@ -473,7 +611,7 @@ function tick(time: number): void {
   }
 
   // --- idle for 30 s → pause (so the creatures don't eat all the coins) ---
-  if (!paused && !flight && performance.now() - lastActivity > IDLE_MS) void idlePause();
+  if (!paused && !flight && hospitalPhase === 'none' && performance.now() - lastActivity > IDLE_MS) void idlePause();
   for (const it of world.interactables) it.update?.(dt);
 
   // --- coins & jewels ---
@@ -492,14 +630,13 @@ function tick(time: number): void {
   // --- creatures ---
   const ev = monsters.update(dt, player.position, save.coins, paused);
   if (ev.say && !paused) taunt(ev.say);
-  if (ev.hit && invulnerable <= 0 && !paused && !driving) {
-    const lost = Math.min(HIT_COST, save.coins);
-    if (lost > 0) addCoins(-lost);
-    sfx.bonk();
-    knock.set(player.position.x - ev.hit.x, 0, player.position.z - ev.hit.z).setLength(11);
-    invulnerable = 1.5;
-    clearTarget();
-  }
+  if (ev.hit) hurt(ev.hit, HIT_COST);
+
+  // --- street trouble (football fans, bar scuffle) and traffic ---
+  trouble.update(dt);
+  traffic.update(dt);
+  updateHospital(dt);
+  weather.update(dt);
   if (knock.lengthSq() > 0.05) {
     player.move(knock.x * dt, knock.z * dt, world.obstacles);
     knock.multiplyScalar(Math.exp(-7 * dt));
@@ -548,19 +685,35 @@ function tick(time: number): void {
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     camYaw += diff * Math.min(1, dt * 2.5);
   }
-  if (flight) {
+  if (aerial) {
+    camera.position.set(aerial.x, aerial.h, aerial.z + aerial.h * 0.35);
+    camera.lookAt(aerial.x, 0, aerial.z);
+  } else if (hospitalPhase === 'bed') {
+    const shot = hospitalShot();
+    camera.position.lerp(shot.pos, Math.min(1, dt * 3));
+    camera.lookAt(shot.look);
+  } else if (flight) {
     const shot = flight.update(dt);
     camera.position.lerp(shot.pos, Math.min(1, dt * 4));
     camera.lookAt(shot.look);
     if (flight.done) endFlight();
   } else {
   const target = player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
-  const dist = driving ? Math.max(camDist, 12) : camDist;
-  camera.position.set(
-    target.x + Math.sin(camYaw) * Math.cos(camPitch) * dist,
-    target.y + Math.sin(camPitch) * dist,
-    target.z + Math.cos(camYaw) * Math.cos(camPitch) * dist,
-  );
+  const wanted = driving ? Math.max(camDist, 12) : camDist;
+  // don't let the camera end up inside a building: walk out from her towards the camera and stop before a wall
+  const dir = new THREE.Vector3(Math.sin(camYaw) * Math.cos(camPitch), Math.sin(camPitch), Math.cos(camYaw) * Math.cos(camPitch));
+  let dist = wanted;
+  for (let d = 1.2; d <= wanted; d += 0.4) {
+    const px = target.x + dir.x * d;
+    const pz = target.z + dir.z * d;
+    if (target.y + dir.y * d > 7) break; // above most rooftops
+    if (world.obstacles.some((o) => o !== driving?.obstacleBox && px > o.minX - 0.3 && px < o.maxX + 0.3 && pz > o.minZ - 0.3 && pz < o.maxZ + 0.3)) {
+      dist = Math.max(1.5, d - 0.6);
+      break;
+    }
+  }
+  camDistSmooth += (dist - camDistSmooth) * Math.min(1, dt * (dist < camDistSmooth ? 12 : 3));
+  camera.position.copy(target).addScaledVector(dir, camDistSmooth);
   camera.lookAt(target);
   }
 
@@ -581,6 +734,13 @@ function tick(time: number): void {
       difficulty: save.difficulty,
       monsterCount: monsters.positions().length,
       rescuing,
+      hospital: hospitalPhase,
+      hospitalLeft: Math.max(0, save.hospitalUntil - Date.now()),
+      carried: carriedKind,
+      weather: weather.state,
+      traffic: traffic.positions().slice(0, 3),
+      trouble: trouble.positions(),
+      sites: trouble.sites(),
       catAt: [+catTree.interactable.position.x.toFixed(1), +catTree.interactable.position.z.toFixed(1)],
       flying: !!flight,
       character: save.character,
@@ -630,7 +790,9 @@ function applyCharacter(id: string): void {
 
 /** "Novo jogo": everything back to zero (keeps the chosen character and the settings). */
 function newGame(): void {
-  Object.assign(save, { coins: 0, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null, visited: [] });
+  hospitalPhase = 'none';
+  player.root.rotation.x = 0;
+  Object.assign(save, { hospitalUntil: 0, coins: 0, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null, visited: [] });
   solved.clear();
   hud.set('coins', 0);
   hud.set('jewels', 0);
@@ -668,4 +830,9 @@ createSettingsButton(
     if (!open) canvas.focus();
   },
 );
-void startScreen();
+void startScreen().then(() => {
+  if (save.hospitalUntil > Date.now()) {
+    paused = true;
+    enterBed();
+  }
+});

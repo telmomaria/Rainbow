@@ -1,6 +1,8 @@
 /** Progress persisted in localStorage. No personal data, no accounts. */
 export interface SaveData {
   coins: number;
+  /** Epoch ms until which she must stay in hospital (0 = not in hospital). */
+  hospitalUntil: number;
   /** Monster difficulty from the settings. */
   difficulty: 'facil' | 'medio' | 'dificil';
   /** Cities already visited (names), in order. */
@@ -36,6 +38,7 @@ export function loadSave(): SaveData {
       const d = JSON.parse(raw) as Partial<SaveData> & { asked?: string[] };
       return {
         coins: d.coins ?? 0,
+        hospitalUntil: d.hospitalUntil ?? 0,
         difficulty: d.difficulty ?? 'medio',
         visited: Array.isArray(d.visited) ? d.visited : [],
         character: d.character ?? null,
@@ -51,7 +54,7 @@ export function loadSave(): SaveData {
   } catch {
     // corrupted or blocked storage: start fresh
   }
-  return { coins: 0, difficulty: 'medio', visited: [], character: null, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null };
+  return { coins: 0, hospitalUntil: 0, difficulty: 'medio', visited: [], character: null, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null };
 }
 
 export function writeSave(data: SaveData): void {

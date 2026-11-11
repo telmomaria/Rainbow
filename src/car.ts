@@ -33,6 +33,10 @@ export class Car {
   phase: Phase = 'parked';
   /** Obstacle box kept in the shared list; follows the car (axis-aligned bound of the rotated car). */
   private readonly box: Obstacle;
+  /** The car's own obstacle box (the follow camera ignores it). */
+  get obstacleBox(): Obstacle {
+    return this.box;
+  }
   private readonly wheels: THREE.Mesh[] = [];
   private readonly frontWheels: THREE.Group[] = [];
   private readonly door: THREE.Group;
