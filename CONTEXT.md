@@ -23,8 +23,8 @@ Pelo caminho encontra roupas e acessórios para trocar.
 
 ## Top pending (per ROADMAP §🎯 NEXT)
 
-1. **Telmo testa o bootstrap** — Telmo · S · none.
-2. **Moedas + perguntas faladas** — agent · M · none.
+1. **Telmo testa moedas + perguntas** — Telmo · S · none.
+2. **Subida de nível + bichos maus** — agent · M · none.
 3. **Spike OSM Lisboa** — agent · M · fonte de dados.
 
 ## Quick references

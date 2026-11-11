@@ -94,6 +94,11 @@ export class Input {
     );
   }
 
+  /** Forget held keys (e.g. when a question pops up mid-walk). Auto-repeat re-arms a key still held. */
+  releaseAll(): void {
+    this.keys.up = this.keys.down = this.keys.left = this.keys.right = false;
+  }
+
   consumeTaps(): { x: number; y: number }[] {
     const t = this.taps;
     this.taps = [];

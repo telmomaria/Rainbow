@@ -2,8 +2,13 @@ import * as THREE from 'three';
 import { Character } from './character';
 import { Input } from './input';
 import { createWorld, type Interactable } from './world';
+import { Collectibles } from './collectibles';
+import { Npcs, type QuestionNpc } from './npcs';
+import { loadSave, writeSave } from './save';
+import { CoinHud, askQuestion } from './ui';
+import { sfx } from './audio';
 
-const WALK_SPEED = 5; // m/s
+const WALK_SPEED = 6.5; // m/s
 const TURN_SPEED = 2.6; // rad/s (arrow keys)
 const ARRIVE_DIST = 0.6;
 /** `?debug` exposes state on <body data-debug> and accepts teleports, for automated browser checks. */
@@ -29,6 +34,39 @@ const player = new Character();
 scene.add(player.root);
 const input = new Input(canvas);
 canvas.focus();
+
+const QUESTION_REWARD = 10;
+const save = loadSave();
+const asked = new Set(save.asked);
+const hud = new CoinHud(save.coins);
+const collectibles = new Collectibles(scene, world.obstacles);
+const npcs = new Npcs(scene, world.obstacles, asked, player.position);
+/** True while a question is on screen: the character stands still. */
+let paused = false;
+
+function addCoins(n: number): void {
+  save.coins += n;
+  hud.set(save.coins);
+  writeSave(save);
+}
+
+async function meet(npc: QuestionNpc): Promise<void> {
+  paused = true;
+  clearTarget();
+  input.releaseAll();
+  // face each other
+  const dx = npc.group.position.x - player.position.x;
+  const dz = npc.group.position.z - player.position.z;
+  player.heading = Math.atan2(-dx, -dz);
+  asked.add(npc.question.id);
+  save.asked = [...asked];
+  writeSave(save); // retired immediately: reloading the page can't give a second try
+  const ok = await askQuestion(npc.question, QUESTION_REWARD);
+  if (ok) addCoins(QUESTION_REWARD);
+  npcs.dismiss(npc);
+  paused = false;
+  canvas.focus();
+}
 
 // Tap target marker: a soft ring on the ground where the character is heading.
 const marker = new THREE.Mesh(
@@ -65,13 +103,19 @@ resize();
 function handleTap(x: number, y: number): void {
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  // Objects first: tapping a thing walks the character up to it (touching it uses it).
+  // Objects and characters first: tapping one walks the character up to it (touching it uses it).
+  const targets = [
+    ...world.interactables.map((i) => ({ object: i.object as THREE.Object3D, position: i.position })),
+    ...npcs.list
+      .filter((n) => n.leaving === null)
+      .map((n) => ({ object: n.group as THREE.Object3D, position: n.group.position })),
+  ];
   const objHits = raycaster.intersectObjects(
-    world.interactables.map((i) => i.object),
+    targets.map((t) => t.object),
     true,
   );
   if (objHits.length > 0) {
-    const hit = world.interactables.find((i) => isDescendant(objHits[0].object, i.object));
+    const hit = targets.find((t) => isDescendant(objHits[0].object, t.object));
     if (hit) {
       setTarget(hit.position);
       return;
@@ -105,7 +149,8 @@ function tick(): void {
   const dt = Math.min(clock.getDelta(), 0.05);
   elapsed += dt;
 
-  for (const t of input.consumeTaps()) handleTap(t.x, t.y);
+  const taps = input.consumeTaps();
+  if (!paused) for (const t of taps) handleTap(t.x, t.y);
 
   const drag = input.consumeDrag();
   if (drag.dx || drag.dy) {
@@ -119,7 +164,9 @@ function tick(): void {
   const k = input.keys;
   let speed = 0;
   const before = player.position.clone();
-  if (k.up || k.down || k.left || k.right) {
+  if (paused) {
+    // standing still while talking
+  } else if (k.up || k.down || k.left || k.right) {
     clearTarget(); // keyboard always takes over from click-to-walk
     if (k.left) player.heading += TURN_SPEED * dt;
     if (k.right) player.heading -= TURN_SPEED * dt;
@@ -166,6 +213,18 @@ function tick(): void {
   }
   world.update(dt);
 
+  // --- coins & jewels ---
+  const got = collectibles.update(dt, player.position);
+  if (got.value > 0) {
+    addCoins(got.value);
+    if (got.kinds.includes('jewel')) sfx.jewel();
+    else sfx.coin();
+  }
+
+  // --- question characters ---
+  const met = npcs.update(dt, player.position);
+  if (met && !paused) void meet(met);
+
   // --- camera follows behind the character, unless the player is looking around ---
   const turning = k.left || k.right;
   if ((speed > 0 || turning) && elapsed - lastDragTime > 1.5) {
@@ -189,6 +248,12 @@ function tick(): void {
       h: +player.heading.toFixed(2),
       camYaw: +camYaw.toFixed(2),
       lamp: (lamp as THREE.PointLight | undefined)?.intensity ?? null,
+      coins: save.coins,
+      asked: save.asked.length,
+      paused,
+      npcs: npcs.list
+        .filter((n) => n.leaving === null)
+        .map((n) => ({ x: +n.group.position.x.toFixed(1), z: +n.group.position.z.toFixed(1), q: n.question.id })),
     });
   }
 
