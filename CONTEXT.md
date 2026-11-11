@@ -15,7 +15,7 @@ Pelo caminho encontra roupas e acessórios para trocar.
 
 - **Stack:** Three.js + Vite + TypeScript · mapa OSM estilizado · Web Speech API pt-PT · localStorage · porta 1234.
 - **Scaffold v7** gerado (CLAUDE.md, ROADMAP, memory/, docs trindade, SKILLS/, .gitignore, .env.example, .mcp.json vazio).
-- Ainda não há código do jogo.
+- **Bootstrap jogável:** cena placeholder, personagem placeholder, setas + rato/toque, colisões, candeeiro interativo (src/main.ts · input.ts · character.ts · world.ts). `?debug` expõe estado em `body[data-debug]` para QA no browser.
 
 ## What's broken / blocked
 
@@ -23,13 +23,13 @@ Pelo caminho encontra roupas e acessórios para trocar.
 
 ## Top pending (per ROADMAP §🎯 NEXT)
 
-1. **Bootstrap Vite + Three.js** — agent · S · none.
-2. **Controlos setas + rato** — agent · S · #1.
+1. **Telmo testa o bootstrap** — Telmo · S · none.
+2. **Moedas + perguntas faladas** — agent · M · none.
 3. **Spike OSM Lisboa** — agent · M · fonte de dados.
 
 ## Quick references
 
-- **Dev server:** `npm run dev` → http://localhost:1234 (ainda por criar)
+- **Dev server:** `npm run dev` → http://localhost:1234 
 - **Repo:** https://github.com/telmomaria/Rainbow.git
 - **Capacity rule:** ≤70% strict close · 60% gate se polimento UX iterativo
 - Regras de jogo, controlos e IP das personagens: [CLAUDE.md](CLAUDE.md) §Project-specific conventions

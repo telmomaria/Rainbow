@@ -12,11 +12,11 @@ Aplicar no Session End Protocol.
 
 | # | Action | Owner | Blocker |
 |---|---|---|---|
-| 1 | Bootstrap Vite + Three.js + TS na porta 1234 (cena vazia, câmara 3.ª pessoa) | agent | none |
-| 2 | Controlos: setas + rato (clicar-para-andar, arrastar câmara) com uma personagem placeholder | agent | #1 |
-| 3 | Spike OSM: carregar um quarteirão real (Lisboa) → ruas + edifícios low-poly com colisões | agent | #1 · decidir fonte de dados (Overpass vs tiles vetoriais pré-processados) |
-| 4 | Moedas/joias no mapa + contador + gravação em localStorage | agent | #2 |
-| 5 | Perguntas faladas (Web Speech pt-PT) com 3 opções; banco inicial ~30 perguntas 2.º ano | agent + Telmo (validar perguntas) | #2 |
+| 1 | Telmo experimenta em `npm run dev` → localhost:1234 (setas, clicar no chão, arrastar, tocar no candeeiro) | Telmo | none |
+| 2 | Spike OSM: carregar um quarteirão real (Lisboa) → ruas + edifícios low-poly com colisões | agent | decidir fonte de dados (Overpass vs tiles vetoriais pré-processados) |
+| 3 | Moedas/joias no mapa + contador + gravação em localStorage | agent | none |
+| 4 | Perguntas faladas (Web Speech pt-PT) com 3 opções; banco inicial ~30 perguntas 2.º ano | agent + Telmo (validar perguntas) | none |
+| 5 | Seleção de personagem (1.ª personagem original modelada) | agent | none |
 
 ---
 
@@ -47,6 +47,8 @@ Aplicar no Session End Protocol.
 ## ✅ Completed (compressed)
 
 - ✅ #NP — scaffold v7 gerado, stack decidida, repo ligado (2026-11-11)
+- ✅ Bootstrap Vite 8 + Three.js 0.187 + TS, porta 1234; mundo placeholder; personagem placeholder (2026-11-11)
+- ✅ Controlos setas + rato/toque (clicar-para-andar, arrastar câmara, roda/pinça zoom), colisões; candeeiro que acende ao tocar — verificado no browser (2026-11-11)
 
 ---
 
@@ -55,3 +57,4 @@ Aplicar no Session End Protocol.
 | v | Date | Summary |
 |---|---|---|
 | v1 | 2026-11-11 | #NP: scaffold, stack Three.js+Vite+TS, mapa OSM estilizado, regras de jogo e controlos (setas + rato) |
+| v1.1 | 2026-11-11 | Bootstrap jogável: cena, personagem placeholder, setas + rato, colisões, 1.º objeto interativo |
