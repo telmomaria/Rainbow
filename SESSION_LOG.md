@@ -45,3 +45,9 @@
 - Retrato abre a página principal completa (Continuar/Novo jogo/Definições), também no hospital. Dificuldade dentro de "⚙ Definições".
 - Personagem de pergunta dentro do hospital: atores passaram a nascer depois de todos os edifícios (npcsInside = 0 verificado).
 - Bug: classe CSS "settings" do botão colidia com o overlay das definições — renomeada.
+
+## 2026-11-12 — fecho da sessão 1 (#SEP)
+- Últimos polimentos: espaço na página principal; opção "Zero" (sem monstros) nas Definições; "Novo jogo" pede confirmação (Enter/Esc = não).
+- Estado: v1.8 + polimentos, 20 commits em `main` (enviados). Mundo continua provisório (OSM por fazer).
+- Lições da sessão: (1) subagentes podem alterar ficheiros fora do âmbito durante testes — rever `git diff` no fim; (2) o limite de 5 h da conta pode cortar subagentes a meio — o trabalho fica no disco e o master pode integrar; (3) edições minhas recarregam o Vite e reiniciam o jogo do Telmo — por isso a posição é gravada; (4) nomes de classes CSS genéricos ("settings") colidem entre módulos.
+- Step 8 (bootstrap v{N+1}) não aplicável: projeto de uma só janela.

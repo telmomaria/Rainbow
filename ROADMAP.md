@@ -12,11 +12,11 @@ Aplicar no Session End Protocol.
 
 | # | Action | Owner | Blocker |
 |---|---|---|---|
-| 1 | Telmo testa moedas + perguntas (voz, dificuldade, recompensas) e valida o banco de 36 perguntas em src/questions.ts | Telmo | none |
-| 2 | Spike OSM: carregar um quarteirão real (Lisboa) → ruas + edifícios low-poly com colisões | agent | decidir fonte de dados (Overpass vs pré-processado) |
-| 3 | Roupas e acessórios (óculos, chapéus) para encontrar e trocar | agent | none |
-| 4 | Morada de início nas Definições | agent | spike OSM |
-| 5 | Mais situações: semáforo que pára o trânsito, porta que toca à campainha, loja de gelados | agent | none |
+| 1 | Telmo testa a sessão toda no browser (voz, dificuldade, situações, compras, voo) e valida as 36 perguntas em src/questions.ts | Telmo | none |
+| 2 | Roupas e acessórios (óculos, chapéus) para encontrar e trocar | agent | none |
+| 3 | Spike OSM: carregar um quarteirão real (Lisboa) → ruas + edifícios low-poly com colisões | agent | decidir fonte de dados (Overpass vs pré-processado) |
+| 4 | Morada de início nas Definições | agent | #3 |
+| 5 | Verificar o não-verificado: adeptos a perseguir, empurrões no bar, chuva/neve/trovoada, viragens do trânsito, fps em tablet | agent | none |
 
 ---
 
@@ -58,6 +58,7 @@ Aplicar no Session End Protocol.
 - ✅ 10 personagens originais + ecrã de escolha; carro conduzível; pobre; 12 adereços interativos (2026-11-11)
 - ✅ Gato na árvore, carro com porta/condutor visível, padaria+pombos, doces, adeptos, bar, trânsito+hospital, tempo real, ecrã inicial, definições, pausa por inatividade (2026-11-11)
 - ✅ Compras só com clique/Enter, inventário lateral, definições no ecrã inicial, luz pela hora local + candeeiros de rua (2026-11-11)
+- ✅ Página principal acessível em jogo (também no hospital), ⚙ Definições com Zero/Fácil/Médio/Difícil, Novo jogo com confirmação (2026-11-12)
 
 ---
 
@@ -74,3 +75,4 @@ Aplicar no Session End Protocol.
 | v1.6 | 2026-11-11 | Aeroporto e voo, ícone, Casa, 10 personagens, carro, pobre, 12 adereços |
 | v1.7 | 2026-11-11 | Cidade viva: lojas, pombos, adeptos, bar, trânsito, hospital, tempo real, gato na árvore; ecrã inicial e definições |
 | v1.8 | 2026-11-11 | Compra por clique, inventário, definições no início, dia/noite real com candeeiros |
+| v1.9 | 2026-11-12 | Menu principal em jogo, Definições (Zero…Difícil), confirmação de Novo jogo — fecho da sessão 1 (#SEP) |

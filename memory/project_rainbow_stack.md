@@ -6,7 +6,8 @@ metadata:
 ---
 
 Three.js + Vite + TypeScript, dev na porta 1234. Mapa a partir de dados OpenStreetMap em estilo cartoon/low-poly.
-Voz das perguntas via Web Speech API (pt-PT). Progresso em localStorage, sem backend.
+Voz das perguntas via Web Speech API (pt-PT). Progresso em localStorage, sem backend. Tempo real + hora local por
+cidade via Open-Meteo (grátis, sem chave, CORS) — único serviço externo em uso (2026-11-11).
 
 **Why:** escolhido pelo Telmo a 2026-11-11 entre Three.js / Babylon.js / Godot e entre OSM estilizado / Google 3D Tiles /
 cidades inventadas. OSM dá ruas reais (morada de início faz sentido) com controlo total de colisões e objetos
