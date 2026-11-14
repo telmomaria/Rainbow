@@ -51,3 +51,18 @@
 - Estado: v1.8 + polimentos, 20 commits em `main` (enviados). Mundo continua provisório (OSM por fazer).
 - Lições da sessão: (1) subagentes podem alterar ficheiros fora do âmbito durante testes — rever `git diff` no fim; (2) o limite de 5 h da conta pode cortar subagentes a meio — o trabalho fica no disco e o master pode integrar; (3) edições minhas recarregam o Vite e reiniciam o jogo do Telmo — por isso a posição é gravada; (4) nomes de classes CSS genéricos ("settings") colidem entre módulos.
 - Step 8 (bootstrap v{N+1}) não aplicável: projeto de uma só janela.
+
+## 2026-11-13/14 — sessão 2: concerto, piscina, autocarro, novas personagens (#SS → #SEP)
+- Novo: concerto (20 em 20 min pelo relógio, 5 canções de domínio público, contagem final, público e artistas entram/saem), piscina (bilhete, cabines, 3 estilos de natação, espreguiçadeiras, visitantes), venue.ts partilhado, autocarro com paragens e 2 linhas, baloiço montável, Vega e Alice, perguntas a passear e a ir embora a pé, Portugal → Porto, Casa no hospital.
+- Bugs corrigidos: personagens das perguntas desapareciam (banco esgotado → revisão das resolvidas); carros parados (bloqueio nos cruzamentos, depois outro com autocarros a virar); espreguiçadeira não deixava levantar/voltar a deitar (o toque acertava na própria espreguiçadeira); andar com o rato saltava para a piscina; xilofone a atravessar ruas; baloiço junto à rua; recintos colados à rua (candeeiro à frente da bilheteira).
+- Subagentes (#SUB): personagens, concerto, espaço livre, trânsito, autocarro. Dois cortados pelo limite semanal — retomados com SendMessage depois do reset.
+- Lições: (1) o HMR do Vite recarrega o browser de teste quando outros editam — desligar com stub de WebSocket no addInitScript; (2) heredocs com aspas partem no Git Bash — escrever partes com Write e montar com node; (3) o Telmo muda de ideias com o uso (sair da piscina: livre → obrigado a vestir) — perguntar pouco, ajustar depressa; (4) "não mexas no que não pedi" (reduzi 5→3 canções sem pedido).
+- Commit sugerido (não feito — aguarda aprovação): `feat: concerto, piscina, autocarro, baloiço, Vega e Alice; trânsito sem bloqueios; Porto`.
+- Step 8 (bootstrap) não aplicável: projeto de uma só janela.
+
+## 2026-11-14 — sessão 3: casa, Tóquio, feira popular (#SS → #SEP)
+- Novo: casa (house.ts) com 5 divisões e ~20 objetos ao toque, sofá/cadeiras/cama, cores da bandeira por país; Tóquio; feira popular (src/fair/) com 15 diversões desbloqueadas cidade a cidade (5 + nível).
+- Base partilhada criada pelo master antes de delegar: items.ts (itens e acessórios), save.wear + Character.setWear, SwingSeat com stand/steer/done/lying, interact() pode recusar, world.clearArea (feira retira edifícios provisórios em cidades cheias).
+- Subagentes (#SUB): rides.ts+ridekit.ts, games.ts, stalls.ts — todos testados; o master corrigiu os problemas de contrato que reportaram (Enter duplo nos carrinhos, buyTarget, compra durante uma diversão, unicórnio sem cabeça exposta).
+- Lição: definir o contrato (types.ts + slots + helpers) ANTES de lançar subagentes paralelos funcionou bem — 3 agentes, 0 conflitos de ficheiros.
+- Commit sugerido (não feito): "feat: casa, Tóquio, feira popular com 15 diversões e acessórios" (inclui o trabalho da sessão 2, ainda sem commit).

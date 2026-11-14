@@ -41,8 +41,9 @@ export class CatTree {
 
   constructor(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number) {
     // spot: 45–110 m from spawn, off the roads, not in the airport, clear of buildings
+    // (4.5 m from the trunk centre = ~4 m of walking room around it; relaxed to 3 m only on a crowded map)
     let at = new THREE.Vector3(-60, 0, -45);
-    for (let i = 0; i < 300; i++) {
+    for (let i = 0; i < 600; i++) {
       const a = rng() * Math.PI * 2;
       const r = 45 + rng() * 65;
       const x = SPAWN.x + Math.cos(a) * r;
@@ -51,7 +52,7 @@ export class CatTree {
       if (Math.abs(x) > 140 || Math.abs(z) > 140) continue;
       if (onRoad(x, z, 4)) continue;
       if (x > z0.minX - 6 && x < z0.maxX + 6 && z > z0.minZ - 6 && z < z0.maxZ + 6) continue;
-      if (!isFree(x, z, 4.5, obstacles)) continue;
+      if (!isFree(x, z, i < 300 ? 4.5 : 3, obstacles)) continue;
       at = new THREE.Vector3(x, 0, z);
       break;
     }

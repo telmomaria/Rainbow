@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /**
- * The 10 original playable characters, built only from Three.js primitives.
+ * The 12 original playable characters, built only from Three.js primitives.
  * All designs and names are original (no Disney / "KPop Demon Hunters" / other IP).
  */
 
@@ -12,6 +12,10 @@ export interface CharacterModel {
   body: THREE.Object3D;
   /** Legs that swing with rotation.x around their top (hip pivot). phase 0 and 1 swing in opposition. */
   legs: { pivot: THREE.Object3D; phase: 0 | 1 }[];
+  /** Human-shaped characters: shoulder-pivot arms (swimming strokes). */
+  arms?: THREE.Object3D[];
+  /** Swimsuit version: stays upright in the water with a float ring (unicorn). */
+  floatUpright?: boolean;
 }
 
 export interface CharacterDef {
@@ -120,6 +124,7 @@ interface BipedOpts {
 
 interface Biped extends CharacterModel {
   kit: Kit;
+  skin: number;
   head: THREE.Group;
   headR: number;
   armL: THREE.Group;
@@ -199,7 +204,7 @@ function biped(o: BipedOpts): Biped {
     [0, 0, Math.PI],
   );
 
-  return { model, body, legs, kit, head, headR, armL: arms[0], armR: arms[1] };
+  return { model, body, legs, kit, head, headR, skin: o.skin, armL: arms[0], armR: arms[1], arms };
 }
 
 /** Point an arm (shoulder pivot) along a direction given in body space. */
@@ -348,7 +353,8 @@ function buildUnicornio(): CharacterModel {
     const t = i / 5;
     kit.put(body, kit.sph(0.11 - t * 0.03, 12, 10), RAINBOW[i], [0, 1.1 - t * 0.5, 0.6 + Math.sin(t * 2.2) * 0.22]);
   }
-  return { model, body, legs };
+  // expose the head so accessories (hats, face paint, necklaces) sit on it
+  return Object.assign({ model, body, legs }, { head, headR: 0.28 });
 }
 
 // ---------------------------------------------------------------------------
@@ -660,6 +666,141 @@ function buildKarateca(): CharacterModel {
 }
 
 // ---------------------------------------------------------------------------
+// 11. Astronauta
+// ---------------------------------------------------------------------------
+
+function buildAstronauta(): CharacterModel {
+  const suit = 0xf4f6fb;
+  const trim = 0xff7a3d;
+  const trim2 = 0x4d7cff;
+  const b = biped({
+    skin: 0xf6cfae,
+    top: suit,
+    sleeve: suit,
+    legs: suit,
+    shoes: 0xc9d0dc,
+    hips: 0xdfe4ee,
+    legR: 0.1,
+    boots: { color: 0xdfe4ee, h: 0.24 },
+  });
+  const { kit, body, head, headR } = b;
+  // chunky boots (wide soles) + orange knee bands
+  for (const leg of b.legs) {
+    kit.put(leg.pivot, kit.box(0.22, 0.08, 0.32), 0x8a94a8, [0, -HIP + 0.04, -0.04]);
+    kit.put(leg.pivot, kit.cyl(0.115, 0.115, 0.06, 14), trim, [0, -0.36, 0]);
+  }
+  // puffy suit lower half, belt with orange trim
+  kit.put(body, kit.cyl(0.26, 0.27, 0.2, 16), suit, [0, 0.76, 0]);
+  kit.put(body, kit.torus(0.25, 0.035), trim, [0, 0.87, 0], [Math.PI / 2, 0, 0]);
+  // chest control panel (coloured buttons) + generic star patch
+  kit.put(body, kit.box(0.2, 0.13, 0.04), 0xdfe4ee, [0.04, 1.03, -0.235]);
+  kit.put(body, kit.sph(0.025, 8, 6), kit.mat(0xff5a5a, 0.6), [-0.02, 1.03, -0.26]);
+  kit.put(body, kit.sph(0.025, 8, 6), kit.mat(0x6bd96b, 0.6), [0.04, 1.03, -0.26]);
+  kit.put(body, kit.sph(0.025, 8, 6), kit.mat(0x4db8ff, 0.6), [0.1, 1.03, -0.26]);
+  kit.put(body, kit.cyl(0.06, 0.06, 0.02, 16), trim2, [-0.1, 1.2, -0.225], [Math.PI / 2, 0, 0]);
+  kit.put(body, kit.cone(0.045, 0.03, 5), kit.mat(0xffd34d, 0.4, 0.3, 0.5), [-0.1, 1.2, -0.24], [-Math.PI / 2, 0, 0]);
+  // life-support backpack with a blue stripe and two little tanks
+  kit.put(body, kit.box(0.4, 0.5, 0.18), 0xe6e9f0, [0, 1.08, 0.3]);
+  kit.put(body, kit.box(0.41, 0.06, 0.19), trim2, [0, 1.2, 0.3]);
+  for (const side of [-1, 1]) kit.put(body, kit.cyl(0.05, 0.05, 0.36, 10), 0xb8c2cc, [side * 0.13, 1.06, 0.41]);
+  // neck ring
+  kit.put(body, kit.torus(0.22, 0.05), kit.mat(0xb8c2cc, 0, 0.35, 0.6), [0, 1.37, 0], [Math.PI / 2, 0, 0]);
+  // arm trims + chunky gloves
+  for (const arm of [b.armL, b.armR]) {
+    kit.put(arm, kit.cyl(0.075, 0.075, 0.05, 12), trim, [0, -0.3, 0]);
+    kit.put(arm, kit.cyl(0.085, 0.08, 0.08, 12), trim2, [0, -0.48, 0]);
+    kit.put(arm, kit.sph(0.1, 14, 10), 0xdfe4ee, HAND);
+  }
+  // short brown hair under the helmet
+  hairCap(b, 0x7a4a2a, 0.4, Math.PI * 0.5);
+  // clear bubble helmet (face visible) with a gold sun visor pushed up and a small antenna
+  const glass = new THREE.MeshStandardMaterial({
+    color: 0xcfe8ff,
+    roughness: 0.05,
+    metalness: 0.1,
+    transparent: true,
+    opacity: 0.22,
+    depthWrite: false,
+  });
+  const bubble = new THREE.Mesh(kit.sph(headR * 1.32, 28, 20), glass);
+  bubble.position.set(0, 0.02, 0);
+  bubble.renderOrder = 2;
+  head.add(bubble);
+  const gold = kit.mat(0xffc93d, 0.15, 0.2, 0.7);
+  kit.put(head, kit.cap(headR * 1.35, Math.PI * 0.3), gold, [0, 0.02, 0], [0.3, 0, 0]);
+  kit.put(head, kit.torus(headR * 1.18, 0.04), kit.mat(0xdfe4ee, 0, 0.4, 0.3), [0, -0.2, 0], [Math.PI / 2, 0, 0]);
+  kit.put(head, kit.cyl(0.012, 0.012, 0.22, 6), 0xb8c2cc, [0.26, 0.42, 0.12], [0, 0, -0.3]);
+  kit.put(head, kit.sph(0.035, 10, 8), kit.mat(0xff5a5a, 0.9), [0.3, 0.53, 0.12]);
+  return b;
+}
+
+// ---------------------------------------------------------------------------
+// 12. Alice (País das Maravilhas) — based on Tenniel's own colouring in "The Nursery Alice" (1890, public domain)
+// ---------------------------------------------------------------------------
+
+function buildAlice(): CharacterModel {
+  const yellow = 0xf6c73a;
+  const white = 0xfdfcf6;
+  const blue = 0x2f62d8;
+  const b = biped({
+    skin: 0xffdcc4,
+    top: yellow,
+    sleeve: yellow,
+    shortSleeve: true,
+    legs: 0xfdfcf6,
+    shoes: 0x1c1c24,
+    hips: yellow,
+    legR: 0.075,
+  });
+  const { kit, body, head, armL } = b;
+  // striped stockings
+  for (const leg of b.legs) {
+    for (let i = 0; i < 5; i++) kit.put(leg.pivot, kit.cyl(0.079, 0.079, 0.04, 12), blue, [0, -0.6 + i * 0.09, 0]);
+  }
+  // knee-length yellow skirt + puff sleeves
+  kit.put(body, kit.cyl(0.23, 0.42, 0.5, 20), yellow, [0, 0.6, 0]);
+  for (const side of [-1, 1]) kit.put(body, kit.sph(0.11), yellow, [side * 0.27, 1.27, 0]);
+  // white pinafore: bib on the chest, straps with frills, apron over the front of the skirt
+  const apron = new THREE.MeshStandardMaterial({ color: white, roughness: 0.85, side: THREE.DoubleSide });
+  kit.put(body, new THREE.CylinderGeometry(0.218, 0.243, 0.3, 16, 1, true, Math.PI * 0.72, Math.PI * 0.56), apron, [0, 1.1, 0]);
+  for (const side of [-1, 1]) {
+    kit.put(body, kit.box(0.06, 0.04, 0.4), apron, [side * 0.12, 1.33, 0]);
+    kit.put(body, kit.sph(0.07, 10, 8), apron, [side * 0.17, 1.31, -0.12], undefined, [1, 0.5, 1]);
+  }
+  const front = Math.PI;
+  const w = Math.PI * 0.9;
+  kit.put(body, new THREE.CylinderGeometry(0.245, 0.435, 0.46, 20, 1, true, front - w / 2, w), apron, [0, 0.6, 0]);
+  kit.put(body, kit.torus(0.235, 0.03), apron, [0, 0.86, 0], [Math.PI / 2, 0, 0]);
+  // apron bow at the back
+  for (const side of [-1, 1]) {
+    kit.put(body, kit.cone(0.07, 0.14, 8), apron, [side * 0.07, 0.86, 0.26], [0, 0, side * Math.PI / 2], [1, 1, 0.4]);
+  }
+  // long blonde hair with side locks
+  const hair = 0xf2d16b;
+  hairCap(b, hair, 0.35, Math.PI * 0.57, 1.08);
+  hairBack(b, hair, 0.9, 0.33);
+  for (const side of [-1, 1]) {
+    kit.put(head, kit.cyl(0.08, 0.06, 0.5, 10), hair, [side * 0.3, -0.25, 0.02], [0, 0, side * 0.08]);
+  }
+  // blue hair ribbon (band) + bow on top
+  kit.put(head, kit.torus(0.355, 0.028), blue, [0, 0.16, 0.03], [Math.PI / 2 + 0.55, 0, 0]);
+  for (const side of [-1, 1]) {
+    kit.put(head, kit.cone(0.08, 0.16, 8), blue, [side * 0.1, 0.36, 0.12], [0.4, 0, side * Math.PI / 2], [1, 1, 0.5]);
+  }
+  kit.put(head, kit.sph(0.045, 10, 8), blue, [0, 0.36, 0.11]);
+  // small teacup (with saucer) in the left hand
+  aim(armL, -0.25, -0.7, -0.6);
+  const cp = handPos(armL).add(new THREE.Vector3(0.02, 0.07, -0.04));
+  const cupMat = kit.mat(0xffffff, 0, 0.35);
+  kit.put(body, kit.cyl(0.08, 0.08, 0.015, 16), cupMat, [cp.x, cp.y, cp.z]);
+  kit.put(body, kit.cyl(0.055, 0.04, 0.07, 14), cupMat, [cp.x, cp.y + 0.045, cp.z]);
+  kit.put(body, kit.cyl(0.05, 0.05, 0.01, 14), 0xa0522d, [cp.x, cp.y + 0.075, cp.z]);
+  kit.put(body, kit.torus(0.025, 0.008), cupMat, [cp.x + 0.065, cp.y + 0.045, cp.z]);
+  kit.put(body, kit.torus(0.057, 0.008), 0x4d8cff, [cp.x, cp.y + 0.07, cp.z], [Math.PI / 2, 0, 0]);
+  return b;
+}
+
+// ---------------------------------------------------------------------------
 
 export const CHARACTERS: CharacterDef[] = [
   { id: 'princesa', name: 'Lia', label: 'Princesa', build: buildPrincesa },
@@ -672,8 +813,75 @@ export const CHARACTERS: CharacterDef[] = [
   { id: 'voleibolista', name: 'Rita', label: 'Voleibolista', build: buildVoleibol },
   { id: 'bailarina', name: 'Clara', label: 'Bailarina', build: buildBailarina },
   { id: 'karateca', name: 'Tomás', label: 'Karateca', build: buildKarateca },
+  { id: 'astronauta', name: 'Vega', label: 'Astronauta', build: buildAstronauta },
+  { id: 'alice', name: 'Alice', label: 'País das Maravilhas', build: buildAlice },
 ];
 
 export function characterById(id: string): CharacterDef {
   return CHARACTERS.find((c) => c.id === id) ?? CHARACTERS[0];
+}
+
+// ---------------------------------------------------------------------------
+// Swimsuits (pool): same head, hair and accessories on a swimsuit body in the character's colour
+// ---------------------------------------------------------------------------
+
+const SWIM: Record<string, { color: number; trunks?: boolean }> = {
+  princesa: { color: 0xb68cf0 },
+  'cantora-bia': { color: 0xff5fa2 },
+  'cantora-nina': { color: 0x4db8ff },
+  'cantora-ines': { color: 0xffb53d },
+  extraterrestre: { color: 0xc9c3ff },
+  guerreira: { color: 0xc0392b },
+  voleibolista: { color: 0x1f8ef1 },
+  bailarina: { color: 0xffa8d0 },
+  karateca: { color: 0x2f9e44, trunks: true },
+  astronauta: { color: 0xff7a3d },
+  alice: { color: 0xf6c73a },
+};
+
+/** The character in swimwear. Non-human shapes (the unicorn) keep their body and get a float ring. */
+export function buildSwimsuit(id: string): CharacterModel {
+  const orig = characterById(id).build() as CharacterModel & Partial<Biped>;
+  if (!orig.head || orig.skin === undefined || !orig.headR) {
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0xff5a5a, roughness: 0.5 });
+    const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.17, 10, 28), ringMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 1.0;
+    ring.castShadow = true;
+    orig.body.add(ring);
+    for (let i = 0; i < 4; i++) {
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.36, 0.36), white);
+      const a = (i / 4) * Math.PI * 2;
+      stripe.position.set(Math.cos(a) * 0.62, 1.0, Math.sin(a) * 0.62);
+      stripe.rotation.y = -a;
+      orig.body.add(stripe);
+    }
+    orig.floatUpright = true;
+    return orig;
+  }
+  const look = SWIM[id] ?? { color: 0x4dabf7 };
+  const b = biped({
+    skin: orig.skin,
+    top: look.trunks ? orig.skin : look.color,
+    legs: orig.skin,
+    shoes: orig.skin,
+    hips: look.color,
+    headR: orig.headR,
+  });
+  // keep the original head (hair, tiara, antennae...) on the new body
+  b.body.remove(b.head);
+  const head = orig.head;
+  head.removeFromParent();
+  head.position.copy(b.head.position);
+  b.body.add(head);
+  const trim = b.kit.mat(0xffffff, 0, 0.6);
+  if (look.trunks) {
+    b.kit.put(b.body, b.kit.cyl(0.25, 0.25, 0.05), trim, [0, 0.86, 0]); // drawstring
+  } else {
+    for (const side of [-1, 1]) b.kit.put(b.body, b.kit.box(0.06, 0.2, 0.42), look.color, [side * 0.12, 1.36, 0]); // straps
+    b.kit.put(b.body, b.kit.cyl(0.255, 0.255, 0.04), trim, [0, 0.7, 0]);
+  }
+  b.head = head;
+  return b;
 }

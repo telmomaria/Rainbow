@@ -1,3 +1,4 @@
+import { itemDef } from './items';
 import * as THREE from 'three';
 import type { GameCtx } from './gamectx';
 import { AIRPORT_ZONE } from './airport';
@@ -17,6 +18,10 @@ const TAU = Math.PI * 2;
 const FRONT_OFF = 7;
 /** Distance from the counter front to the spot where the customer stands. */
 const STAND_OFF = 1.1;
+/** Walking room (m) kept between a shop's footprint and buildings/solids; relaxed step by step only on crowded maps. */
+const ROOM_STEPS = [2.2, 1.6, 1.2] as const;
+/** A thin post (street lamp, pole): ~1 m beside it is plenty to walk past. */
+const isPost = (o: Obstacle): boolean => o.maxX - o.minX < 0.9 && o.maxZ - o.minZ < 0.9;
 
 interface Spot {
   x: number;
@@ -185,7 +190,7 @@ type HatKind = 'chef' | 'cap' | 'beret' | 'bow';
 /** Builders for the items sold (filled by createShops), so the game can put a bag item in her hand. */
 const itemBuilders = new Map<string, () => THREE.Group>();
 export function buildItem(kind: string): THREE.Group | null {
-  return itemBuilders.get(kind)?.() ?? null;
+  return itemBuilders.get(kind)?.() ?? itemDef(kind)?.build() ?? null;
 }
 
 export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number, ctx: GameCtx): Interactable[] {
@@ -233,7 +238,8 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
     if (road) return false;
     if (boxesOverlap(fp, AIRPORT_ZONE, 3)) return false;
     if (circleHitsBox(SPAWN.x, SPAWN.z, 10, fp)) return false;
-    for (const o of obstacles) if (boxesOverlap(fp, o, margin)) return false;
+    // posts (street lamps) only need room to walk past; buildings and big things get the full margin
+    for (const o of obstacles) if (boxesOverlap(fp, o, isPost(o) ? Math.min(margin, 1) : margin)) return false;
     for (const t of taken) if (boxesOverlap(fp, t, 3)) return false;
     return true;
   };
@@ -249,7 +255,7 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
    * A spot beside a road: the footprint (local x ∈ ±hw, z ∈ [back, front]) has its front at FRONT_OFF
    * from the road centre line, facing the road. `accept` filters by the customer's standing point.
    */
-  const roadSpot = (hw: number, back: number, front: number, accept: (x: number, z: number) => boolean): Spot | null => {
+  const roadSpot = (hw: number, back: number, front: number, accept: (x: number, z: number) => boolean, margin: number): Spot | null => {
     const nRoads = ROADS.xs.length + ROADS.zs.length;
     for (let i = 0; i < 500; i++) {
       const ri = Math.floor(rng() * nRoads);
@@ -263,9 +269,20 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
         : { x: t, z: at + side * d, rot: Math.atan2(0, -side) };
       const stand = toWorld(spot, 0, front + STAND_OFF);
       if (!accept(stand.x, stand.z)) continue;
-      if (!boxFree(footprint(spot, -hw, hw, back, front), 1.2)) continue;
+      if (!boxFree(footprint(spot, -hw, hw, back, front), margin)) continue;
       if (!pointFree(stand.x, stand.z, 1.2)) continue;
       return spot;
+    }
+    return null;
+  };
+  /**
+   * Tries the `accepts` filters in order of preference with full walking room around the shop, then again
+   * with less room (busy maps still get every shop, but never glued to a building if it can be helped).
+   */
+  const bestRoadSpot = (hw: number, back: number, front: number, accepts: ((x: number, z: number) => boolean)[]): Spot | null => {
+    for (const m of ROOM_STEPS) for (const ok of accepts) {
+      const s = roadSpot(hw, back, front, ok, m);
+      if (s) return s;
     }
     return null;
   };
@@ -602,10 +619,11 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
 
   /* ================================================================ Padaria */
   const BK = { hw: 2.5, back: -2, front: 1.9 };
-  const bakerySpot =
-    roadSpot(BK.hw, BK.back, BK.front, (x, z) => quadOf(x, z) === quads[0] && spawnDist(x, z) > 40 && spawnDist(x, z) < 110) ??
-    roadSpot(BK.hw, BK.back, BK.front, (x, z) => spawnDist(x, z) > 30 && spawnDist(x, z) < 130) ??
-    roadSpot(BK.hw, BK.back, BK.front, (x, z) => spawnDist(x, z) > 15);
+  const bakerySpot = bestRoadSpot(BK.hw, BK.back, BK.front, [
+    (x, z) => quadOf(x, z) === quads[0] && spawnDist(x, z) > 40 && spawnDist(x, z) < 110,
+    (x, z) => spawnDist(x, z) > 30 && spawnDist(x, z) < 130,
+    (x, z) => spawnDist(x, z) > 15,
+  ]);
   let bakeryStand: THREE.Vector3 | null = null;
   if (bakerySpot) {
     const s = bakerySpot;
@@ -667,7 +685,8 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
       const z = b.z + Math.sin(a) * d;
       if (Math.abs(x) + PR > LIMIT || Math.abs(z) + PR > LIMIT) continue;
       if (onRoad(x, z, PR + 0.3) || spawnDist(x, z) < 20) continue;
-      if (!pointFree(x, z, PR + 1.2)) continue;
+      // full walking room around the plaza first; a little less only if the map is crowded
+      if (!pointFree(x, z, PR + (i < 1000 ? ROOM_STEPS[0] : i < 1300 ? ROOM_STEPS[1] : ROOM_STEPS[2]))) continue;
       plaza = new THREE.Vector3(x, 0, z);
     }
   }
@@ -677,11 +696,12 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
   const SW = { hw: 4.5, back: -1.6, front: 0.6 };
   const far = (x: number, z: number) =>
     (!bakeryStand || Math.hypot(x - bakeryStand.x, z - bakeryStand.z) > 60) && (!plaza || Math.hypot(x - plaza.x, z - plaza.z) > 50);
-  const sweetsSpot =
-    roadSpot(SW.hw, SW.back, SW.front, (x, z) => quadOf(x, z) === quads[1] && spawnDist(x, z) > 35 && spawnDist(x, z) < 120 && far(x, z)) ??
-    roadSpot(SW.hw, SW.back, SW.front, (x, z) => quadOf(x, z) !== quads[0] && spawnDist(x, z) > 30 && spawnDist(x, z) < 130 && far(x, z)) ??
-    roadSpot(SW.hw, SW.back, SW.front, (x, z) => spawnDist(x, z) > 30 && spawnDist(x, z) < 130) ??
-    roadSpot(SW.hw, SW.back, SW.front, (x, z) => spawnDist(x, z) > 15);
+  const sweetsSpot = bestRoadSpot(SW.hw, SW.back, SW.front, [
+    (x, z) => quadOf(x, z) === quads[1] && spawnDist(x, z) > 35 && spawnDist(x, z) < 120 && far(x, z),
+    (x, z) => quadOf(x, z) !== quads[0] && spawnDist(x, z) > 30 && spawnDist(x, z) < 130 && far(x, z),
+    (x, z) => spawnDist(x, z) > 30 && spawnDist(x, z) < 130,
+    (x, z) => spawnDist(x, z) > 15,
+  ]);
   if (sweetsSpot) {
     const s = sweetsSpot;
     const offs = [-3.3, 0, 3.3];

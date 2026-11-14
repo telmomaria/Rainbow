@@ -35,6 +35,7 @@ const KINDS: WeatherKind[] = ['clear', 'partly', 'overcast', 'fog', 'drizzle', '
 /** Coordinates for the city names in cities.ts. 'Portugal' = Lisboa for now. */
 const COORDS: Record<string, [number, number]> = {
   Portugal: [38.72, -9.14],
+  Porto: [41.15, -8.61],
   Lisboa: [38.72, -9.14],
   Roma: [41.9, 12.5],
   Madrid: [40.42, -3.7],
@@ -44,6 +45,7 @@ const COORDS: Record<string, [number, number]> = {
   Vilnius: [54.69, 25.28],
   Moscovo: [55.76, 37.62],
   Pequim: [39.9, 116.4],
+  'Tóquio': [35.68, 139.69],
   'Rio de Janeiro': [-22.91, -43.17],
   'Cidade do México': [19.43, -99.13],
   Reiquiavique: [64.15, -21.94],
@@ -74,8 +76,8 @@ const DEFAULT_READING: Reading = { code: 0, isDay: true, tempC: 18, cloud: 10, w
 
 /** Fallback standard UTC offsets (hours) until live data arrives. Live data (DST-aware) wins. */
 const TZ_FALLBACK: Record<string, number> = {
-  Portugal: 0, Lisboa: 0, Roma: 1, Madrid: 1, Londres: 0, Paris: 1, 'Varsóvia': 1, Vilnius: 2, Moscovo: 3,
-  Pequim: 8, 'Rio de Janeiro': -3, 'Cidade do México': -6, Reiquiavique: 0, Nuuk: -2,
+  Portugal: 0, Porto: 0, Lisboa: 0, Roma: 1, Madrid: 1, Londres: 0, Paris: 1, 'Varsóvia': 1, Vilnius: 2, Moscovo: 3,
+  Pequim: 8, 'Tóquio': 9, 'Rio de Janeiro': -3, 'Cidade do México': -6, Reiquiavique: 0, Nuuk: -2,
 };
 
 /** "2026-11-11T07:14" → 7.233 (local hours). */

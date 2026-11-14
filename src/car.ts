@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { tone } from './audio';
 import { isFree } from './spawn';
-import type { Interactable, Obstacle } from './world';
+import { AIRPORT_ZONE } from './airport';
+import { ROADS, SPAWN, type Interactable, type Obstacle } from './world';
 
 const HALF_LEN = 2.1;
 const HALF_WID = 1.0;
@@ -57,6 +58,10 @@ export class Car {
     color: number,
     onEnter: () => void,
   ) {
+    // the wanted parking spot unless it's against a building — then the nearest roomy one along the kerb
+    const park = parkingSpot(at, heading, obstacles);
+    at = park.at;
+    heading = park.heading;
     this.heading = heading;
     const built = buildCar(this.group, color, this.wheels, this.frontWheels);
     this.door = built.door;
@@ -276,6 +281,55 @@ export class Car {
     const p = this.position;
     Object.assign(this.box, { minX: p.x - hx, maxX: p.x + hx, minZ: p.z - hz, maxZ: p.z + hz });
   }
+}
+
+/**
+ * Parking spot with walking room: ≥ 2 m between the car and any building/solid (the driver's door opens there and
+ * she steps out), thin posts such as kerb lamps excepted. If the wanted spot is too tight, slides along the same
+ * kerb (nearest first), then tries the opposite kerb of the same road (turned round so the door still faces away
+ * from the road). Crowded maps relax the room (2 → 1.2 → 0.6 m) instead of losing the car.
+ */
+function parkingSpot(wanted: THREE.Vector3, heading: number, obstacles: Obstacle[]): { at: THREE.Vector3; heading: number } {
+  const alongX = Math.abs(Math.sin(heading)) > 0.5;
+  const hx = HALF_WID * Math.abs(Math.cos(heading)) + HALF_LEN * Math.abs(Math.sin(heading));
+  const hz = HALF_WID * Math.abs(Math.sin(heading)) + HALF_LEN * Math.abs(Math.cos(heading));
+  const half = ROADS.width / 2 + 0.3;
+  const a = AIRPORT_ZONE;
+  const fits = (x: number, z: number, room: number): boolean => {
+    const b = { minX: x - hx, maxX: x + hx, minZ: z - hz, maxZ: z + hz };
+    if (Math.max(Math.abs(b.minX), Math.abs(b.maxX), Math.abs(b.minZ), Math.abs(b.maxZ)) > 135) return false;
+    if (ROADS.xs.some((rx) => b.maxX > rx - half && b.minX < rx + half)) return false;
+    if (ROADS.zs.some((rz) => b.maxZ > rz - half && b.minZ < rz + half)) return false;
+    if (b.maxX + 3 > a.minX && b.minX - 3 < a.maxX && b.maxZ + 3 > a.minZ && b.minZ - 3 < a.maxZ) return false;
+    const cx = Math.max(b.minX, Math.min(SPAWN.x, b.maxX));
+    const cz = Math.max(b.minZ, Math.min(SPAWN.z, b.maxZ));
+    if (Math.hypot(SPAWN.x - cx, SPAWN.z - cz) < 6) return false;
+    for (const o of obstacles) {
+      const m = o.maxX - o.minX < 0.9 && o.maxZ - o.minZ < 0.9 ? 0.2 : room;
+      if (b.maxX + m > o.minX && b.minX - m < o.maxX && b.maxZ + m > o.minZ && b.minZ - m < o.maxZ) return false;
+    }
+    return true;
+  };
+  // the kerb line it was meant for, and the opposite kerb of the nearest parallel road
+  const roads: readonly number[] = alongX ? ROADS.zs : ROADS.xs;
+  const across = alongX ? wanted.z : wanted.x;
+  const road = roads.reduce((p, r) => (Math.abs(r - across) < Math.abs(p - across) ? r : p), roads[0]);
+  const lines = [
+    { across, heading },
+    { across: 2 * road - across, heading: heading + Math.PI },
+  ];
+  const start = alongX ? wanted.x : wanted.z;
+  for (const room of [2, 1.2, 0.6]) {
+    for (const line of lines) {
+      for (let k = 0; k <= 160; k++) {
+        const along = start + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 1.5;
+        const x = alongX ? along : line.across;
+        const z = alongX ? line.across : along;
+        if (fits(x, z, room)) return { at: new THREE.Vector3(x, 0, z), heading: line.heading };
+      }
+    }
+  }
+  return { at: wanted.clone(), heading };
 }
 
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));

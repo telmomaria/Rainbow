@@ -24,4 +24,10 @@ export interface GameCtx {
   isDriving(): boolean;
   /** True while the game is paused (question on screen, flying, hospital...): freeze your actors. */
   isPaused(): boolean;
+  /** Put an item (registered in items.ts or sold in shops.ts) into her bag and her hand. */
+  give(kind: string): void;
+  /** Wear an accessory (items.ts registerWearable) in its slot, or take the slot off (null). Saved. */
+  wear(slot: import('./items').WearSlot, kind: string | null): void;
+  /** What she wears now (slot → kind). */
+  worn(): Record<string, string>;
 }

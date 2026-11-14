@@ -19,12 +19,18 @@ import { CAT_REWARD, CatTree } from './cattree';
 import { buildItem, createShops } from './shops';
 import { Trouble } from './trouble';
 import { Traffic } from './traffic';
+import { createBusStops } from './busstops';
 import { createHospital, type Hospital } from './hospital';
 import { Weather } from './weather';
 import { StreetLights } from './streetlights';
 import type { GameCtx } from './gamectx';
 import { DIFFICULTY_FACTOR, createBag, showIdlePause } from './ui';
-import { isFree } from './spawn';
+import { isFree, setNoSpawnZones } from './spawn';
+import { Concert } from './concert';
+import { itemDef } from './items';
+import { Pool } from './pool';
+import { House, houseColors } from './house';
+import { Fair } from './fair';
 
 const WALK_SPEED = 6.5; // m/s
 const TURN_SPEED = 2.6; // rad/s (arrow keys)
@@ -63,6 +69,7 @@ const save = loadSave();
 let city = cityAt(save.level);
 let world = createWorld(scene, city);
 const player = new Character(save.character ?? 'princesa');
+player.setWear(save.wear);
 scene.add(player.root);
 const input = new Input(canvas);
 canvas.focus();
@@ -74,6 +81,8 @@ const RETRY_DELAY_MS = 3 * 60 * 1000; // a missed question comes back after ~3 m
 const solved = new Set(save.solved);
 const hud = new Hud(save);
 const questionAvailable = (id: string) => !solved.has(id) && (save.retryAt[id] ?? 0) <= Date.now();
+/** Solved questions come back as a review once nothing unsolved is left (so question-givers never vanish). */
+const questionRecyclable = (id: string) => solved.has(id) && (save.retryAt[id] ?? 0) <= Date.now();
 // created after the city extras (see below) so they never spawn inside the hospital, shops, stadium...
 let collectibles!: Collectibles;
 let npcs!: Npcs;
@@ -84,6 +93,10 @@ let trouble: Trouble;
 let streetLights: StreetLights;
 let traffic: Traffic;
 let hospital: Hospital;
+let concert: Concert;
+let pool: Pool;
+let house: House;
+let fair: Fair;
 const HIT_FLASH = 1.5;
 const RUN_OVER_COST = 30;
 const HOSPITAL_MS = 5 * 60 * 1000;
@@ -114,8 +127,19 @@ const gameCtx: GameCtx = {
     refreshBag();
   },
   carried: () => carriedKind,
-  isDriving: () => !!driving,
+  isDriving: () => !!driving || onBus(),
   isPaused: () => paused,
+  give(kind) {
+    const m = buildItem(kind);
+    if (m) gameCtx.setCarried(m, kind);
+  },
+  wear(slot, kind) {
+    if (kind) save.wear[slot] = kind;
+    else delete save.wear[slot];
+    player.setWear(save.wear);
+    writeSave(save);
+  },
+  worn: () => ({ ...save.wear }),
 };
 
 /** Show an item in her hand (display only — the bag counts are in save.bag). */
@@ -141,7 +165,7 @@ let eating: { kind: string; t: number; bites: number } | null = null;
 function useBagItem(kind: string): void {
   if (paused || driving || flight || (save.bag[kind] ?? 0) <= 0) return;
   holdItem(kind);
-  if (kind !== 'pao') eating = { kind, t: 0, bites: 0 };
+  if (kind !== 'pao' && (itemDef(kind)?.edible ?? true)) eating = { kind, t: 0, bites: 0 };
 }
 function updateEating(dt: number): void {
   if (!eating || !carriedObj) return;
@@ -164,7 +188,7 @@ function updateEating(dt: number): void {
 
 /** Knock her away from `from`, flash, lose `cost` coins. False if she can't be hurt right now. */
 function hurt(from: THREE.Vector3, cost: number): boolean {
-  if (paused || driving || flight || invulnerable > 0) return false;
+  if (paused || driving || flight || onBus() || invulnerable > 0) return false;
   const lost = Math.min(cost, save.coins);
   if (lost > 0) addCoins(-lost);
   sfx.bonk();
@@ -181,7 +205,7 @@ spawnActors();
 /** Coins, question characters and creatures — always after every building/object exists. */
 function spawnActors(): void {
   collectibles = new Collectibles(scene, world.obstacles);
-  npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position);
+  npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position, questionRecyclable);
   monsters = new Monsters(scene, world.obstacles);
   monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
 }
@@ -197,6 +221,13 @@ if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles
 function addCityExtras(): Car {
   // street lamps first (along the roads) so everything placed after avoids them
   streetLights = new StreetLights(scene, world.obstacles);
+  // the fair needs the most room: placed first; its grounds are kept free of everything placed after it
+  fair = new Fair(scene, world.obstacles, mulberry32(city.seed * 67 + 19), gameCtx, [], save.level, world);
+  world.interactables.push(...fair.things);
+  const fairBlock = fair.interior ? { ...fair.interior } : null;
+  if (fairBlock) world.obstacles.push(fairBlock);
+  // bus stops along the bus lines, early so everything placed after keeps clear of them
+  const busStops = createBusStops(scene, world.obstacles, mulberry32(city.seed * 67 + 19));
   const c = new Car(scene, world.obstacles, new THREE.Vector3(-16, 0, 7), Math.PI / 2, city.buildings[0], () => enterCar());
   world.interactables.push(c.interactable);
   world.interactables.push(
@@ -211,14 +242,60 @@ function addCityExtras(): Car {
   hospital = createHospital(scene, world.obstacles, mulberry32(city.seed * 41 + 9));
   world.interactables.push(...createShops(scene, world.obstacles, mulberry32(city.seed * 13 + 7), gameCtx));
   trouble = new Trouble(scene, world.obstacles, mulberry32(city.seed * 17 + 3), gameCtx);
-  traffic = new Traffic(scene, world.obstacles, gameCtx, (carPos) => runOver(carPos));
+  // children's concert: ticket booth + fenced venue (nothing spawns inside it)
+  concert = new Concert(scene, world.obstacles, mulberry32(city.seed * 53 + 11), gameCtx, [
+    ...world.interactables.map((i) => i.position),
+    catTree.interactable.position,
+  ]);
+  if (concert.booth) world.interactables.push(concert.booth);
+  // swimming pool: ticket, beach cabins to change, swim among other swimmers
+  pool = new Pool(scene, world.obstacles, mulberry32(city.seed * 59 + 13), gameCtx, [
+    ...world.interactables.map((i) => i.position),
+    catTree.interactable.position,
+  ], {
+    player,
+    hold(on) {
+      paused = on;
+      clearTarget();
+      input.releaseAll();
+    },
+    changed: () => holdItem(null),
+  });
+  if (pool.booth) world.interactables.push(pool.booth, ...pool.cabins);
+  // a house to walk into (hall, kitchen, living/dining room, bathroom, bedroom) — everything inside reacts to touch
+  house = new House(scene, world.obstacles, mulberry32(city.seed * 61 + 17), gameCtx, [
+    ...world.interactables.map((i) => i.position),
+    catTree.interactable.position,
+  ], houseColors(city.name));
+  world.interactables.push(...house.things);
+  if (fairBlock) world.obstacles.splice(world.obstacles.indexOf(fairBlock), 1);
+  setNoSpawnZones([concert.interior, pool.interior, house.interior, fair.interior].filter((z): z is NonNullable<typeof z> => z !== null));
+  traffic = new Traffic(scene, world.obstacles, gameCtx, (carPos) => runOver(carPos), busStops);
   world.interactables.push(catTree.interactable);
   if (!save.visited.includes(city.name)) save.visited.push(city.name);
   return c;
 }
 
 /** Rebuild everything for the current level's city (in place, no page reload). */
+/** Out of the water and back in her clothes (Casa, new city, new game). */
+function leavePool(): void {
+  getOffSwing();
+  pool?.release();
+  player.swimming = false;
+  player.stroke = 'crawl';
+  player.airborne = false;
+  player.setSwimwear(false);
+  player.position.y = 0;
+  player.root.rotation.x = 0;
+}
+
 function loadCity(): void {
+  leaveBus(true);
+  concert?.dispose();
+  pool?.dispose();
+  house?.dispose();
+  fair?.dispose();
+  leavePool();
   scene.clear();
   city = cityAt(save.level);
   world = createWorld(scene, city);
@@ -299,6 +376,8 @@ createHomeButton(() => {
     clearTarget();
     input.releaseAll();
     knock.set(0, 0, 0);
+    leaveBus(true);
+    leavePool();
     player.position.set(SPAWN.x, 0, SPAWN.z);
     player.heading = SPAWN.h;
     camYaw = SPAWN.h;
@@ -311,15 +390,40 @@ createHomeButton(() => {
 let rescuing = false;
 /** Shop the child tapped and is walking to (buys on arrival). */
 let buyTarget: Interactable | null = null;
+/** Swing she is sitting on (null = not swinging). */
+let riding: { seat: NonNullable<Interactable['seat']>; i: number } | null = null;
+function useClickable(it: Interactable): void {
+  if (riding) return; // already on a ride: taps steer / get off, they never buy another
+  const ok = it.interact({ player: player.position }) !== false;
+  if (ok && it.seat && !riding && !paused && !driving && !pool.swimming) {
+    clearTarget();
+    input.releaseAll();
+    riding = { seat: it.seat, i: it.seat.take(player.position) };
+    player.sitting = true;
+    player.airborne = true;
+  }
+}
+function getOffSwing(): void {
+  if (!riding) return;
+  const off = riding.seat.getOff();
+  riding.seat.leave();
+  riding = null;
+  player.sitting = false;
+  player.lyingY = null;
+  player.airborne = false;
+  player.root.rotation.x = 0;
+  player.position.set(off.x, 0, off.z);
+}
 // Enter next to a shop counter buys too (keyboard players)
 window.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter' || paused || driving || flight) return;
+  if (e.key !== 'Enter' || paused || driving || flight || onBus() || riding) return;
   const shop = world.interactables.find(
     (i) => i.requiresClick && Math.hypot(i.position.x - player.position.x, i.position.z - player.position.z) < i.radius,
   );
   if (shop) {
     e.preventDefault();
-    shop.interact({ player: player.position });
+    useClickable(shop);
+    e.stopImmediatePropagation(); // the same Enter must not also get her off the ride she just boarded
   }
 });
 const refreshBag = (() => {
@@ -336,7 +440,7 @@ void weather.setCity(city.name);
 let hospitalPhase: 'none' | 'fall' | 'bed' = 'none';
 let hospitalT = 0;
 function runOver(carPos: THREE.Vector3): void {
-  if (paused || driving || flight || hospitalPhase !== 'none') return;
+  if (paused || driving || flight || onBus() || hospitalPhase !== 'none') return;
   addCoins(-RUN_OVER_COST);
   sfx.bonk();
   paused = true;
@@ -417,7 +521,7 @@ async function idlePause(): Promise<void> {
 let driving: Car | null = null;
 
 function enterCar(): void {
-  if (paused || flight || driving) return;
+  if (paused || flight || driving || onBus()) return;
   driving = car;
   car.enter(player.root); // door opens, she climbs in and stays visible at the wheel
   clearTarget();
@@ -433,8 +537,106 @@ function exitCar(): void {
   });
 }
 
-// Space / Enter gets out of the car (tapping the car does too)
+/* ---------- bus (traffic.ts + busstops.ts) ---------- */
+/** Touch distance to an open bus door to get on. */
+const BUS_DOOR_R = 1.5;
+/** Far from everything: coins can't be picked up through the bus windows. */
+const NOWHERE = new THREE.Vector3(1e5, 0, 1e5);
+/** She was at an open bus door last frame (getting on by touch is edge-triggered). */
+let busNearDoor = false;
+/** She asked to get off while the bus was moving: off at the next stop. */
+let busWantOff = false;
+/** Her camera pitch before getting on (the ride camera is lower, to see her at the window). */
+let busPitch: number | null = null;
+function onBus(): boolean {
+  return traffic?.hasRider() ?? false;
+}
+function boardBus(): void {
+  if (paused || driving || flight || onBus() || riding || pool?.swimming) return;
+  if (traffic.tryBoard(player.position, 3) !== 'ok') return;
+  clearTarget();
+  input.releaseAll();
+  buyTarget = null;
+  busWantOff = false;
+  busPitch = camPitch;
+  player.sitting = true;
+  player.airborne = true;
+}
+/** Off the bus onto the pavement by the door. forced (Casa, menu, new city): wherever the bus is. */
+function leaveBus(forced = false): void {
+  if (!onBus()) return;
+  const off = forced ? traffic.dropRider() : traffic.alight();
+  if (!off && !forced) return;
+  player.sitting = false;
+  player.airborne = false;
+  player.root.rotation.x = 0;
+  const spot = off ?? { x: SPAWN.x, z: SPAWN.z, h: SPAWN.h };
+  player.position.set(spot.x, 0, spot.z);
+  player.heading = spot.h;
+  camYaw = spot.h;
+  busNearDoor = true; // no instant re-boarding
+  busWantOff = false;
+  if (busPitch !== null) camPitch = busPitch;
+  busPitch = null;
+  clearTarget();
+  if (!forced) savePosition();
+}
+function requestOffBus(): void {
+  if (traffic.riderCanAlight()) leaveBus();
+  else if (!busWantOff) {
+    busWantOff = true;
+    traffic.ringBell();
+  }
+}
+/** Every frame, after traffic.update(): sit her in the bus / get on by touching an open door. */
+function updateBus(dt: number): void {
+  if (onBus()) {
+    if (traffic.kickRider || (busWantOff && traffic.riderCanAlight())) {
+      leaveBus(traffic.kickRider);
+      return;
+    }
+    const seat = traffic.riderSeat();
+    if (!seat) return;
+    player.position.copy(seat.pos);
+    player.heading = seat.heading;
+    player.root.rotation.y = seat.heading;
+    // camera behind-right of the bus and fairly low: she is seen at her window (door side)
+    if (elapsed - lastDragTime > 1.5) {
+      const want = seat.heading + 0.75;
+      const diff = Math.atan2(Math.sin(want - camYaw), Math.cos(want - camYaw));
+      camYaw += diff * Math.min(1, dt * 2);
+      camPitch += (0.2 - camPitch) * Math.min(1, dt * 2);
+    }
+    return;
+  }
+  if (paused || driving || flight) return;
+  const near = traffic.openDoorNear(player.position, BUS_DOOR_R);
+  if (near && !busNearDoor) boardBus();
+  busNearDoor = near;
+}
+
+// Space / Enter gets out of the car (tapping the car does too); Space in the water changes swimming style
 window.addEventListener('keydown', (e) => {
+  if ((e.key === ' ' || e.key === 'Enter') && !paused && onBus()) {
+    e.preventDefault();
+    requestOffBus();
+    return;
+  }
+  if (e.key === 'Enter' && !paused && !driving && !flight && traffic.openDoorNear(player.position, 3)) {
+    e.preventDefault();
+    boardBus();
+    return;
+  }
+  if ((e.key === ' ' || e.key === 'Enter') && riding?.seat.steer) {
+    e.preventDefault();
+    getOffSwing();
+    return;
+  }
+  if (e.key === ' ' && !paused && pool?.swimming) {
+    e.preventDefault();
+    pool.nextStroke();
+    return;
+  }
   if (driving && (e.key === ' ' || e.key === 'Enter')) {
     e.preventDefault();
     exitCar();
@@ -448,6 +650,15 @@ let invulnerable = 0;
 /** Remember where the character is, so a reload continues from the same spot. */
 function savePosition(): void {
   if (flight) return; // mid-flight positions (stairs, cabin) are not places to resume from
+  if (onBus()) {
+    // on the bus: a reload continues at the stop she got on at / last stopped at (never on the road)
+    const spot = traffic.riderSafeSpot();
+    if (spot) {
+      save.pos = { x: +spot.x.toFixed(2), z: +spot.z.toFixed(2), h: +spot.h.toFixed(3) };
+      writeSave(save);
+    }
+    return;
+  }
   save.pos = { x: +player.position.x.toFixed(2), z: +player.position.z.toFixed(2), h: +player.heading.toFixed(3) };
   writeSave(save);
 }
@@ -474,7 +685,10 @@ async function meet(npc: QuestionNpc): Promise<void> {
   save.retryAt[id] = Date.now() + RETRY_DELAY_MS; // set now: reloading mid-question can't give an instant retry
   writeSave(save);
   const ok = await askQuestion(npc.question, QUESTION_REWARD);
-  if (ok) {
+  if (ok && solved.has(id)) {
+    // a review of an already-solved question: coins again, but it doesn't count twice (and waits ~3 min to come back)
+    addCoins(QUESTION_REWARD);
+  } else if (ok) {
     solved.add(id);
     save.solved = [...solved];
     delete save.retryAt[id];
@@ -520,11 +734,47 @@ function resize(): void {
 window.addEventListener('resize', resize);
 resize();
 
+/** Last tap (for double taps in the water = change swimming style). */
+let lastTap = { t: -1, x: 0, y: 0 };
 function handleTap(x: number, y: number): void {
+  // lying on a lounger / sitting on a swing: any tap (on anything) = get up first
+  if (pool.lounging) {
+    pool.getUp();
+    return;
+  }
+  if (riding && !riding.seat.steer) {
+    getOffSwing();
+    return;
+  }
+  if (pool.swimming) {
+    const now = performance.now();
+    if (now - lastTap.t < 380 && Math.hypot(x - lastTap.x, y - lastTap.y) < 60) {
+      pool.nextStroke();
+      lastTap.t = -1;
+      return;
+    }
+    lastTap = { t: now, x, y };
+  }
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
   if (driving && raycaster.intersectObject(driving.group, true).length > 0) {
     exitCar();
+    return;
+  }
+  // on the bus: any tap = "I want to get off" (now if the doors are open, else at the next stop)
+  if (onBus()) {
+    requestOffBus();
+    return;
+  }
+  // tapping a bus standing at a stop with its doors open: walk to the door (touching it gets her on)
+  const bus = !driving ? traffic.tappedBus(raycaster) : null;
+  if (bus?.open && bus.door) {
+    buyTarget = null;
+    if (Math.hypot(bus.door.x - player.position.x, bus.door.z - player.position.z) < BUS_DOOR_R) boardBus();
+    else {
+      setTarget(bus.door);
+      busNearDoor = false;
+    }
     return;
   }
   // Objects and characters first: tapping one walks the character up to it (touching it uses it).
@@ -544,8 +794,8 @@ function handleTap(x: number, y: number): void {
       if (hit.it?.requiresClick) {
         // shops: tapping = "I want to buy": walk there and buy on arrival (or right away if already there)
         const d = Math.hypot(hit.it.position.x - player.position.x, hit.it.position.z - player.position.z);
-        if (d < hit.it.radius) {
-          hit.it.interact({ player: player.position });
+        if (d < Math.max(hit.it.radius, hit.it.reach ?? 0)) {
+          useClickable(hit.it);
           return;
         }
         buyTarget = hit.it;
@@ -555,7 +805,10 @@ function handleTap(x: number, y: number): void {
     }
   }
   const groundHit = raycaster.intersectObject(world.ground)[0];
-  if (groundHit) setTarget(groundHit.point);
+  if (groundHit) {
+    buyTarget = null; // changed her mind: walking somewhere else
+    setTarget(groundHit.point);
+  }
 }
 
 function setTarget(p: THREE.Vector3): void {
@@ -574,6 +827,10 @@ function isDescendant(obj: THREE.Object3D, root: THREE.Object3D): boolean {
   for (let o: THREE.Object3D | null = obj; o; o = o.parent) if (o === root) return true;
   return false;
 }
+
+/** Swimming is slower and only the pool edges stop her. */
+const moveSpeed = () => (pool?.swimming ? pool.swimSpeed : WALK_SPEED);
+const moveObstacles = () => (pool?.swimming ? pool.waterWalls : world.obstacles);
 
 const timer = new THREE.Timer();
 timer.connect(document); // pauses the clock while the tab is hidden
@@ -599,8 +856,37 @@ function tick(time: number): void {
   const k = input.keys;
   let speed = 0;
   const before = player.position.clone();
+  // lying on a pool lounger: any arrow key or tap gets her up
+  if (!paused && pool.lounging && (k.up || k.down || k.left || k.right || walkTarget)) pool.getUp();
   if (paused) {
     // standing still while talking / flying
+  } else if (pool.lounging) {
+    // sunbathing
+  } else if (riding) {
+    const sv = riding.seat;
+    if (sv.steer) {
+      // a ride she drives (bumper car): arrows, or steer towards a tapped spot
+      let throttle = (k.up ? 1 : 0) - (k.down ? 1 : 0);
+      let turn = (k.left ? 1 : 0) - (k.right ? 1 : 0);
+      if (!throttle && !turn && walkTarget) {
+        const pz = sv.pose(riding.i);
+        const dx = walkTarget.x - pz.pos.x;
+        const dz = walkTarget.z - pz.pos.z;
+        let diff = Math.atan2(-dx, -dz) - pz.heading;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        turn = THREE.MathUtils.clamp(diff * 2, -1, 1);
+        throttle = Math.hypot(dx, dz) > 1.2 ? 1 : 0;
+        if (!throttle) clearTarget();
+      }
+      sv.steer(dt, throttle, turn);
+    } else if (k.up || k.down || k.left || k.right || walkTarget) {
+      clearTarget();
+      getOffSwing();
+    }
+    if (riding && sv.done?.()) getOffSwing();
+  } else if (onBus()) {
+    if ((k.up || k.down || k.left || k.right) && traffic.riderCanAlight()) leaveBus();
+    clearTarget();
   } else if (driving) {
     let throttle = (k.up ? 1 : 0) - (k.down ? 1 : 0);
     let steer = (k.left ? 1 : 0) - (k.right ? 1 : 0);
@@ -630,12 +916,12 @@ function tick(time: number): void {
     if (k.right) player.heading -= TURN_SPEED * dt;
     const dir = (k.up ? 1 : 0) - (k.down ? 1 : 0);
     if (dir !== 0) {
-      const s = dir > 0 ? WALK_SPEED : WALK_SPEED * 0.6;
+      const s = dir > 0 ? moveSpeed() : moveSpeed() * 0.6;
       speed = s;
       player.move(
         -Math.sin(player.heading) * s * dir * dt,
         -Math.cos(player.heading) * s * dir * dt,
-        world.obstacles,
+        moveObstacles(),
       );
     }
   } else if (walkTarget) {
@@ -646,9 +932,9 @@ function tick(time: number): void {
       clearTarget();
     } else {
       player.turnTowards(Math.atan2(-dx, -dz), 8 * dt);
-      const step = Math.min(WALK_SPEED * dt, dist);
-      speed = WALK_SPEED;
-      player.move((dx / dist) * step, (dz / dist) * step, world.obstacles);
+      const step = Math.min(moveSpeed() * dt, dist);
+      speed = moveSpeed();
+      player.move((dx / dist) * step, (dz / dist) * step, moveObstacles());
       // Give up if blocked (e.g. tapped inside a building or behind a wall).
       const moved = player.position.distanceTo(before);
       stuckTime = moved < step * 0.2 ? stuckTime + dt : 0;
@@ -656,16 +942,38 @@ function tick(time: number): void {
     }
   }
   if (!flight) player.update(dt, driving ? 0 : speed);
+  if (riding) {
+    const p = riding.seat.pose(riding.i);
+    player.heading = p.heading;
+    if (p.stand) {
+      // standing ride (trampoline, bouncy castle): upright, feet at pos.y
+      player.sitting = false;
+      player.lyingY = null;
+      player.root.rotation.x = 0;
+      player.position.set(p.pos.x, p.pos.y, p.pos.z);
+    } else if (p.lying) {
+      // in bed: Character.update lays her on her back at this height
+      player.sitting = false;
+      player.lyingY = p.pos.y;
+      player.position.set(p.pos.x, p.pos.y, p.pos.z);
+    } else {
+      player.root.rotation.order = 'YXZ';
+      player.root.rotation.y = p.heading;
+      player.root.rotation.x = p.tilt;
+      player.position.set(p.pos.x, p.pos.y - 0.7, p.pos.z);
+    }
+  }
 
   // --- touch-to-interact (edge triggered: fires once when the character reaches the object) ---
   for (const it of world.interactables) {
+    if (onBus()) break; // riding past things doesn't touch them
     const d = Math.hypot(it.position.x - player.position.x, it.position.z - player.position.z);
     if (it.requiresClick) {
       // only when the child asked for it (tap, or Enter next to it)
       if (buyTarget === it && d < it.radius) {
         buyTarget = null;
         clearTarget();
-        it.interact({ player: player.position });
+        useClickable(it);
       }
       continue;
     }
@@ -684,7 +992,7 @@ function tick(time: number): void {
   // --- kitten stuck in a tree: touch the trunk to climb up and rescue it ---
   catTree.update(dt, player.position);
   catTree.idleAfter(dt);
-  if (!paused && !driving && !flight && catTree.waiting) {
+  if (!paused && !driving && !flight && !onBus() && catTree.waiting) {
     const tp = catTree.interactable.position;
     if (Math.hypot(player.position.x - tp.x, player.position.z - tp.z) < 1.75) {
       paused = true;
@@ -706,11 +1014,12 @@ function tick(time: number): void {
   }
 
   // --- idle for 30 s → pause (so the creatures don't eat all the coins) ---
-  if (!paused && !flight && hospitalPhase === 'none' && performance.now() - lastActivity > IDLE_MS) void idlePause();
+  // (not while she's watching the concert — standing still is the whole point there)
+  if (!paused && !flight && !onBus() && hospitalPhase === 'none' && !concert.isInside() && !pool.isInside() && !house.isInside() && !fair.isInside() && performance.now() - lastActivity > IDLE_MS) void idlePause();
   for (const it of world.interactables) it.update?.(dt);
 
   // --- coins & jewels ---
-  const got = collectibles.update(dt, player.position);
+  const got = collectibles.update(dt, onBus() ? NOWHERE : player.position);
   if (got.value > 0) {
     const jewels = got.kinds.filter((k) => k === 'jewel').length;
     if (jewels > 0) {
@@ -723,13 +1032,18 @@ function tick(time: number): void {
   }
 
   // --- creatures ---
-  const ev = monsters.update(dt, player.position, save.coins, paused);
+  const ev = monsters.update(dt, player.position, save.coins, paused || onBus());
   if (ev.say && !paused) taunt(ev.say);
   if (ev.hit) hurt(ev.hit, HIT_COST);
 
   // --- street trouble (football fans, bar scuffle) and traffic ---
   trouble.update(dt);
   traffic.update(dt);
+  updateBus(dt);
+  concert.update(dt);
+  pool.update(dt, k.up || k.down || walkTarget !== null, walkTarget);
+  house.update(dt);
+  fair.update(dt);
   updateHospital(dt);
   weather.update(dt);
   streetLights.update(dt, weather.daylight, camera);
@@ -754,7 +1068,7 @@ function tick(time: number): void {
     void speak(['Boa! Juntaste cem moedas!', `Vai ao aeroporto e apanha o avião para ${next}!`]);
   }
   if (!paused && lastLevel() && save.coins >= COINS_PER_LEVEL && !save.finished) void finishJourney();
-  if (!paused && !flight && !driving) {
+  if (!paused && !flight && !driving && !onBus()) {
     const b = airport.boardPoint;
     if (Math.hypot(player.position.x - b.x, player.position.z - b.z) < 1.4) {
       if (readyToTravel()) startFlight();
@@ -771,8 +1085,8 @@ function tick(time: number): void {
   );
 
   // --- question characters ---
-  const met = npcs.update(dt, player.position);
-  if (met && !paused && !driving) void meet(met);
+  const met = npcs.update(dt, player.position, paused || onBus());
+  if (met && !paused && !driving && !onBus()) void meet(met);
 
   // --- camera follows behind the character, unless the player is looking around ---
   const turning = k.left || k.right;
@@ -795,15 +1109,19 @@ function tick(time: number): void {
     if (flight.done) endFlight();
   } else {
   const target = player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
-  const wanted = driving ? Math.max(camDist, 12) : camDist;
+  const wanted = driving || onBus() ? Math.max(camDist, 12) : camDist;
   // don't let the camera end up inside a building: walk out from her towards the camera and stop before a wall
-  const dir = new THREE.Vector3(Math.sin(camYaw) * Math.cos(camPitch), Math.sin(camPitch), Math.cos(camYaw) * Math.cos(camPitch));
+  // inside the house the roof is hidden and the camera looks down from above, over the walls
+  const pitch = house.isInside() ? Math.max(camPitch, 1.05) : camPitch;
+  const dir = new THREE.Vector3(Math.sin(camYaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(camYaw) * Math.cos(pitch));
   let dist = wanted;
   for (let d = 1.2; d <= wanted; d += 0.4) {
     const px = target.x + dir.x * d;
     const pz = target.z + dir.z * d;
-    if (target.y + dir.y * d > 7) break; // above most rooftops
-    if (world.obstacles.some((o) => o !== driving?.obstacleBox && px > o.minX - 0.3 && px < o.maxX + 0.3 && pz > o.minZ - 0.3 && pz < o.maxZ + 0.3)) {
+    const py = target.y + dir.y * d;
+    if (py > 7) break; // above most rooftops
+    // low things (fences, the concert crowd, the stage) only block the camera below their height
+    if (world.obstacles.some((o) => o !== driving?.obstacleBox && !(o.height !== undefined && py > o.height + 0.4) && px > o.minX - 0.3 && px < o.maxX + 0.3 && pz > o.minZ - 0.3 && pz < o.maxZ + 0.3)) {
       dist = Math.max(1.5, d - 0.6);
       break;
     }
@@ -842,6 +1160,15 @@ function tick(time: number): void {
       traffic: traffic.positions().slice(0, 3),
       trouble: trouble.positions(),
       sites: trouble.sites(),
+      concert: concert.debug(),
+      riding: riding ? riding.i : null,
+      house: house.debug(),
+      fair: fair.debug(),
+      wear: save.wear,
+      onBus: onBus(),
+      bus: traffic.busDebug(),
+      buy: buyTarget ? [+buyTarget.position.x.toFixed(1), +buyTarget.position.z.toFixed(1)] : null,
+      pool: pool.debug(),
       catAt: [+catTree.interactable.position.x.toFixed(1), +catTree.interactable.position.z.toFixed(1)],
       flying: !!flight,
       character: save.character,
@@ -890,8 +1217,9 @@ function newGame(): void {
   rescuing = false;
   buyTarget = null;
   holdItem(null);
-  Object.assign(save, { bag: {}, hospitalUntil: 0, coins: 0, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null, visited: [] });
+  Object.assign(save, { wear: {}, bag: {}, hospitalUntil: 0, coins: 0, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null, visited: [] });
   solved.clear();
+  player.setWear(save.wear);
   hud.set('coins', 0);
   hud.set('jewels', 0);
   hud.set('correct', 0);
@@ -923,6 +1251,7 @@ const setAvatar = createAvatarButton(save.character ?? 'princesa', () => {
 /** In-game: back to the main page. "Continuar" resumes exactly where she was; "Novo jogo" restarts. */
 async function openMainPage(): Promise<void> {
   menuOpen = true;
+  leaveBus(true);
   const wasPaused = paused;
   paused = true;
   clearTarget();

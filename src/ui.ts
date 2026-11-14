@@ -1,3 +1,4 @@
+import { itemDef, itemKinds } from './items';
 import { speak, sfx, stopSpeaking } from './audio';
 import type { Question } from './questions';
 
@@ -520,7 +521,7 @@ export function createBag(onUse: (kind: string) => void): (bag: Record<string, n
   document.body.appendChild(bar);
   const buttons = new Map<string, HTMLButtonElement>();
   return (bag, inHand) => {
-    for (const kind of Object.keys(BAG_ICONS)) {
+    for (const kind of [...Object.keys(BAG_ICONS), ...itemKinds()]) {
       const n = bag[kind] ?? 0;
       let b = buttons.get(kind);
       if (n <= 0) {
@@ -531,15 +532,16 @@ export function createBag(onUse: (kind: string) => void): (bag: Record<string, n
       if (!b) {
         b = document.createElement('button');
         b.className = 'bag-item';
-        b.setAttribute('aria-label', BAG_NAMES[kind]);
-        b.innerHTML = `${BAG_ICONS[kind]}<span class="bag-count"></span>`;
-        b.addEventListener('mouseenter', () => void speak([BAG_NAMES[kind]]));
+        const name = BAG_NAMES[kind] ?? itemDef(kind)?.name ?? kind;
+        b.setAttribute('aria-label', name);
+        b.innerHTML = `${BAG_ICONS[kind] ?? itemDef(kind)?.icon ?? '🎁'}<span class="bag-count"></span>`;
+        b.addEventListener('mouseenter', () => void speak([name]));
         b.addEventListener('click', () => {
           b!.blur();
           onUse(kind);
         });
         // keep the order stable: pão, gelado, chocolate, chupa
-        const order = Object.keys(BAG_ICONS);
+        const order = [...Object.keys(BAG_ICONS), ...itemKinds()];
         const next = [...buttons.entries()].find(([k]) => order.indexOf(k) > order.indexOf(kind));
         bar.insertBefore(b, next ? next[1] : null);
         buttons.set(kind, b);

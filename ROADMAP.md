@@ -12,6 +12,13 @@ Aplicar no Session End Protocol.
 
 | # | Action | Owner | Blocker |
 |---|---|---|---|
+| 1 | Telmo testa as sessões 2–3 (concerto, piscina, autocarro, casa, Tóquio, feira) e aprova o commit | Telmo | none |
+| 2 | Medir fps em tablet com feira (15 diversões)/concerto/piscina/casa/autocarros; otimizar se < 30 | agent | none |
+| 3 | Spike OSM: carregar um quarteirão real (Porto) → ruas + edifícios low-poly com colisões | agent | decidir fonte de dados (Overpass vs pré-processado) |
+| 4 | Afinar acessórios (chapéus vs coroa/laço, capa vs mochila) e gesto de atirar/arco | agent | none |
+| 5 | Morada de início nas Definições | agent | #3 |
+
+---|---|---|---|
 | 1 | Telmo testa a sessão toda no browser (voz, dificuldade, situações, compras, voo) e valida as 36 perguntas em src/questions.ts | Telmo | none |
 | 2 | Roupas e acessórios (óculos, chapéus) para encontrar e trocar | agent | none |
 | 3 | Spike OSM: carregar um quarteirão real (Lisboa) → ruas + edifícios low-poly com colisões | agent | decidir fonte de dados (Overpass vs pré-processado) |
@@ -58,6 +65,8 @@ Aplicar no Session End Protocol.
 - ✅ 10 personagens originais + ecrã de escolha; carro conduzível; pobre; 12 adereços interativos (2026-11-11)
 - ✅ Gato na árvore, carro com porta/condutor visível, padaria+pombos, doces, adeptos, bar, trânsito+hospital, tempo real, ecrã inicial, definições, pausa por inatividade (2026-11-11)
 - ✅ Compras só com clique/Enter, inventário lateral, definições no ecrã inicial, luz pela hora local + candeeiros de rua (2026-11-11)
+- ✅ Casa com 5 divisões e objetos interativos (cores da bandeira), Tóquio, feira popular com 15 diversões e acessórios gravados (2026-11-14)
+- ✅ Concerto de 20 em 20 min (contagem, público e artistas entram/saem), piscina (cabines, 3 estilos, espreguiçadeiras), autocarro com paragens e linhas, baloiço montável, Vega e Alice, trânsito sem bloqueios, primeira cidade = Porto (2026-11-14)
 - ✅ Página principal acessível em jogo (também no hospital), ⚙ Definições com Zero/Fácil/Médio/Difícil, Novo jogo com confirmação (2026-11-12)
 
 ---
@@ -75,4 +84,6 @@ Aplicar no Session End Protocol.
 | v1.6 | 2026-11-11 | Aeroporto e voo, ícone, Casa, 10 personagens, carro, pobre, 12 adereços |
 | v1.7 | 2026-11-11 | Cidade viva: lojas, pombos, adeptos, bar, trânsito, hospital, tempo real, gato na árvore; ecrã inicial e definições |
 | v1.8 | 2026-11-11 | Compra por clique, inventário, definições no início, dia/noite real com candeeiros |
+| v2.1 | 2026-11-14 | Sessão 3: casa, Tóquio, feira popular (15 diversões), acessórios (#SEP) |
+| v2.0 | 2026-11-14 | Sessão 2: concerto, piscina, autocarro, baloiço, 12 personagens, trânsito corrigido, Porto (#SEP) |
 | v1.9 | 2026-11-12 | Menu principal em jogo, Definições (Zero…Difícil), confirmação de Novo jogo — fecho da sessão 1 (#SEP) |

@@ -1,6 +1,43 @@
 import * as THREE from 'three';
 import { speak, tone } from './audio';
-import type { Interactable, Obstacle } from './world';
+import { AIRPORT_ZONE } from './airport';
+import { SPAWN, onRoad, type Interactable, type Obstacle } from './world';
+
+/** Half-size of her blanket (solid footprint). */
+const HALF = 0.6;
+const TAU = Math.PI * 2;
+
+/**
+ * Her wanted spot if it has walking room all round (≥ 2 m to any building, ~1 m to thin posts); otherwise the
+ * nearest such spot, keeping her on the pavement side (off the road, clear of the start point and the airport).
+ * Crowded maps relax the room to 1.2 m rather than leave her inside or against a building.
+ */
+function roomySpot(wanted: THREE.Vector3, obstacles: Obstacle[]): THREE.Vector3 {
+  const a = AIRPORT_ZONE;
+  const ok = (x: number, z: number, room: number): boolean => {
+    if (onRoad(x, z, HALF + 2) || Math.abs(x) > 135 || Math.abs(z) > 135) return false;
+    if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 10) return false;
+    if (x + HALF + 3 > a.minX && x - HALF - 3 < a.maxX && z + HALF + 3 > a.minZ && z - HALF - 3 < a.maxZ) return false;
+    for (const o of obstacles) {
+      const m = HALF + (o.maxX - o.minX < 0.9 && o.maxZ - o.minZ < 0.9 ? Math.min(room, 1) : room);
+      if (x + m > o.minX && x - m < o.maxX && z + m > o.minZ && z - m < o.maxZ) return false;
+    }
+    return true;
+  };
+  for (const room of [2, 1.2]) {
+    // rings of growing radius around the wanted spot (the first one is the spot itself)
+    for (let r = 0; r <= 40; r += 1) {
+      const n = r === 0 ? 1 : Math.ceil((TAU * r) / 1);
+      for (let k = 0; k < n; k++) {
+        const ang = (k / n) * TAU;
+        const x = wanted.x + Math.cos(ang) * r;
+        const z = wanted.z + Math.sin(ang) * r;
+        if (ok(x, z, room)) return new THREE.Vector3(x, 0, z);
+      }
+    }
+  }
+  return wanted.clone();
+}
 
 export interface BeggarHooks {
   coins(): number;
@@ -14,7 +51,8 @@ export interface BeggarHooks {
  * - she only accepts once per city (afterwards she just waves and smiles);
  * - with no coins: she smiles and wishes a good walk.
  */
-export function createBeggar(scene: THREE.Scene, obstacles: Obstacle[], at: THREE.Vector3, hooks: BeggarHooks): Interactable {
+export function createBeggar(scene: THREE.Scene, obstacles: Obstacle[], wanted: THREE.Vector3, hooks: BeggarHooks): Interactable {
+  const at = roomySpot(wanted, obstacles);
   const g = new THREE.Group();
   g.position.copy(at);
   g.rotation.y = Math.PI; // faces +Z (towards the road / spawn)

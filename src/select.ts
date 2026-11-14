@@ -11,12 +11,13 @@ style.textContent = `
     animation: fadein .3s;
   }
   .select h1 { margin: 12px 0 10px; font: 900 40px/1.1 system-ui, sans-serif; color: #7c3aed; text-align: center; }
-  .select-grid { display: grid; grid-template-columns: repeat(5, minmax(110px, min(150px, 17vh))); gap: 12px; padding: 0 16px 14px; justify-content: center; }
-  @media (max-width: 760px) { .select-grid { grid-template-columns: repeat(3, minmax(100px, 150px)); } }
+  .select-grid { display: grid; grid-template-columns: repeat(6, minmax(100px, min(150px, 19vh))); gap: 12px; padding: 0 16px 14px; justify-content: center; }
+  @media (max-width: 1000px) { .select-grid { grid-template-columns: repeat(4, minmax(100px, min(150px, 17vh))); } }
+  @media (max-width: 760px) { .select-grid { grid-template-columns: repeat(3, minmax(90px, 150px)); } }
   .select-card {
     border: 0; border-radius: 22px; background: #fff; padding: 8px 8px 12px; cursor: pointer;
     box-shadow: 0 6px 0 rgba(124,58,237,.18), 0 8px 18px rgba(0,0,0,.08); transition: transform .12s;
-    font-family: inherit; outline: none;
+    font-family: inherit; outline: none; display: flex; flex-direction: column; justify-content: flex-start;
   }
   .select-card:hover, .select-card:focus-visible, .select-card.focus { transform: translateY(-4px) scale(1.04); box-shadow: 0 0 0 5px #a78bfa, 0 10px 20px rgba(0,0,0,.12); }
   .select-card.chosen { box-shadow: 0 0 0 6px #22c55e, 0 10px 20px rgba(0,0,0,.12); }
@@ -223,7 +224,7 @@ export function chooseCharacter(
         resolve({ id: def.id, mode });
       }, 700);
     };
-    const cols = () => (window.innerWidth <= 760 ? 3 : 5);
+    const cols = () => (window.innerWidth <= 760 ? 3 : window.innerWidth <= 1000 ? 4 : 6);
     const onKey = (e: KeyboardEvent) => {
       if (document.querySelector('.settings') || document.querySelector('.confirm')) return;
       const k = e.key;

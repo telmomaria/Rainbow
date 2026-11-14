@@ -10,6 +10,13 @@ import { tone } from './audio';
  */
 
 const TAU = Math.PI * 2;
+/** Walking room (m) between a prop's footprint and any building/solid; relaxed step by step only on crowded maps. */
+const ROOM = 2.2;
+const ROOM_STEPS = [ROOM, 1.6, 1.2] as const;
+/** Margin to use after fraction `k` (0..1) of the search attempts: full room for the first half, then relaxing. */
+const roomFor = (k: number): number => (k < 0.5 ? ROOM_STEPS[0] : k < 0.8 ? ROOM_STEPS[1] : ROOM_STEPS[2]);
+/** A thin post (street lamp, pole): small enough that ~1 m beside it is plenty to walk past. */
+const isPost = (o: Obstacle): boolean => o.maxX - o.minX < 0.9 && o.maxZ - o.minZ < 0.9;
 
 interface Spot {
   x: number;
@@ -176,12 +183,17 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
     const cz = Math.max(o.minZ, Math.min(z, o.maxZ));
     return (x - cx) ** 2 + (z - cz) ** 2 < r * r;
   };
+  /** Free walking space kept between a prop's footprint and buildings/other solids (relaxed only when crowded). */
+  let margin = ROOM;
+  /** Distance kept from the road edge (playground things stay well away from the traffic). */
+  let roadGap = 4;
   const isFree = (x: number, z: number, r: number, offRoad = true): boolean => {
-    if (offRoad && onRoad(x, z, 0.6 + r)) return false; // roads + kerb
+    if (offRoad && onRoad(x, z, roadGap + r)) return false; // roads + kerb + a safe gap
     const a = AIRPORT_ZONE;
     if (x + r + 2 > a.minX && x - r - 2 < a.maxX && z + r + 2 > a.minZ && z - r - 2 < a.maxZ) return false;
     if (Math.abs(x) + r > 140 || Math.abs(z) + r > 140) return false;
-    for (const o of obstacles) if (circleHitsBox(x, z, r + 1.2, o)) return false;
+    // posts (street lamps...) only need room to walk past; buildings and big things get the full margin
+    for (const o of obstacles) if (circleHitsBox(x, z, r + (isPost(o) ? Math.min(margin, 1) : margin), o)) return false;
     for (const t of taken) if (Math.hypot(x - t.x, z - t.z) < r + t.r + 1.5) return false;
     return true;
   };
@@ -191,12 +203,16 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
     let x = 0;
     let z = 0;
     for (let i = 0; i < 600; i++) {
+      margin = roomFor(i / 600);
+      roadGap = i < 450 ? 4 : 2.5;
       const a = i < 80 ? angle + (rng() - 0.5) * 1.0 : rng() * TAU;
       const d = minD + rng() * (maxD - minD) + Math.floor(i / 100) * 5; // widen the ring if crowded
       x = Math.cos(a) * d;
       z = Math.sin(a) * d;
       if (isFree(x, z, r)) break;
     }
+    margin = ROOM;
+    roadGap = 4;
     taken.push({ x, z, r });
     return { x, z, rot: faceOrigin(x, z) };
   };
@@ -208,7 +224,7 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
   // Near the crossroads (seen from the start), one sector each.
   const near: [number, (at: Spot) => Interactable][] = [
     [1.7, (at) => createFountain(kit, at)],
-    [1.9, (at) => createSwing(kit, at)],
+    [2.2, (at) => createSwing(kit, at)],
     [1.2, (at) => createMushroom(kit, at)],
     [1.2, (at) => createCatBench(kit, at)],
     [0.8, (at) => createDog(kit, at)],
@@ -226,14 +242,17 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
       [5.3, -5.3],
     ];
     const first = Math.floor(rng() * 4);
-    let at: Spot = { x: -5.3, z: 5.3, rot: 0 };
-    for (let k = 0; k < 4; k++) {
-      const [x, z] = corners[(first + k) % 4];
-      if (isFree(x, z, 0.3, false)) {
-        at = { x, z, rot: faceOrigin(x, z) };
-        break;
+    let found: Spot | null = null;
+    for (const m of ROOM_STEPS) {
+      margin = m;
+      for (let k = 0; k < 4 && !found; k++) {
+        const [x, z] = corners[(first + k) % 4];
+        if (isFree(x, z, 0.3, false)) found = { x, z, rot: faceOrigin(x, z) };
       }
+      if (found) break;
     }
+    margin = ROOM;
+    const at: Spot = found ?? { x: -5.3, z: 5.3, rot: 0 };
     taken.push({ x: at.x, z: at.z, r: 0.5 });
     props.push(createTrafficLight(kit, at));
   }
@@ -244,20 +263,22 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
     const gap = 1.2;
     let placed: { x: number; z: number; dx: number; dz: number } | null = null;
     for (let i = 0; i < 300 && !placed; i++) {
+      margin = roomFor(i / 300);
       const alongX = rng() < 0.5;
       const s1 = rng() < 0.5 ? -1 : 1; // which side of the road
       const s2 = rng() < 0.5 ? -1 : 1; // which direction along it
-      const off = 6 + rng() * 2; // distance from the road centre line
+      const off = 10 + rng() * 3; // distance from the road centre line (beyond the pavement and the lamps)
       const start = 25 + rng() * (i < 150 ? 60 : 100);
       const x0 = alongX ? s2 * start : s1 * off;
       const z0 = alongX ? s1 * off : s2 * start;
       const dx = alongX ? s2 * gap : 0;
       const dz = alongX ? 0 : s2 * gap;
       let ok = true;
-      for (let k = 0; k < n && ok; k++) ok = isFree(x0 + dx * k, z0 + dz * k, 0.7, false) && Math.abs(alongX ? z0 : x0) > 5.2;
+      for (let k = 0; k < n && ok; k++) ok = isFree(x0 + dx * k, z0 + dz * k, 0.7, false) && !onRoad(x0 + dx * k, z0 + dz * k, 2.5); // never on/across any road
       if (ok) placed = { x: x0, z: z0, dx, dz };
     }
-    const p = placed ?? { x: -7, z: 20, dx: 0, dz: gap };
+    margin = ROOM;
+    const p = placed ?? { x: -12, z: 20, dx: 0, dz: gap };
     for (let k = 0; k < n; k++) {
       const x = p.x + p.dx * k;
       const z = p.z + p.dz * k;
@@ -286,6 +307,24 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
 }
 
 /* ------------------------------------------------------------------ props */
+
+/** A swing seat she can sit on (main.ts drives her pose while riding). */
+export interface SwingSeat {
+  /** Sit on the seat nearest to `p`; returns its index. */
+  take(p: THREE.Vector3): number;
+  /** World position of the seat top, the swing's facing and current tilt. */
+  pose(i: number): { pos: THREE.Vector3; heading: number; tilt: number; lying?: boolean; stand?: boolean };
+  /**
+   * Rides she controls (bumper car): while seated, the arrow keys / taps on the ground call this instead of getting
+   * her off (Space / Enter / tapping her car = get off). throttle and turn are in [-1, 1].
+   */
+  steer?(dt: number, throttle: number, turn: number): void;
+  /** Timed rides (roller coaster lap, bumper-car session): true when the ride is over → she gets off by herself. */
+  done?(): boolean;
+  leave(): void;
+  /** Where to stand after getting off. */
+  getOff(): THREE.Vector3;
+}
 
 /** Baloiço: two swings that sway when touched, slowly settling, with a happy creak. */
 function createSwing(k: Kit, at: Spot): Interactable {
@@ -318,10 +357,33 @@ function createSwing(k: Kit, at: Spot): Interactable {
   let amp = 0.05;
   let t = 0;
   let lastSign = 1;
+  let rider: number | null = null;
+  const seat: SwingSeat = {
+    take(p) {
+      // the seat nearest to her
+      const local = g.worldToLocal(p.clone());
+      rider = local.x < 0 ? 0 : 1;
+      amp = Math.max(amp, 0.4);
+      return rider;
+    },
+    pose(i) {
+      g.updateMatrixWorld(true);
+      const pos = pivots[i].localToWorld(new THREE.Vector3(0, -1.86, 0));
+      return { pos, heading: at.rot, tilt: pivots[i].rotation.x };
+    },
+    leave() {
+      rider = null;
+    },
+    getOff() {
+      return g.localToWorld(new THREE.Vector3(0, 0, -1.6)); // in front of the swing
+    },
+  };
   return {
     object: g,
-    position: new THREE.Vector3(at.x, 0, at.z),
-    radius: 1.9,
+    position: new THREE.Vector3(at.x, 0, at.z - 0),
+    radius: 2.2,
+    requiresClick: true,
+    seat,
     interact() {
       amp = Math.min(1.0, amp + 0.75);
       [523, 659, 784].forEach((f, i) => tone(f, 0.05 + i * 0.08, 0.18, 'triangle', 0.08));
@@ -329,10 +391,10 @@ function createSwing(k: Kit, at: Spot): Interactable {
     },
     update(dt) {
       t += dt;
-      amp = Math.max(0.03, amp * Math.exp(-0.4 * dt));
+      amp = rider !== null ? Math.min(0.75, amp + dt * 0.15) : Math.max(0.03, amp * Math.exp(-0.4 * dt)); // she pumps
       const s = Math.sin(t * 2.6);
-      pivots[0].rotation.x = amp * s;
-      pivots[1].rotation.x = amp * 0.8 * Math.sin(t * 2.6 + 1.4);
+      pivots[0].rotation.x = amp * s * (rider === 1 ? 0.3 : 1);
+      pivots[1].rotation.x = amp * (rider === 0 ? 0.25 : 0.8) * Math.sin(t * 2.6 + (rider === 1 ? 0 : 1.4));
       const sign = s >= 0 ? 1 : -1;
       if (sign !== lastSign && amp > 0.3) tone(360 + Math.random() * 80, 0, 0.12, 'sawtooth', 0.015); // soft creak
       lastSign = sign;

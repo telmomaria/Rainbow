@@ -8,6 +8,8 @@ export interface Obstacle {
   maxX: number;
   minZ: number;
   maxZ: number;
+  /** Height (m) of a low obstacle (fence, crowd, stage): the camera may pass above it. Omitted = tall. */
+  height?: number;
 }
 
 /** Something the player can walk up to and use. No UI marks it — discovery is by touching it. */
@@ -18,11 +20,16 @@ export interface Interactable {
   /** How close (metres) the character must be for the interaction to fire. */
   radius: number;
   /** Fired once each time the character comes within radius (edge-triggered). */
-  interact(ctx: InteractCtx): void;
+  /** Return false to refuse (e.g. she can't pay): a seat is then not taken. */
+  interact(ctx: InteractCtx): void | boolean;
   /** Optional per-frame animation. */
   update?(dt: number): void;
   /** Shops etc.: don't fire on mere contact — only when the child clicks/taps it (or presses Enter next to it). */
   requiresClick?: boolean;
+  /** Swing: tapping it seats her on it (see props.ts SwingSeat). */
+  seat?: import('./props').SwingSeat;
+  /** Tapping it from up to this far away uses it straight away (loungers: she walks/lies down directly). */
+  reach?: number;
 }
 
 export interface InteractCtx {
@@ -53,6 +60,10 @@ export interface World {
   obstacles: Obstacle[];
   interactables: Interactable[];
   update(dt: number): void;
+  /** Placeholder buildings' obstacle boxes (so a big venue may clear room when the city is too crowded). */
+  buildings: Set<Obstacle>;
+  /** Remove every placeholder building overlapping `area` (plus margin m): meshes and obstacles. */
+  clearArea(area: Obstacle, margin: number): void;
 }
 
 /**
@@ -103,6 +114,7 @@ export function createWorld(scene: THREE.Scene, city: City): World {
   for (const z of ROADS.zs) addRoad(false, z);
 
   const obstacles: Obstacle[] = [];
+  const buildingMeshes = new Map<Obstacle, THREE.Mesh>();
   const rng = mulberry32(city.seed);
   for (let i = 0; i < 70; i++) {
     const w = 4 + rng() * 6;
@@ -125,7 +137,9 @@ export function createWorld(scene: THREE.Scene, city: City): World {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
-    obstacles.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
+    const ob = { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 };
+    obstacles.push(ob);
+    buildingMeshes.set(ob, mesh);
   }
 
   // fluffy clouds high up (seen when flying between cities)
@@ -145,7 +159,19 @@ export function createWorld(scene: THREE.Scene, city: City): World {
 
   const interactables: Interactable[] = [createLamp(scene, new THREE.Vector3(6, 0, -8), obstacles)];
 
-  return { ground, hemi, sun, obstacles, interactables, update: () => {} };
+  const buildings = new Set(buildingMeshes.keys());
+  const clearArea = (a: Obstacle, m: number): void => {
+    for (const [ob, mesh] of buildingMeshes) {
+      if (ob.maxX + m > a.minX && ob.minX - m < a.maxX && ob.maxZ + m > a.minZ && ob.minZ - m < a.maxZ) {
+        scene.remove(mesh);
+        const i = obstacles.indexOf(ob);
+        if (i >= 0) obstacles.splice(i, 1);
+        buildingMeshes.delete(ob);
+        buildings.delete(ob);
+      }
+    }
+  };
+  return { ground, hemi, sun, obstacles, interactables, update: () => {}, buildings, clearArea };
 }
 
 /** Street lamp with a button on its post: touch it and the light switches on/off. */

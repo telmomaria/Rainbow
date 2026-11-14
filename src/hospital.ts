@@ -89,22 +89,35 @@ function choosePlot(obstacles: Obstacle[], rng: () => number): { x: number; z: n
     ...ROADS.xs.map((x) => ({ minX: x - half, maxX: x + half, minZ: -999, maxZ: 999 })),
     ...ROADS.zs.map((z) => ({ minX: -999, maxX: 999, minZ: z - half, maxZ: z + half })),
   ];
-  const tryAt = (x: number, z: number, rot: number): void => {
+  // the real solids (main block, ward, ambulance): thin posts such as street lamps are checked against these
+  const solids = [MAIN, WARD, { minX: AMB.x - AMB.hl, maxX: AMB.x + AMB.hl, minZ: AMB.z - AMB.hw, maxZ: AMB.z + AMB.hw }];
+  const isPost = (o: Obstacle): boolean => o.maxX - o.minX < 0.9 && o.maxZ - o.minZ < 0.9;
+  /** `room` = walking space kept between the plot and any building/solid (roads keep their own 1.5 m pad). */
+  const tryAt = (x: number, z: number, rot: number, room: number): void => {
     const fp = worldBox(x, z, rot, plot, 1.5);
     const centre = toWorld(x, z, rot, 1.6, 0);
     const d = Math.hypot(centre.x - SPAWN.x, centre.z - SPAWN.z);
     if (d < 55 || d > 115) return;
     if (Math.max(Math.abs(fp.minX), Math.abs(fp.maxX), Math.abs(fp.minZ), Math.abs(fp.maxZ)) > ROADS.extent - 15) return;
-    if (overlaps(fp, AIRPORT_ZONE) || roads.some((r) => overlaps(fp, r)) || obstacles.some((o) => overlaps(fp, o))) return;
+    if (overlaps(fp, AIRPORT_ZONE) || roads.some((r) => overlaps(fp, r))) return;
+    const roomy = worldBox(x, z, rot, plot, room);
+    const near = solids.map((b) => worldBox(x, z, rot, b, Math.min(room, 1)));
+    for (const o of obstacles) {
+      if (isPost(o) ? near.some((b) => overlaps(b, o)) : overlaps(roomy, o)) return;
+    }
     found.push({ x, z, rot });
   };
-  for (let t = -ROADS.extent + 20; t <= ROADS.extent - 20; t += 3) {
-    for (const side of [-1, 1]) {
-      // horizontal roads: building north (side -1, faces +Z, rot 0) or south (faces -Z, rot π)
-      for (const rz of ROADS.zs) tryAt(t, rz + side * SETBACK, side < 0 ? 0 : Math.PI);
-      // vertical roads: building west/east, local +Z pointing at the road
-      for (const rx of ROADS.xs) tryAt(rx + side * SETBACK, t, -side * (Math.PI / 2));
+  // full walking room (2.5 m) first; less only if the map is crowded
+  for (const room of [2.5, 1.5, 0.5]) {
+    for (let t = -ROADS.extent + 20; t <= ROADS.extent - 20; t += 3) {
+      for (const side of [-1, 1]) {
+        // horizontal roads: building north (side -1, faces +Z, rot 0) or south (faces -Z, rot π)
+        for (const rz of ROADS.zs) tryAt(t, rz + side * SETBACK, side < 0 ? 0 : Math.PI, room);
+        // vertical roads: building west/east, local +Z pointing at the road
+        for (const rx of ROADS.xs) tryAt(rx + side * SETBACK, t, -side * (Math.PI / 2), room);
+      }
     }
+    if (found.length) break;
   }
   if (found.length) return found[Math.floor(rng() * found.length)];
   return { x: -40, z: -SETBACK, rot: 0 }; // fallback: beside the z = 0 road, west of the spawn

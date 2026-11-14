@@ -262,12 +262,36 @@ function allSites(rng: () => number): Site[] {
   return out;
 }
 
-/** How many sample points of a local rectangle collide with roads, obstacles, the airport or the map edge. */
-function conflicts(s: Site, x0: number, x1: number, z0: number, z1: number, obstacles: Obstacle[]): number {
+/** A thin post (street lamp, pole): ~1 m beside it is plenty to walk past. */
+const isPost = (o: Obstacle): boolean => o.maxX - o.minX < 0.9 && o.maxZ - o.minZ < 0.9;
+
+/** Walking room (m) kept around the stadium/bar plot: full first, relaxed only on crowded maps. */
+const ROOM_STEPS = [2, 1.2] as const;
+
+/**
+ * How many sample points of a local rectangle collide with roads, obstacles (within `room` m), the airport or the
+ * map edge. Stops counting at `limit`. The samples include the rectangle's edges, so the room is kept all round.
+ */
+function conflicts(
+  s: Site,
+  x0: number,
+  x1: number,
+  z0: number,
+  z1: number,
+  obstacles: Obstacle[],
+  room: number,
+  limit = Infinity,
+): number {
   let bad = 0;
   const a = AIRPORT_ZONE;
-  for (let lx = x0; lx <= x1 + 0.01; lx += 1.5) {
-    for (let lz = z0; lz <= z1 + 0.01; lz += 1.5) {
+  const big = obstacles.filter((o) => !isPost(o));
+  const posts = obstacles.filter(isPost);
+  const nx = Math.max(1, Math.ceil((x1 - x0) / 1.5));
+  const nz = Math.max(1, Math.ceil((z1 - z0) / 1.5));
+  for (let i = 0; i <= nx; i++) {
+    const lx = x0 + ((x1 - x0) * i) / nx;
+    for (let j = 0; j <= nz; j++) {
+      const lz = z0 + ((z1 - z0) * j) / nz;
       const { x, z } = toWorld(s, lx, lz);
       if (
         Math.abs(x) > 140 ||
@@ -275,9 +299,12 @@ function conflicts(s: Site, x0: number, x1: number, z0: number, z1: number, obst
         onRoad(x, z, 0.5) ||
         (x > a.minX - 3 && x < a.maxX + 3 && z > a.minZ - 3 && z < a.maxZ + 3) ||
         Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14 ||
-        !isFree(x, z, 0.9, obstacles)
-      )
+        !isFree(x, z, room, big) ||
+        !isFree(x, z, Math.min(room, 0.6), posts)
+      ) {
         bad++;
+        if (bad >= limit) return bad;
+      }
     }
   }
   return bad;
@@ -287,18 +314,24 @@ function quadrant(x: number, z: number): number {
   return (x > SPAWN.x ? 1 : 0) + (z > SPAWN.z ? 2 : 0);
 }
 
-/** First conflict-free site that passes `ok`; else the least-bad one (busy maps still get the feature). */
+/**
+ * First conflict-free site that passes `ok` with full walking room around it, then with less room;
+ * else the least-bad one (busy maps still get the feature).
+ */
 function pickSite(
   sites: Site[],
   rect: [number, number, number, number],
   obstacles: Obstacle[],
   ok: (s: Site) => boolean,
 ): Site | null {
+  const okSites = sites.filter(ok);
+  for (const room of ROOM_STEPS) {
+    for (const s of okSites) if (conflicts(s, rect[0], rect[1], rect[2], rect[3], obstacles, room, 1) === 0) return s;
+  }
   let best: Site | null = null;
   let bestScore = Infinity;
-  for (const s of sites) {
-    if (!ok(s)) continue;
-    const score = conflicts(s, rect[0], rect[1], rect[2], rect[3], obstacles);
+  for (const s of okSites) {
+    const score = conflicts(s, rect[0], rect[1], rect[2], rect[3], obstacles, 0.9, bestScore);
     if (score === 0) return s;
     if (score < bestScore) {
       bestScore = score;
@@ -421,7 +454,8 @@ export class Trouble {
     const R = STADIUM_R;
 
     // stadium: 60-130 m from the spawn (measured at its centre)
-    this.stadium = pickSite(sites, [-R - 1, R + 1, -2 * R - 5, -1.5], obstacles, (s) => {
+    // rect = stand + 1 m all round (the gate front is at -2.9; the pavement strip by the road keeps its lamps)
+    this.stadium = pickSite(sites, [-R - 1, R + 1, -2 * R - 5, -3], obstacles, (s) => {
       const c = toWorld(s, 0, -(R + 4));
       const d = Math.hypot(c.x - SPAWN.x, c.z - SPAWN.z);
       return d >= 60 && d <= 130;
@@ -430,7 +464,7 @@ export class Trouble {
 
     // bar: 40-130 m from the spawn, in another quadrant than the stadium
     const sq = this.stadium ? quadrant(this.stadiumC.x, this.stadiumC.z) : -1;
-    this.bar = pickSite(sites, [-6, 6, -13.5, -1], obstacles, (s) => {
+    this.bar = pickSite(sites, [-6, 6, -13.5, -2.5], obstacles, (s) => {
       const c = toWorld(s, 2.6, -3.2);
       const d = Math.hypot(c.x - SPAWN.x, c.z - SPAWN.z);
       return d >= 40 && d <= 130 && quadrant(c.x, c.z) !== sq;

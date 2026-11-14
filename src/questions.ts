@@ -57,8 +57,17 @@ export const QUESTIONS: Question[] = [
 ];
 
 /** Pick a random available question not already held by a character; null if none right now. */
-export function nextQuestion(available: (id: string) => boolean, reserved: Set<string>): Question | null {
-  const pool = QUESTIONS.filter((q) => available(q.id) && !reserved.has(q.id));
+/**
+ * A question nobody is holding yet: unsolved ones first; once those run out (all solved or waiting to be retried),
+ * already-solved ones come back as a review (`recyclable`), so the world never runs out of question-givers.
+ */
+export function nextQuestion(
+  available: (id: string) => boolean,
+  reserved: Set<string>,
+  recyclable: (id: string) => boolean = () => false,
+): Question | null {
+  let pool = QUESTIONS.filter((q) => available(q.id) && !reserved.has(q.id));
+  if (pool.length === 0) pool = QUESTIONS.filter((q) => recyclable(q.id) && !reserved.has(q.id));
   if (pool.length === 0) return null;
   return pool[Math.floor(Math.random() * pool.length)];
 }

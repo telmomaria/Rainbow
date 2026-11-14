@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { isFree, randomFreeSpot } from './spawn';
+import { inNoSpawn, isFree, randomFreeSpot } from './spawn';
 import { SPAWN, type Obstacle } from './world';
 
 export const COIN_VALUE = 1;
@@ -55,7 +55,7 @@ export class Collectibles {
     const a = Math.random() * Math.PI * 2;
     for (let i = 0; i < TRAIL; i++) {
       const p = start.clone().add(new THREE.Vector3(Math.cos(a) * i * 2, 0, Math.sin(a) * i * 2));
-      if (!isFree(p.x, p.z, 0.6, this.obstacles)) break;
+      if (!isFree(p.x, p.z, 0.6, this.obstacles) || inNoSpawn(p.x, p.z, 0.6)) break;
       this.place('coin', p);
     }
   }
