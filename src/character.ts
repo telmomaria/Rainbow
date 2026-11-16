@@ -1,7 +1,17 @@
 import * as THREE from 'three';
-import { buildSwimsuit, characterById, type CharacterModel } from './characters';
+import {
+  buildShopOutfit,
+  buildSwimsuit,
+  characterById,
+  isShopOutfit,
+  type CharacterModel,
+} from './characters';
 import { wearableDef } from './items';
+import { SHOE_FOOT_Y, SHOE_FOOT_Z, buildShoeMesh, type ShoeKind } from './shoes';
 import type { Obstacle } from './world';
+
+/** Broken stub cape (blue flat box stuck to the head) — never re-apply. */
+const BROKEN_WEAR = new Set(['srv-capa']);
 
 export const CHARACTER_RADIUS = 0.45;
 /** Height of the pool's water surface (the pool is a raised basin). */
@@ -29,6 +39,8 @@ export class Character {
   stroke: Stroke = 'crawl';
   /** Lying on a pool lounger: on her back at this height (null = not lying). */
   lyingY: number | null = null;
+  /** On the massage table (on her back, face clear / turned toward the masseuse). */
+  prone = false;
   /** Sitting on a swing: legs forward (main.ts places her and sets the tilt). */
   sitting = false;
   private swimPhase = 0;
@@ -54,7 +66,12 @@ export class Character {
 
   private rebuild(): void {
     this.root.remove(this.model.model);
-    this.model = this.swimwear ? buildSwimsuit(this.id) : characterById(this.id).build();
+    if (this.swimwear) this.model = buildSwimsuit(this.id);
+    else {
+      const bodyKind = this.wearing.body;
+      this.model =
+        bodyKind && isShopOutfit(bodyKind) ? buildShopOutfit(this.id, bodyKind) : characterById(this.id).build();
+    }
     this.attach();
   }
 
@@ -67,13 +84,29 @@ export class Character {
   /** Accessories (slot → kind), re-applied whenever the model is rebuilt (character change, swimsuit…). */
   private wearing: Record<string, string> = {};
   private wornObjs: THREE.Object3D[] = [];
+  private bodyOutfit: string | null = null;
   setWear(w: Record<string, string>): void {
-    this.wearing = { ...w };
-    this.applyWear();
+    // strip broken kinds from the caller's object too (save.wear is passed by reference)
+    for (const [slot, kind] of Object.entries(w)) {
+      if (BROKEN_WEAR.has(kind)) delete w[slot];
+    }
+    const clean = { ...w };
+    const nextBody = clean.body ?? null;
+    const bodyChanged = nextBody !== this.bodyOutfit;
+    this.wearing = clean;
+    this.bodyOutfit = nextBody;
+    if (bodyChanged && !this.swimwear) this.rebuild();
+    else this.applyWear();
   }
   private applyWear(): void {
     for (const o of this.wornObjs) o.removeFromParent();
     this.wornObjs = [];
+    // restore default biped shoes (hidden while a shop pair is on)
+    for (const leg of this.model.legs) {
+      for (const ch of leg.pivot.children) {
+        if ((ch as THREE.Object3D).userData?.isShoe) ch.visible = true;
+      }
+    }
     const m = this.model as CharacterModel & { head?: THREE.Object3D; headR?: number };
     const model = this.model.model;
     let head = m.head;
@@ -93,8 +126,14 @@ export class Character {
     }
     const k = r / 0.34;
     for (const [slot, kind] of Object.entries(this.wearing)) {
+      if (slot === 'body') continue; // baked into the rebuilt torso
       const def = wearableDef(kind);
       if (!def || def.slot !== slot) continue;
+      if (slot === 'feet') {
+        if (this.swimwear) continue; // bare feet in the pool
+        this.applyShoes(kind);
+        continue;
+      }
       const o = def.build();
       o.scale.multiplyScalar(k);
       if (slot === 'head') o.position.set(0, r * 0.92, 0);
@@ -106,6 +145,33 @@ export class Character {
     }
   }
 
+  /** Hide stock biped shoes and put a pair of shop shoes on both leg pivots. */
+  private applyShoes(kind: string): void {
+    const shoeKind = kind as ShoeKind;
+    const legs = this.model.legs;
+    if (!legs.length) {
+      // unicorn / non-biped: little booties near the front hooves
+      const pair = new THREE.Group();
+      for (const s of [-1, 1]) {
+        const sh = buildShoeMesh(shoeKind, 0.9);
+        sh.position.set(s * 0.18, 0.08, -0.55);
+        pair.add(sh);
+      }
+      this.model.body.add(pair);
+      this.wornObjs.push(pair);
+      return;
+    }
+    for (const leg of legs) {
+      for (const ch of leg.pivot.children) {
+        if ((ch as THREE.Object3D).userData?.isShoe) ch.visible = false;
+      }
+      const sh = buildShoeMesh(shoeKind, 1);
+      sh.position.set(0, SHOE_FOOT_Y, SHOE_FOOT_Z);
+      leg.pivot.add(sh);
+      this.wornObjs.push(sh);
+    }
+  }
+
   get position(): THREE.Vector3 {
     return this.root.position;
   }
@@ -113,10 +179,25 @@ export class Character {
   /** Move by (dx, dz) in world space, sliding along obstacles. */
   move(dx: number, dz: number, obstacles: Obstacle[]): void {
     const p = this.root.position;
-    // already overlapping something (e.g. an object built where she stood)? let her walk out freely
+    // Already overlapping (spawned inside a new prop, etc.): only accept steps that leave the solid —
+    // never walk freely through people/walls (that caused visual clipping with folk/NPCs).
     if (collides(p.x, p.z, obstacles)) {
-      p.x += dx;
-      p.z += dz;
+      const tries: [number, number][] = [
+        [dx, dz],
+        [dx, 0],
+        [0, dz],
+        [-dx, -dz],
+        [-dx, 0],
+        [0, -dz],
+      ];
+      for (const [cx, cz] of tries) {
+        if (!collides(p.x + cx, p.z + cz, obstacles)) {
+          p.x += cx;
+          p.z += cz;
+          return;
+        }
+      }
+      escapeObstacles(p, obstacles);
       return;
     }
     // resolve each axis separately so the character slides along walls
@@ -129,6 +210,35 @@ export class Character {
     let diff = target - this.heading;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     this.heading += Math.max(-maxStep, Math.min(maxStep, diff));
+  }
+
+  /** Hip pitch of each leg (for QA: prove the walk cycle is swinging, not an elevator slide). */
+  legPitches(): number[] {
+    return this.model.legs.map((l) => l.pivot.rotation.x);
+  }
+
+  /**
+   * Massage lie: on her back on the pad (same readable pose as the lounger), face clear
+   * and turned a little toward the masseuse. No face-down — that buried the head in the pad.
+   * Call each frame while hold()’d — player.update runs earlier in the tick.
+   */
+  applyProneLie(padY: number): void {
+    this.lyingY = padY;
+    this.prone = true;
+    this.airborne = true;
+    this.root.rotation.order = 'YXZ';
+    this.root.rotation.x = Math.PI / 2 - 0.22;
+    this.root.rotation.z = 0;
+    this.root.position.y = padY;
+    const head = (this.model as CharacterModel & { head?: THREE.Object3D }).head;
+    // look toward the masseuse (local −X) so the face reads in a side/door shot
+    if (head) head.rotation.set(-0.2, -0.85, 0);
+    const arms = this.model.arms ?? [];
+    for (const a of arms) {
+      const z0 = (a.userData.z0 ??= a.rotation.z) as number;
+      a.rotation.set(-0.15, 0, z0 * 0.4);
+    }
+    for (const l of this.model.legs) l.pivot.rotation.set(0.25, 0, 0);
   }
 
   update(dt: number, speed: number): void {
@@ -157,24 +267,38 @@ export class Character {
     if (this.sitting) {
       inner.position.set(0, 0, 0);
       inner.rotation.y = 0;
-      for (const l of legs) l.pivot.rotation.set(-1.45, 0, 0);
+      // her face looks at -Z: a positive turn about X swings the feet forward (negative folded them behind her back)
+      for (const l of legs) l.pivot.rotation.set(1.45, 0, 0);
       return;
     }
     if (this.lyingY !== null) {
-      // on a lounger, on her back (head towards +Z of her heading), back slightly raised
       this.root.rotation.order = 'YXZ';
-      this.root.rotation.x = Math.PI / 2 - 0.3;
-      this.root.position.y = this.lyingY;
       inner.position.set(0, 0, 0);
       inner.rotation.y = 0;
+      const head = (this.model as CharacterModel & { head?: THREE.Object3D }).head;
+      if (this.prone) {
+        this.applyProneLie(this.lyingY);
+        return;
+      }
+      // lounger: on her back (head towards +Z of her heading), back slightly raised
+      this.root.rotation.x = Math.PI / 2 - 0.3;
+      this.root.rotation.z = 0;
+      this.root.position.y = this.lyingY;
+      if (head) head.rotation.set(0, 0, 0);
       resetLimbs(this.model.arms ?? [], legs);
       return;
     }
-    if (this.root.rotation.x !== 0 || inner.position.y !== 0 || inner.rotation.y !== 0) {
-      // out of the water / off the lounger: stand up again (the hospital sets rotation.x itself while she lies in bed)
-      if (!this.airborne && this.root.position.y < 0.01) this.root.rotation.x = 0;
+    if (this.root.rotation.x !== 0 || this.root.rotation.z !== 0 || inner.position.y !== 0 || inner.rotation.y !== 0 || this.prone) {
+      // out of the water / off the lounger / off the massage table
+      if (!this.airborne && this.root.position.y < 0.01) {
+        this.root.rotation.x = 0;
+        this.root.rotation.z = 0;
+      }
       inner.position.set(0, 0, 0);
       inner.rotation.y = 0;
+      const head = (this.model as CharacterModel & { head?: THREE.Object3D }).head;
+      if (head) head.rotation.set(0, 0, 0);
+      this.prone = false;
       resetLimbs(this.model.arms ?? [], legs);
     }
     if (speed > 0.01) {
@@ -232,4 +356,28 @@ function collides(x: number, z: number, obstacles: Obstacle[]): boolean {
     if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true;
   }
   return false;
+}
+
+/** Nudge out of the nearest overlapping obstacle centre (last resort when stuck inside a solid). */
+function escapeObstacles(p: THREE.Vector3, obstacles: Obstacle[]): void {
+  let best: Obstacle | null = null;
+  let bestD = Infinity;
+  for (const o of obstacles) {
+    const ox = (o.minX + o.maxX) / 2;
+    const oz = (o.minZ + o.maxZ) / 2;
+    const d = Math.hypot(p.x - ox, p.z - oz);
+    if (d < bestD) {
+      bestD = d;
+      best = o;
+    }
+  }
+  if (!best) return;
+  const ox = (best.minX + best.maxX) / 2;
+  const oz = (best.minZ + best.maxZ) / 2;
+  let dx = p.x - ox;
+  let dz = p.z - oz;
+  const len = Math.hypot(dx, dz) || 1;
+  const need = Math.max(best.maxX - best.minX, best.maxZ - best.minZ) / 2 + CHARACTER_RADIUS + 0.05;
+  p.x = ox + (dx / len) * need;
+  p.z = oz + (dz / len) * need;
 }

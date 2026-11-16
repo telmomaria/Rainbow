@@ -1,18 +1,20 @@
 import * as THREE from 'three';
 import { nextQuestion, type Question } from './questions';
-import { inNoSpawn, isFree, randomFreeSpot } from './spawn';
-import { onRoad, type Obstacle } from './world';
+import { inNoSpawn, randomFreeSpot } from './spawn';
+import { PERSON_BODY_HALF, PERSON_CLEAR, onRoad, type Obstacle } from './world';
 
-const MEET_RADIUS = 1.6;
+/** Meet when she is within this (must be > PERSON_CLEAR so click-to-walk still triggers the question). */
+const MEET_RADIUS = PERSON_CLEAR + 0.35;
 const MAX_NPCS = 5;
 const RESPAWN_DELAY = 12; // seconds after one leaves
-/** About half of the question-givers stroll around; the others stand still. */
-const WALKER_CHANCE = 0.5;
+// Nobody stands around in the street: every question-giver strolls, and only stops to wait for her when she is near.
 const WALK_SPEED = 1.3; // m/s — a slow stroll, easy to catch up with (she walks at 6.5)
 const WANDER_RANGE = 14; // they stay this close to where they appeared
 /** A walker stops and turns to the child when she comes this close. */
 const STOP_DIST = 8;
 const BODY_R = 0.6;
+/** Minimum distance between two question NPCs at spawn. */
+const NPC_MIN_DIST = 3;
 
 /** A friendly character somewhere in the world, holding one question. */
 export interface QuestionNpc {
@@ -20,21 +22,23 @@ export interface QuestionNpc {
   question: Question;
   /** fade-out progress once its question has been asked; null while waiting */
   leaving: number | null;
-  /** strolls around (true) or stands still (false) */
-  walker: boolean;
   home: THREE.Vector3;
   target: THREE.Vector3 | null;
-  /** seconds to stand still before picking the next stroll target */
+  /** seconds to pause before picking the next stroll target */
   wait: number;
   /** leg-swing phase */
   step: number;
+  /** seconds of happy hopping left (she was given a present — src/gifts.ts) */
+  cheer?: number;
+  /** Live solid body in `obstacles` — updated as they stroll so she cannot walk through them. */
+  body: Obstacle;
 }
 
 const OUTFITS = [0x4dabf7, 0xff922b, 0x51cf66, 0xcc5de8, 0xffd43b, 0x20c997];
 const HATS = [0xe03131, 0x1971c2, 0x2f9e44, 0xf08c00];
 const PANTS = [0x364fc7, 0x5c3d2e, 0x495057, 0x862e9c];
 
-/** Spawns question-givers, makes some of them stroll, detects when the player walks up to one. */
+/** Spawns question-givers, keeps them strolling, detects when the player walks up to one. */
 export class Npcs {
   readonly list: QuestionNpc[] = [];
   private readonly reserved = new Set<string>();
@@ -56,21 +60,30 @@ export class Npcs {
     const q = nextQuestion(this.available, this.reserved, this.recyclable);
     if (!q) return; // nothing available right now (all solved or cooling down) - retried by the timer
     this.reserved.add(q.id);
-    const p = randomFreeSpot(this.obstacles, { radius: 1.2, avoid: player, minDist, range: 60 });
+    let p = randomFreeSpot(this.obstacles, { radius: 1.2, avoid: player, minDist, range: 60 });
+    for (let tries = 0; tries < 40; tries++) {
+      const farEnough = this.list.every((n) => Math.hypot(n.group.position.x - p.x, n.group.position.z - p.z) >= NPC_MIN_DIST);
+      if (farEnough) break;
+      p = randomFreeSpot(this.obstacles, { radius: 1.2, avoid: player, minDist, range: 60 });
+    }
     const group = buildNpc();
     group.position.copy(p);
     group.rotation.y = Math.random() * Math.PI * 2;
     this.scene.add(group);
-    this.list.push({
+    const body: Obstacle = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, height: 1.9 };
+    const npc: QuestionNpc = {
       group,
       question: q,
       leaving: null,
-      walker: Math.random() < WALKER_CHANCE,
       home: p.clone(),
       target: null,
-      wait: Math.random() * 3,
+      wait: Math.random(),
       step: 0,
-    });
+      body,
+    };
+    syncBody(npc);
+    this.obstacles.push(body);
+    this.list.push(npc);
   }
 
   /** Returns the NPC the player just bumped into (if any). `paused` freezes the strollers. */
@@ -97,7 +110,11 @@ export class Npcs {
           const step = 1.6 * dt;
           const nx = g.position.x + (dx / d) * step;
           const nz = g.position.z + (dz / d) * step;
-          if (isFree(nx, nz, BODY_R, this.obstacles) && !inNoSpawn(nx, nz, BODY_R) && !(onRoad(nx, nz, 0.5) && !onRoad(g.position.x, g.position.z, 0.5))) {
+          if (
+            isFreeIgnoring(nx, nz, BODY_R, this.obstacles, n.body) &&
+            !inNoSpawn(nx, nz, BODY_R) &&
+            !(onRoad(nx, nz, 0.5) && !onRoad(g.position.x, g.position.z, 0.5))
+          ) {
             g.position.x = nx;
             g.position.z = nz;
           } else n.target = null; // blocked: pick another way
@@ -110,16 +127,18 @@ export class Npcs {
           if (legR) legR.rotation.x = -swing;
           const arm = g.getObjectByName('arm');
           if (arm) arm.rotation.z = n.leaving < 1.5 ? 2.4 + Math.sin(this.time * 8) * 0.4 : swing * 0.5; // bye-bye
+          syncBody(n);
         }
         const far = Math.hypot(g.position.x - player.x, g.position.z - player.z);
         if (far > 45 || n.leaving > 40) {
+          this.removeBody(n);
           this.scene.remove(g);
           this.list.splice(i, 1);
         }
         continue;
       }
       const d = Math.hypot(g.position.x - player.x, g.position.z - player.z);
-      const walking = !paused && n.walker && d >= STOP_DIST && this.stroll(n, dt);
+      const walking = !paused && d >= STOP_DIST && this.stroll(n, dt);
       // legs swing while walking, settle when standing
       n.step = walking ? n.step + dt * 7 : 0;
       const swing = walking ? Math.sin(n.step) * 0.6 : 0;
@@ -128,6 +147,11 @@ export class Npcs {
       if (legL) legL.rotation.x += (swing - legL.rotation.x) * Math.min(1, dt * 12);
       if (legR) legR.rotation.x += (-swing - legR.rotation.x) * Math.min(1, dt * 12);
       g.position.y = walking ? Math.abs(Math.sin(n.step)) * 0.06 : 0;
+      if (n.cheer) {
+        n.cheer = Math.max(0, n.cheer - dt);
+        g.position.y = Math.abs(Math.sin(n.cheer * 9)) * 0.35; // happy hops: thank you for the present!
+      }
+      syncBody(n);
       // idle: wave, turning towards the player when near
       const arm = g.getObjectByName('arm');
       if (arm) arm.rotation.z = walking ? Math.sin(n.step) * 0.3 : 2.4 + Math.sin(this.time * 6 + i) * 0.4 * (d < 12 ? 1 : 0.2);
@@ -166,16 +190,17 @@ export class Npcs {
     const dist = Math.hypot(dx, dz);
     if (dist < 0.3) {
       n.target = null;
-      n.wait = 2 + Math.random() * 4;
+      n.wait = 0.4 + Math.random() * 0.8; // a short breath, then off again
       return false;
     }
     const s = Math.min(WALK_SPEED * dt, dist);
     const nx = g.position.x + (dx / dist) * s;
     const nz = g.position.z + (dz / dist) * s;
     const leavesPavement = onRoad(nx, nz, 0.5) && !onRoad(g.position.x, g.position.z, 0.5);
-    if (!isFree(nx, nz, BODY_R, this.obstacles) || leavesPavement || inNoSpawn(nx, nz, BODY_R)) {
-      n.target = null; // blocked (wall, road, concert fence): stand a moment and pick another way
-      n.wait = 1 + Math.random();
+    // Skip own body when testing free space (otherwise they never move).
+    if (!isFreeIgnoring(nx, nz, BODY_R, this.obstacles, n.body) || leavesPavement || inNoSpawn(nx, nz, BODY_R)) {
+      n.target = null; // blocked (wall, road, concert fence): pick another way straight away
+      n.wait = 0.3;
       return false;
     }
     g.position.x = nx;
@@ -190,6 +215,30 @@ export class Npcs {
     n.target = null;
     this.reserved.delete(n.question.id);
   }
+
+  private removeBody(n: QuestionNpc): void {
+    const i = this.obstacles.indexOf(n.body);
+    if (i >= 0) this.obstacles.splice(i, 1);
+  }
+}
+
+function syncBody(n: QuestionNpc): void {
+  const h = PERSON_BODY_HALF;
+  const x = n.group.position.x;
+  const z = n.group.position.z;
+  n.body.minX = x - h;
+  n.body.maxX = x + h;
+  n.body.minZ = z - h;
+  n.body.maxZ = z + h;
+  n.body.height = 1.9;
+}
+
+function isFreeIgnoring(x: number, z: number, r: number, obstacles: Obstacle[], ignore: Obstacle): boolean {
+  for (const o of obstacles) {
+    if (o === ignore) continue;
+    if (x + r > o.minX && x - r < o.maxX && z + r > o.minZ && z - r < o.maxZ) return false;
+  }
+  return true;
 }
 
 /** Turn a group (whose face looks at -Z) smoothly towards the direction (dx, dz). */

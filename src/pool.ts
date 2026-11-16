@@ -429,6 +429,7 @@ export class Pool {
     this.playerLounger = null;
     this.loungerUsedBy[i] = null;
     p.lyingY = null;
+    p.prone = false;
     const st = toWorld(plot.x, plot.z, plot.rot, LOUNGER_STAND_X - 1.4, LOUNGERS[i]); // clear of the touch spot
     p.position.set(st.x, 0, st.z);
     p.heading = plot.rot + Math.PI / 2;
@@ -440,6 +441,7 @@ export class Pool {
     if (this.playerLounger !== null) this.loungerUsedBy[this.playerLounger] = null;
     this.playerLounger = null;
     this.hooks.player.lyingY = null;
+    this.hooks.player.prone = false;
   }
 
   /* ------------------------------------------------------------ water (player) */
@@ -813,6 +815,7 @@ export class Pool {
       return [r(v.x), r(v.z)];
     };
     const p = this.hooks.player;
+    const interior = this.interior;
     return {
       booth: [r(this.booth.position.x), r(this.booth.position.z)],
       gateOut: w(0, 2.5),
@@ -823,6 +826,9 @@ export class Pool {
       people: this.bathers.map((b) => b.mode),
       rimNear: w(-1, WATER.z1 + RIM + 1.2),
       waterMid: w((WATER.x0 + WATER.x1) / 2, (WATER.z0 + WATER.z1) / 2),
+      interior: interior
+        ? { minX: r(interior.minX), maxX: r(interior.maxX), minZ: r(interior.minZ), maxZ: r(interior.maxZ) }
+        : null,
       rot: +this.plot.rot.toFixed(2),
       ...this.gate.debug(),
       swimwear: p.swimwear,

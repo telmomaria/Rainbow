@@ -9,7 +9,7 @@ const BRANCH_Y = 4.6;
 export const CAT_REWARD = 5;
 
 /** A meow made of two quick pitch slides. */
-function meow(gain = 0.07): void {
+export function meow(gain = 0.07): void {
   tone(700, 0, 0.12, 'triangle', gain);
   tone(950, 0.08, 0.16, 'triangle', gain);
   tone(620, 0.22, 0.22, 'triangle', gain * 0.8);
@@ -243,9 +243,10 @@ export class CatTree {
   }
 }
 
-function buildKitten(): { cat: THREE.Group; tail: THREE.Object3D } {
+/** A small cat whose face looks at -Z (also used by the cat that walks around town, in another colour). */
+export function buildKitten(furColor = 0xf2a65a): { cat: THREE.Group; tail: THREE.Object3D } {
   const g = new THREE.Group();
-  const fur = new THREE.MeshStandardMaterial({ color: 0xf2a65a, roughness: 0.9 });
+  const fur = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.9 });
   const white = new THREE.MeshStandardMaterial({ color: 0xffffff });
   const dark = new THREE.MeshStandardMaterial({ color: 0x222222 });
   const body = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10), fur);

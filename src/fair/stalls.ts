@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { feel } from '../bus';
 import { registerItem, registerWearable, type WearSlot } from '../items';
 import { animateStaff, box, buildFolk, cyl, HAIRS, mat, PANTS, pick, SHIRTS, SKINS, type Folk } from '../venue';
 import type { Interactable } from '../world';
@@ -326,6 +327,7 @@ function handOver(ctx: FairCtx, fx: Fx, seller: Seller, kind: string, build: () 
       fx.temp.delete(copy);
       seller.reachTarget = 0;
       ctx.give(kind);
+      feel('shop');
       happyChime(ctx);
       fx.burst(herHand(ctx), 8, [0xffffff, 0xffd43b, 0xff8fab]);
       done();

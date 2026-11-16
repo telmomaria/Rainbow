@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { audioContext } from '../audio';
+import { feel } from '../bus';
 import type { SwingSeat } from '../props';
 import { box, buildFolk, cyl, ball, HAIRS, mat, PANTS, pick, SKINS, SHIRTS, type Folk } from '../venue';
 import type { Interactable } from '../world';
@@ -186,6 +187,7 @@ export function rideThing(ctx: FairCtx, r: RideImpl): RideHandle {
       }
       paid = false;
       refused = false;
+      feel('play');
       return r.board(p);
     },
     pose(i) {

@@ -149,9 +149,11 @@ function biped(o: BipedOpts): Biped {
     kit.put(pivot, kit.cyl(legR, legR, 0.66), o.legs, [0, -0.33, 0]);
     if (o.boots) {
       const r = legR + 0.018;
-      kit.put(pivot, kit.cyl(r, r, o.boots.h), o.boots.color, [0, -HIP + 0.06 + o.boots.h / 2, 0]);
+      const boot = kit.put(pivot, kit.cyl(r, r, o.boots.h), o.boots.color, [0, -HIP + 0.06 + o.boots.h / 2, 0]);
+      boot.userData.isShoe = true;
     }
-    kit.put(pivot, kit.box(0.17, 0.11, 0.27), o.shoes, [0, -HIP + 0.055, -0.04]);
+    const shoe = kit.put(pivot, kit.box(0.17, 0.11, 0.27), o.shoes, [0, -HIP + 0.055, -0.04]);
+    shoe.userData.isShoe = true;
     legs.push({ pivot, phase: side < 0 ? 0 : 1 });
   }
 
@@ -644,13 +646,17 @@ function buildKarateca(): CharacterModel {
   kit.put(body, kit.box(0.05, 0.38, 0.02), lapel, [-0.07, 1.16, -0.222], [0, 0, 0.42]);
   kit.put(body, kit.box(0.05, 0.38, 0.02), lapel, [0.07, 1.16, -0.222], [0, 0, -0.42]);
   kit.put(body, kit.cone(0.1, 0.22, 3), skin, [0, 1.25, -0.2], [Math.PI, 0, 0], [1, 1, 0.25]);
-  // orange belt with knot and tails
+  // orange karate belt: flat wrap + clear square knot + long hanging tails (not a "pouch")
   const belt = 0xff8c1a;
-  kit.put(body, kit.torus(0.27, 0.04), belt, [0, 0.88, 0], [Math.PI / 2, 0, 0]);
-  kit.put(body, kit.box(0.09, 0.08, 0.06), belt, [0, 0.88, -0.28]);
-  kit.put(body, kit.box(0.05, 0.2, 0.025), belt, [-0.04, 0.76, -0.29], [0, 0, 0.2]);
-  kit.put(body, kit.box(0.05, 0.2, 0.025), belt, [0.04, 0.76, -0.29], [0, 0, -0.2]);
-  // spiky black hair + red headband
+  kit.put(body, kit.torus(0.27, 0.035), belt, [0, 0.88, 0], [Math.PI / 2, 0, 0]);
+  // square knot (two overlapping loops) at the front
+  kit.put(body, kit.box(0.12, 0.07, 0.05), belt, [-0.04, 0.9, -0.27], [0, 0, 0.35]);
+  kit.put(body, kit.box(0.12, 0.07, 0.05), belt, [0.04, 0.9, -0.27], [0, 0, -0.35]);
+  kit.put(body, kit.box(0.06, 0.06, 0.05), belt, [0, 0.88, -0.29]);
+  // long flat tails hanging down (reads as faixa, not a bag)
+  kit.put(body, kit.box(0.055, 0.38, 0.02), belt, [-0.05, 0.66, -0.3], [0.15, 0, 0.12]);
+  kit.put(body, kit.box(0.055, 0.34, 0.02), belt, [0.06, 0.68, -0.3], [0.12, 0, -0.15]);
+  // spiky black hair + red forehead band with side knot (not a full ring under the chin)
   const hair = 0x1a1a22;
   hairCap(b, hair, 0.4);
   for (const [x, z, rx, rz] of [
@@ -661,7 +667,13 @@ function buildKarateca(): CharacterModel {
   ] as const) {
     kit.put(head, kit.cone(0.1, 0.22, 6), hair, [x, 0.33, z], [rx, 0, rz]);
   }
-  kit.put(head, kit.torus(0.345, 0.03), 0xe23b3b, [0, 0.1, 0], [Math.PI / 2 + 0.15, 0, 0]);
+  const red = 0xe23b3b;
+  // forehead strap only (arc across the front) — kids read “faixa de karate”
+  kit.put(head, kit.torus(0.34, 0.032, Math.PI * 1.15), red, [0, 0.12, -0.02], [Math.PI / 2 + 0.2, 0, Math.PI]);
+  // knot + short tails on the left side
+  kit.put(head, kit.box(0.07, 0.06, 0.05), red, [-0.32, 0.1, 0.05]);
+  kit.put(head, kit.box(0.04, 0.14, 0.02), red, [-0.34, 0.0, 0.08], [0.3, 0, 0.2]);
+  kit.put(head, kit.box(0.04, 0.12, 0.02), red, [-0.3, 0.01, 0.1], [0.25, 0, -0.15]);
   return b;
 }
 
@@ -838,6 +850,122 @@ const SWIM: Record<string, { color: number; trunks?: boolean }> = {
   astronauta: { color: 0xff7a3d },
   alice: { color: 0xf6c73a },
 };
+
+/** Shop outfits (S04): kids' clothes on a fresh body, same head/hair as the chosen character. */
+export type ShopOutfitId = 'srv-vestido' | 'srv-casaco' | 'srv-calcoes';
+
+const SHOP_OUTFITS: Record<
+  ShopOutfitId,
+  {
+    top: number;
+    sleeve: number;
+    legs: number;
+    shoes: number;
+    hips: number;
+    shortSleeve?: boolean;
+    decorate: (b: Biped) => void;
+  }
+> = {
+  'srv-vestido': {
+    top: 0xff6b9d,
+    sleeve: 0xffc9c9,
+    legs: 0xffd9bf,
+    shoes: 0xff922b,
+    hips: 0xff6b9d,
+    shortSleeve: true,
+    decorate(b) {
+      // flared pink dress + white sash + little flower
+      b.kit.put(b.body, b.kit.cyl(0.22, 0.48, 0.75, 20), 0xff6b9d, [0, 0.42, 0]);
+      b.kit.put(b.body, b.kit.cyl(0.26, 0.26, 0.08, 16), 0xffffff, [0, 0.88, 0]);
+      b.kit.put(b.body, b.kit.sph(0.06), 0xffe066, [0.12, 1.15, -0.22]);
+      for (const side of [-1, 1]) b.kit.put(b.body, b.kit.sph(0.11), 0xffc9c9, [side * 0.27, 1.28, 0]);
+    },
+  },
+  'srv-casaco': {
+    top: 0x4dabf7,
+    sleeve: 0x4dabf7,
+    legs: 0x364fc7,
+    shoes: 0x212529,
+    hips: 0x364fc7,
+    decorate(b) {
+      // blue jacket over white shirt + yellow buttons
+      b.kit.put(b.body, b.kit.cyl(0.22, 0.26, 0.55, 16), 0xffffff, [0, 1.08, 0]);
+      b.kit.put(b.body, b.kit.box(0.52, 0.55, 0.38), 0x4dabf7, [0, 1.1, 0.02]);
+      for (const y of [1.25, 1.1, 0.95]) b.kit.put(b.body, b.kit.sph(0.035), 0xffe066, [0, y, -0.2]);
+      b.kit.put(b.body, b.kit.box(0.48, 0.08, 0.4), 0x228be6, [0, 0.82, 0]); // hem
+    },
+  },
+  'srv-calcoes': {
+    top: 0x51cf66,
+    sleeve: 0x51cf66,
+    legs: 0xffd9bf,
+    shoes: 0xe03131,
+    hips: 0xff922b,
+    shortSleeve: true,
+    decorate(b) {
+      // green tee + orange shorts + white stripes
+      b.kit.put(b.body, b.kit.cyl(0.24, 0.26, 0.28, 14), 0xff922b, [0, 0.72, 0]);
+      b.kit.put(b.body, b.kit.cyl(0.255, 0.255, 0.05, 14), 0xffffff, [0, 0.86, 0]);
+      for (const side of [-1, 1]) b.kit.put(b.body, b.kit.box(0.08, 0.35, 0.42), 0xffffff, [side * 0.12, 1.15, 0]);
+    },
+  },
+};
+
+export function shopOutfitIds(): ShopOutfitId[] {
+  return Object.keys(SHOP_OUTFITS) as ShopOutfitId[];
+}
+
+export function isShopOutfit(kind: string): kind is ShopOutfitId {
+  return kind in SHOP_OUTFITS;
+}
+
+/** Kids' shop clothes: same head/hair, new body (no helmet/sword from guerreira body props). */
+export function buildShopOutfit(id: string, outfit: ShopOutfitId): CharacterModel {
+  const orig = characterById(id).build() as CharacterModel & Partial<Biped>;
+  if (!orig.head || orig.skin === undefined || !orig.headR) {
+    // unicorn etc.: keep the body, add a colourful bow on the mane tip
+    const bow = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshStandardMaterial({ color: 0xff6b9d }));
+    bow.scale.set(1.4, 0.5, 0.8);
+    bow.position.set(0, 1.6, -0.6);
+    orig.body.add(bow);
+    return orig;
+  }
+  const look = SHOP_OUTFITS[outfit];
+  const b = biped({
+    skin: orig.skin,
+    top: look.top,
+    sleeve: look.sleeve,
+    legs: look.legs,
+    shoes: look.shoes,
+    hips: look.hips,
+    shortSleeve: look.shortSleeve,
+    headR: orig.headR,
+  });
+  look.decorate(b);
+  b.body.remove(b.head);
+  const head = orig.head;
+  head.removeFromParent();
+  head.position.copy(b.head.position);
+  b.body.add(head);
+  b.head = head;
+  // drop helmets / visors / armour on the head (shop clothes = civilian look)
+  stripHeadGear(head);
+  return b;
+}
+
+/** Remove metallic / hard-hat gear so a shop outfit never keeps a knight helmet. */
+function stripHeadGear(head: THREE.Object3D): void {
+  const drop: THREE.Object3D[] = [];
+  head.traverse((o) => {
+    if (o === head || !(o instanceof THREE.Mesh)) return;
+    const m = o.material as THREE.MeshStandardMaterial;
+    if (!m || !('metalness' in m)) return;
+    if (m.metalness >= 0.25 || (m.color && m.color.getHex() >= 0xa0a8b0 && m.color.getHex() <= 0xd0d8e0)) {
+      drop.push(o);
+    }
+  });
+  for (const o of drop) o.removeFromParent();
+}
 
 /** The character in swimwear. Non-human shapes (the unicorn) keep their body and get a float ring. */
 export function buildSwimsuit(id: string): CharacterModel {

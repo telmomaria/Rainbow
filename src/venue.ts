@@ -22,7 +22,8 @@ export const DOORMAN = { x: -2.4, z: -1.3 };
  * steps out of a venue straight into the traffic. */
 const SETBACK = 16;
 /** Free space kept all around a venue (nothing glued to buildings or other objects). */
-const CLEARANCE = 3;
+/** Free ring (m) kept around a ticketed venue so bus stops / props / lamps never glue to the fence. */
+const CLEARANCE = 8;
 
 export interface Plot {
   x: number;
@@ -374,7 +375,7 @@ export class TicketGate {
 
     const T = 0.15;
     obstacles.push(worldBox(plot, B.x0, B.x1, B.z0, B.z1, 2.9));
-    obstacles.push(worldBox(plot, DOORMAN.x - 0.4, DOORMAN.x + 0.4, DOORMAN.z - 0.4, DOORMAN.z + 0.4, 2.2));
+    obstacles.push(worldBox(plot, DOORMAN.x - 0.95, DOORMAN.x + 0.95, DOORMAN.z - 0.95, DOORMAN.z + 0.95, 2.2));
     this.gateBox = worldBox(plot, -GATE_HW, GATE_HW, -T, T, FENCE_H);
     this.gateClosed = { ...this.gateBox };
     obstacles.push(this.gateBox);

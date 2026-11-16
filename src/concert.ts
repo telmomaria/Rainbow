@@ -24,7 +24,7 @@ const CYCLE = 20 * 60;
 const DOORS_OPEN = CYCLE - 4 * 60; // the booth starts selling
 const ARRIVE = CYCLE - 3 * 60; // the audience starts walking in
 const STAGGER = 0.7; // seconds between people leaving / arriving
-const FADE = 1.2; // metres over which a person shrinks away (or grows in) at the end of the path
+const FADE = 1.2; // metres over which a leaver shrinks away in the forecourt (arrivals stay full-size)
 const OUT_Z = 4; // how far into the forecourt people walk before disappearing
 
 /* ---- venue layout, local frame: x across, +Z points at the road, the front fence is z = 0 ---- */
@@ -951,7 +951,7 @@ export class Concert {
       w.scale = 0;
       return;
     }
-    let s: number; // metres from the spot along the path
+    let s: number; // metres from the spot along the leave path (arriving = same path, reversed in time)
     const back = this.audience === 'arriving';
     if (!back) {
       const t = this.c - (this.plan.end + f.leaveDelay);
@@ -961,15 +961,15 @@ export class Concert {
     } else {
       const t = this.c - (ARRIVE + f.arriveDelay);
       if (t <= 0) {
-        w.scale = 0; // not here yet
+        w.scale = 0; // still outside, turn not started
         return;
       }
       s = f.len - t * f.speed;
-      if (s <= 0) return; // arrived
+      if (s <= 0) return; // arrived at the spot, full size
       w.walk = t * f.speed;
     }
     if (s >= f.len) {
-      w.scale = 0;
+      w.scale = 0; // past the forecourt (leavers only)
       return;
     }
     const P = f.path;
@@ -984,12 +984,15 @@ export class Concert {
         const u = L > 0 ? Math.min(1, rem / L) : 0;
         w.x = ax + dx * u;
         w.z = az + dz * u;
-        w.yaw = back ? Math.atan2(dx, dz) : Math.atan2(-dx, -dz); // people face -Z
+        // Three.js forward is −Z: face travel direction (leave along path, arrive opposite)
+        w.yaw = back ? Math.atan2(dx, dz) : Math.atan2(-dx, -dz);
         break;
       }
       rem -= L;
     }
-    w.scale = f.s * Math.min(1, (f.len - s) / FADE); // shrink away at the end of the path (grow in when arriving)
+    // Leavers shrink only in the last FADE metres of the forecourt. Arrivals stay full-size
+    // from the moment they appear outside the gate — no scale-up / rising from the floor.
+    w.scale = back ? f.s : f.s * Math.min(1, (f.len - s) / FADE);
   }
 
   /** Place every audience member's parts. `b` = beat (dancing) or a running clock. Walkers swing arms and legs. */
@@ -1072,6 +1075,19 @@ export class Concert {
     const inside = this.root.localToWorld(new THREE.Vector3(0, 0, -4));
     const seg = this.seg;
     const front = this.root.localToWorld(new THREE.Vector3(6, 0, -5)); // in front of the right crowd block
+    // sample walkers: local xz + scale (arrivals must be full-size while z is still near the gate)
+    const walkers =
+      this.audience === 'arriving' || this.audience === 'leaving'
+        ? this.fans
+            .map((f) => {
+              this.fanAt(f);
+              return this.where.walk >= 0 && this.where.scale > 0.01
+                ? [+this.where.x.toFixed(2), +this.where.z.toFixed(2), +this.where.scale.toFixed(2)]
+                : null;
+            })
+            .filter((v): v is number[] => !!v)
+            .slice(0, 12)
+        : [];
     return {
       lineup: this.lineup,
       booth: [r(this.booth.position.x), r(this.booth.position.z)],
@@ -1092,6 +1108,7 @@ export class Concert {
       crowdFront: [r(front.x), r(front.z)],
       leaveDur: r(this.leaveDur),
       arriveDur: r(this.arriveDur),
+      walkers,
       vol: +this.vol.toFixed(2),
     };
   }

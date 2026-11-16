@@ -4,6 +4,9 @@ import { SPAWN, type Obstacle } from './world';
 
 export const COIN_VALUE = 1;
 export const JEWEL_VALUE = 5;
+/** A banknote: rare (about one in every hundred coins that appear) and worth 20 coins. */
+export const NOTE_VALUE = 20;
+const NOTE_CHANCE = 0.01;
 const PICKUP_RADIUS = 1.1;
 const TARGET_COINS = 36;
 const TRAIL = 3; // coins are laid out in short trails, easy to follow and satisfying to collect
@@ -11,7 +14,7 @@ const TARGET_JEWELS = 3;
 
 interface Item {
   mesh: THREE.Mesh;
-  kind: 'coin' | 'jewel';
+  kind: 'coin' | 'jewel' | 'note';
   /** 0..1 pickup animation progress; null while lying in the world. */
   taken: number | null;
 }
@@ -36,8 +39,20 @@ export class Collectibles {
     emissiveIntensity: 0.45,
   });
   private readonly jewelGeo = new THREE.OctahedronGeometry(0.4);
+  private readonly noteGeo = new THREE.BoxGeometry(0.8, 0.42, 0.03);
+  private readonly noteMat = new THREE.MeshStandardMaterial({ color: 0x4fd18b, roughness: 0.6, emissive: 0x1f9d55, emissiveIntensity: 0.4 });
+  private readonly noteInkMat = new THREE.MeshStandardMaterial({ color: 0xf4fff7, roughness: 0.6 });
+
+  /** QA: put a banknote at a given spot. */
+  debugNote(x: number, z: number): void {
+    this.place('note', new THREE.Vector3(x, 0, z));
+  }
   private time = 0;
   private respawnTimer = 0;
+
+  /** Optional ground height (Moon hills) and a little extra float (low gravity — LUA5). */
+  heightAt: ((x: number, z: number) => number) | null = null;
+  floatAmp = 0.15;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -56,7 +71,7 @@ export class Collectibles {
     for (let i = 0; i < TRAIL; i++) {
       const p = start.clone().add(new THREE.Vector3(Math.cos(a) * i * 2, 0, Math.sin(a) * i * 2));
       if (!isFree(p.x, p.z, 0.6, this.obstacles) || inNoSpawn(p.x, p.z, 0.6)) break;
-      this.place('coin', p);
+      this.place(Math.random() < NOTE_CHANCE ? 'note' : 'coin', p);
     }
   }
 
@@ -69,6 +84,16 @@ export class Collectibles {
     if (kind === 'coin') {
       mesh = new THREE.Mesh(this.coinGeo, this.coinMat);
       mesh.rotation.x = Math.PI / 2;
+    } else if (kind === 'note') {
+      // a green banknote standing on its long edge, with a pale oval in the middle on both faces
+      mesh = new THREE.Mesh(this.noteGeo, this.noteMat);
+      for (const side of [-1, 1]) {
+        const oval = new THREE.Mesh(new THREE.CircleGeometry(0.13, 16), this.noteInkMat);
+        oval.position.z = side * 0.017;
+        oval.rotation.y = side < 0 ? Math.PI : 0;
+        oval.scale.x = 1.3;
+        mesh.add(oval);
+      }
     } else {
       const color = JEWEL_COLORS[Math.floor(Math.random() * JEWEL_COLORS.length)];
       mesh = new THREE.Mesh(
@@ -94,12 +119,13 @@ export class Collectibles {
       const m = it.mesh;
       if (it.taken === null) {
         const phase = m.userData.phase as number;
-        m.position.y = 0.8 + Math.sin(this.time * 2.5 + phase) * 0.15;
+        const ground = this.heightAt?.(m.position.x, m.position.z) ?? 0;
+        m.position.y = ground + 0.8 + Math.sin(this.time * 2.5 + phase) * this.floatAmp;
         if (it.kind === 'coin') m.rotation.z = this.time * 3 + phase;
         else m.rotation.y = this.time * 1.5 + phase;
         if (Math.hypot(m.position.x - player.x, m.position.z - player.z) < PICKUP_RADIUS) {
           it.taken = 0;
-          value += it.kind === 'coin' ? COIN_VALUE : JEWEL_VALUE;
+          value += it.kind === 'coin' ? COIN_VALUE : it.kind === 'note' ? NOTE_VALUE : JEWEL_VALUE;
           kinds.push(it.kind);
         }
       } else {
@@ -118,7 +144,7 @@ export class Collectibles {
     this.respawnTimer += dt;
     if (this.respawnTimer > 2) {
       this.respawnTimer = 0;
-      const coins = this.items.filter((i) => i.kind === 'coin' && i.taken === null).length;
+      const coins = this.items.filter((i) => i.kind !== 'jewel' && i.taken === null).length;
       const jewels = this.items.filter((i) => i.kind === 'jewel' && i.taken === null).length;
       if (coins <= TARGET_COINS - TRAIL) this.spawnTrail(player);
       if (jewels < TARGET_JEWELS && Math.random() < 0.1) this.spawn('jewel', player);

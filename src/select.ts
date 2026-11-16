@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CHARACTERS, characterById } from './characters';
 import { speak, stopSpeaking } from './audio';
-import { openSettings } from './ui';
+import { openSettings, type RainSound } from './ui';
 
 const style = document.createElement('style');
 style.textContent = `
@@ -138,7 +138,13 @@ export type StartMode = 'pick' | 'continue' | 'new';
  */
 export function chooseCharacter(
   current?: string,
-  start?: { canContinue: boolean; difficulty: 'zero' | 'facil' | 'medio' | 'dificil'; onDifficulty: (d: 'zero' | 'facil' | 'medio' | 'dificil') => void },
+  start?: {
+    canContinue: boolean;
+    difficulty: 'zero' | 'facil' | 'medio' | 'dificil';
+    onDifficulty: (d: 'zero' | 'facil' | 'medio' | 'dificil') => void;
+    rainSound: RainSound;
+    onRainSound: (r: RainSound) => void;
+  },
 ): Promise<{ id: string; mode: StartMode }> {
   const pics = renderThumbs();
   const box = document.createElement('div');
@@ -180,10 +186,20 @@ export function chooseCharacter(
     const setBtn = document.createElement('button');
     setBtn.className = 'select-go cfg';
     setBtn.innerHTML = '<span>⚙</span> Definições';
-    setBtn.addEventListener('click', () => void openSettings(() => start.difficulty, (d) => {
-      start.difficulty = d;
-      start.onDifficulty(d);
-    }));
+    setBtn.addEventListener('click', () => void openSettings(
+      () => start.difficulty,
+      (d) => {
+        start.difficulty = d;
+        start.onDifficulty(d);
+      },
+      {
+        get: () => start.rainSound,
+        set: (r) => {
+          start.rainSound = r;
+          start.onRainSound(r);
+        },
+      },
+    ));
     row.appendChild(setBtn);
     wrap.appendChild(row);
   }

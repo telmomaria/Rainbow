@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { GameCtx } from './gamectx';
 import { AIRPORT_ZONE } from './airport';
 import { tone } from './audio';
+import { feel } from './bus';
 import { ROADS, SPAWN, onRoad, type Interactable, type Obstacle } from './world';
 
 /**
@@ -14,14 +15,22 @@ import { ROADS, SPAWN, onRoad, type Interactable, type Obstacle } from './world'
  */
 
 const TAU = Math.PI * 2;
-/** Counter front line, metres from the road centre line (road half-width 4 + pavement). */
-const FRONT_OFF = 7;
+/**
+ * Counter front line, metres from the road centre line.
+ * 12 ≈ 8 m past the kerb (half-width 4) — behind the street-lamp line (5.5) with a clear walk-up.
+ */
+const FRONT_OFF = 12;
+/** Free metres kept clear in front of the counter (no lamps/posts). */
+const DOOR_APRON = 4;
 /** Distance from the counter front to the spot where the customer stands. */
 const STAND_OFF = 1.1;
 /** Walking room (m) kept between a shop's footprint and buildings/solids; relaxed step by step only on crowded maps. */
-const ROOM_STEPS = [2.2, 1.6, 1.2] as const;
-/** A thin post (street lamp, pole): ~1 m beside it is plenty to walk past. */
+const ROOM_STEPS = [3, 2.2, 1.5] as const;
+/** A thin post (street lamp, pole): ~1 m beside it is plenty to walk past — but never in the door apron. */
 const isPost = (o: Obstacle): boolean => o.maxX - o.minX < 0.9 && o.maxZ - o.minZ < 0.9;
+
+/** Optional clearer for street lamps blocking a shop door (from StreetLights.clearIn). */
+export type LampClearer = (area: Obstacle, obstacles: Obstacle[]) => void;
 
 interface Spot {
   x: number;
@@ -193,7 +202,13 @@ export function buildItem(kind: string): THREE.Group | null {
   return itemBuilders.get(kind)?.() ?? itemDef(kind)?.build() ?? null;
 }
 
-export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number, ctx: GameCtx): Interactable[] {
+export function createShops(
+  scene: THREE.Scene,
+  obstacles: Obstacle[],
+  rng: () => number,
+  ctx: GameCtx,
+  clearLamps?: LampClearer,
+): Interactable[] {
   /* ---- shared materials / geometries ---- */
   const mats = new Map<string, THREE.MeshStandardMaterial>();
   const mat = (color: number, emissive = 0): THREE.MeshStandardMaterial => {
@@ -231,17 +246,28 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
   /* ---- placement ---- */
   const taken: Obstacle[] = [];
   const LIMIT = 140;
-  const boxFree = (fp: Obstacle, margin: number): boolean => {
-    if (fp.minX < -LIMIT || fp.maxX > LIMIT || fp.minZ < -LIMIT || fp.maxZ > LIMIT) return false;
+  // Keep shop bodies ≥ 7 m past the kerb (road half 4 + 7 → 11 from centre).
+  const ROAD_KEEP = ROADS.width / 2 + 7;
+  /** `postsInApron` = door blocked by a lamp — OK only when clearLamps can remove it. */
+  const boxFree = (fp: Obstacle, margin: number, apron?: Obstacle): { ok: boolean; postsInApron: boolean } => {
+    if (fp.minX < -LIMIT || fp.maxX > LIMIT || fp.minZ < -LIMIT || fp.maxZ > LIMIT) return { ok: false, postsInApron: false };
     const road =
-      ROADS.xs.some((rx) => fp.maxX > rx - 5.5 && fp.minX < rx + 5.5) || ROADS.zs.some((rz) => fp.maxZ > rz - 5.5 && fp.minZ < rz + 5.5);
-    if (road) return false;
-    if (boxesOverlap(fp, AIRPORT_ZONE, 3)) return false;
-    if (circleHitsBox(SPAWN.x, SPAWN.z, 10, fp)) return false;
-    // posts (street lamps) only need room to walk past; buildings and big things get the full margin
-    for (const o of obstacles) if (boxesOverlap(fp, o, isPost(o) ? Math.min(margin, 1) : margin)) return false;
-    for (const t of taken) if (boxesOverlap(fp, t, 3)) return false;
-    return true;
+      ROADS.xs.some((rx) => fp.maxX > rx - ROAD_KEEP && fp.minX < rx + ROAD_KEEP) ||
+      ROADS.zs.some((rz) => fp.maxZ > rz - ROAD_KEEP && fp.minZ < rz + ROAD_KEEP);
+    if (road) return { ok: false, postsInApron: false };
+    if (boxesOverlap(fp, AIRPORT_ZONE, 3)) return { ok: false, postsInApron: false };
+    if (circleHitsBox(SPAWN.x, SPAWN.z, 10, fp)) return { ok: false, postsInApron: false };
+    let postsInApron = false;
+    for (const o of obstacles) {
+      if (boxesOverlap(fp, o, isPost(o) ? Math.min(margin, 1) : margin)) return { ok: false, postsInApron: false };
+      if (apron && boxesOverlap(apron, o, margin)) {
+        if (isPost(o)) postsInApron = true;
+        else return { ok: false, postsInApron: false };
+      }
+    }
+    for (const t of taken) if (boxesOverlap(fp, t, 3)) return { ok: false, postsInApron: false };
+    if (postsInApron && !clearLamps) return { ok: false, postsInApron: false };
+    return { ok: true, postsInApron };
   };
   const pointFree = (x: number, z: number, r: number): boolean => {
     if (onRoad(x, z, 0.5)) return false;
@@ -269,8 +295,12 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
         : { x: t, z: at + side * d, rot: Math.atan2(0, -side) };
       const stand = toWorld(spot, 0, front + STAND_OFF);
       if (!accept(stand.x, stand.z)) continue;
-      if (!boxFree(footprint(spot, -hw, hw, back, front), margin)) continue;
+      const body = footprint(spot, -hw, hw, back, front);
+      const apron = footprint(spot, -hw - 0.3, hw + 0.3, front, front + DOOR_APRON);
+      const check = boxFree(body, margin, apron);
+      if (!check.ok) continue;
       if (!pointFree(stand.x, stand.z, 1.2)) continue;
+      if (check.postsInApron && clearLamps) clearLamps(apron, obstacles);
       return spot;
     }
     return null;
@@ -600,6 +630,7 @@ export function createShops(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
         }
         busy = true;
         ctx.addCoins(-price);
+        feel('shop');
         group.updateWorldMatrix(true, false);
         const top = group.localToWorld(counterLocal.clone());
         payCoins(price, top, () => {

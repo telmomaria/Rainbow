@@ -1,5 +1,9 @@
 # SESSION LOG — Rainbow (append-only)
 
+## 2026-11-15 — I08 guardião removido (pedido do Telmo)
+- Screenshot: NPC de chapéu/fato azul com massa enorme de esferas verdes-oliva colada à cabeça; falava «Boa tarde» + estrelas do céu — Telmo: «aberração… remove isto».
+- Removido `registerFolk` I08 (`id: 'guardiao'`) em `src/folk/fantasia.ts` (builder, constelação, falas). Deixada nota para não repor. ROADMAP: tirado «guardião» da lista.
+
 ## 2026-11-11 — #NP
 - Interrogatório first-run; stack Three.js + Vite + TS; mapa OSM estilizado; porta 1234; PT-PT; uma só janela; sem MCP.
 - Scaffold gerado a partir de -SKILLS_GLOBAL/framework/templates/.
@@ -66,3 +70,26 @@
 - Subagentes (#SUB): rides.ts+ridekit.ts, games.ts, stalls.ts — todos testados; o master corrigiu os problemas de contrato que reportaram (Enter duplo nos carrinhos, buyTarget, compra durante uma diversão, unicórnio sem cabeça exposta).
 - Lição: definir o contrato (types.ts + slots + helpers) ANTES de lançar subagentes paralelos funcionou bem — 3 agentes, 0 conflitos de ficheiros.
 - Commit sugerido (não feito): "feat: casa, Tóquio, feira popular com 15 diversões e acessórios" (inclui o trabalho da sessão 2, ainda sem commit).
+
+## 2026-11-15 — #SEP (reality-check, sem código novo)
+
+- Esta janela só fechou. Zero alterações em `src/`. O jogo não foi aberto.
+- Reality-check: `HEAD` = `origin/main` = `68e30da` (2026-11-14 09:03 UTC, Telmo Pereira da Silva). O commit já contém as sessões 2 e 3 (concerto, piscina, autocarro, casa, Tóquio, feira, +9942/−214 em 40 ficheiros) e os docs do #SEP de 2026-11-14. A frase "commit sugerido (não feito)" acima ficou velha no instante em que entrou nesse commit. O passado do log não se edita; a correção é esta entrada.
+- ROADMAP: apagada a segunda tabela 🎯 NEXT (resto da sessão 1, com Lisboa e "testar a sessão toda"). Critical passou a 14 cidades e 12 personagens, como em `src/cities.ts` e `src/characters.ts`. NEXT #1 deixou de ser "aprovar o commit" e passou a "jogar e validar".
+- Débitos que estavam só no CONTEXT entraram no plano: saves antigos (índice 9) e três limites sem data (pontas das ruas, bilhete do concerto, espectadores).
+- `.tmp/`: ~378 capturas e scripts de QA, gitignored, zero `.md`. Nada a promover; ficam como debug. `Rainbow.code-workspace` continua untracked (atalho local para `-SKILLS_GLOBAL`).
+- Passos 3 e 8 não aplicam: não há `docs/orchestration/LINEAGE.md`, e a sessão não entregou jogo (bootstrap fantasma).
+- Lição: confirmar `git rev-parse HEAD` contra `origin/main` no fecho. O SESSION_LOG pode dizer "ainda sem commit" depois de esse texto já ter sido commitado.
+- Capacity desta janela: baixa (só o fecho).
+
+## 2026-11-15 — brief didático do Telmo (depois do #SEP, mesma janela)
+
+- O Telmo reabriu a janela com um brief grande: objetivo didático, personagens e profissões com quem falar, energia e humor, notas, polícia, joias com uso, serviços pagos, escadas contra monstros, ex-líbris por cidade, cidades diferentes, casa maior, Nuuk a dobrar. Pediu 90 interações, 30 formas de ganhar e 50 de gastar para aprovar.
+- **Decisão que inverte o plano:** sem mapas reais (grandes demais para as crianças). OSM, atribuição e morada de início passaram a ⛔ no ROADMAP; CLAUDE.md e a memória da stack foram corrigidos.
+- Feito e verificado no browser (0 erros; `tsc` e `build` OK), por commitar: perguntas a 0,75; pernas para a frente ao sentar (era `-1,45` rad em vez de `+1,45`, em todos os assentos); som da chuva nas Definições; aterragem vista do lado de lá da pista; gato a passear (`wandercat.ts`); todas as personagens das perguntas passeiam.
+- A aterragem foi resolvida com a câmara: o avião continua a voar para +X; a câmara passou para +Z, onde o ecrã-direita é +X, e fica dentro da faixa sem edifícios (z < 50).
+- Propostas entregues num canvas com caixas de aceitar/recusar (`rainbow-propostas.canvas.tsx`); as escolhas ficam no `.canvas.data.json` ao lado. Nada do brief grande foi construído: espera aprovação.
+- Assinalado ao Telmo: Super-Homem, Batman, Mulher-Maravilha, Homem-Aranha e Guardiões da Galáxia são marcas registadas; a proposta usa heróis originais, como a regra do projeto já pede.
+- Não verificado: som real (voz mais lenta, volume da chuva) — o browser de teste não tem áudio.
+- Mais tarde, na mesma janela, o Telmo definiu o final: penúltimo nível nos Estados Unidos (Estátua da Liberdade, ponte de São Francisco, Walt Disney World), sem aeroporto, com foguetão em Cabo Canaveral; último nível na Lua (crateras, moedas, subidas e descidas, areia, terra, rochas, pedras, marcianos que tiram moedas); o jogo acaba ao colocar os diamantes num local específico. Registado em CLAUDE.md, ROADMAP (v2.4) e CONTEXT; propostas US1–US9, LUA1–LUA6 e FIM1–FIM4 no canvas, mais três escolhas (posição de Nuuk, onde fica o palácio, quantos diamantes). Sem código. Assinalado: "Walt Disney World" e "Caesars Palace" são marcas; a frase "o Ceasars Pallace é na Lua" não ficou clara.
+- Lição: no patchright, `page.evaluate` corre num mundo isolado; o que um `addInitScript` guarda em `window` não se lê de lá. Passar os dados por `document.documentElement.dataset`. E não reescrever scripts com `Get-Content`/`Set-Content` do PowerShell 5: estraga os acentos.

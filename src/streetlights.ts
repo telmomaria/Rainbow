@@ -54,6 +54,8 @@ interface Lamp {
   level: number; // 0..1 shown brightness
   flicker: number; // seconds of start-up flicker left
   shown: number; // last level written to the GPU (-1 = never)
+  /** Cleared for a shop/kiosk façade — stay invisible and skip lighting. */
+  gone?: boolean;
 }
 
 /** Radial white→transparent texture used by the glow and the ground pool. */
@@ -199,6 +201,13 @@ export class StreetLights {
     return this.lamps.length;
   }
 
+  /** Live post positions (skips lamps cleared for a shop/kiosk door). */
+  positions(): { x: number; z: number }[] {
+    const out: { x: number; z: number }[] = [];
+    for (const l of this.lamps) if (!l.gone) out.push({ x: +l.x.toFixed(1), z: +l.z.toFixed(1) });
+    return out;
+  }
+
   /** Number of lamps currently shining (any brightness). */
   litCount(): number {
     let k = 0;
@@ -218,19 +227,21 @@ export class StreetLights {
       this.started = true;
       this.want = want;
       for (const l of this.lamps) {
+        if (l.gone) continue;
         l.on = want;
         l.level = want ? 1 : 0;
         l.delay = 0;
       }
     } else if (want !== this.want) {
       this.want = want;
-      for (const l of this.lamps) l.delay = Math.random() * WAVE_S;
+      for (const l of this.lamps) if (!l.gone) l.delay = Math.random() * WAVE_S;
     }
 
     // --- per-lamp switching, flicker and fade
     let colorsDirty = false;
     let anyLit = false;
     for (const l of this.lamps) {
+      if (l.gone) continue;
       if (l.on !== this.want) {
         l.delay -= dt;
         if (l.delay <= 0) {
@@ -289,6 +300,52 @@ export class StreetLights {
     this.assignLights(anyLit);
   }
 
+  /**
+   * Hide every lamp whose post sits inside `area` and drop its obstacle box.
+   * Used when a shop/kiosk door would otherwise be blocked by a post already planted on the kerb.
+   */
+  clearIn(area: Obstacle, obstacles: Obstacle[]): number {
+    let n = 0;
+    for (let i = 0; i < this.lamps.length; i++) {
+      const l = this.lamps[i];
+      if (l.gone) continue;
+      if (l.x < area.minX || l.x > area.maxX || l.z < area.minZ || l.z > area.maxZ) continue;
+      l.gone = true;
+      l.on = false;
+      l.level = 0;
+      l.shown = 0;
+      l.flicker = 0;
+      // collapse the instances so the post vanishes
+      this.tmpM.compose(this.tmpP.set(l.x, -50, l.z), this.tmpQ.set(0, 0, 0, 1), this.tmpS.set(0, 0, 0));
+      this.frame.setMatrixAt(i, this.tmpM);
+      this.bulbs.setMatrixAt(i, this.tmpM);
+      this.glows.setMatrixAt(i, this.tmpM.makeScale(0, 0, 0));
+      this.pools.setMatrixAt(i, this.tmpM.makeTranslation(l.hx, -50, l.hz));
+      this.bulbs.setColorAt(i, BULB_OFF);
+      this.glows.setColorAt(i, BLACK);
+      this.pools.setColorAt(i, BLACK);
+      // drop the thin post obstacle (FOOT half-size)
+      for (let j = obstacles.length - 1; j >= 0; j--) {
+        const o = obstacles[j];
+        if (o.maxX - o.minX > 0.9 || o.maxZ - o.minZ > 0.9) continue;
+        const cx = (o.minX + o.maxX) / 2;
+        const cz = (o.minZ + o.maxZ) / 2;
+        if (Math.hypot(cx - l.x, cz - l.z) < 0.35) obstacles.splice(j, 1);
+      }
+      n++;
+    }
+    if (n) {
+      this.frame.instanceMatrix.needsUpdate = true;
+      this.bulbs.instanceMatrix.needsUpdate = true;
+      this.glows.instanceMatrix.needsUpdate = true;
+      this.pools.instanceMatrix.needsUpdate = true;
+      if (this.bulbs.instanceColor) this.bulbs.instanceColor.needsUpdate = true;
+      if (this.glows.instanceColor) this.glows.instanceColor.needsUpdate = true;
+      if (this.pools.instanceColor) this.pools.instanceColor.needsUpdate = true;
+    }
+    return n;
+  }
+
   /** Remove everything from the scene and free GPU memory (optional: scene.clear() also drops it). */
   dispose(): void {
     this.root.removeFromParent();
@@ -314,7 +371,7 @@ export class StreetLights {
     const K = POINT_LIGHTS + 1; // one extra to know how close the next candidate is
     for (let i = 0; i < this.lamps.length; i++) {
       const l = this.lamps[i];
-      if (l.shown <= 0.01) continue;
+      if (l.gone || l.shown <= 0.01) continue;
       const d = Math.hypot(l.hx - this.camP.x, l.hz - this.camP.z);
       if (near.length === K && d >= nd[K - 1]) continue;
       let j = Math.min(near.length, K - 1);

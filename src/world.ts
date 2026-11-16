@@ -10,7 +10,23 @@ export interface Obstacle {
   maxZ: number;
   /** Height (m) of a low obstacle (fence, crowd, stage): the camera may pass above it. Omitted = tall. */
   height?: number;
+  /** Roof top (m) of a placeholder building — used to attach exterior stairs. Omitted = not a building. */
+  roof?: number;
 }
+
+/**
+ * How far (m) she must stay from a person (folk, question NPC, beggar…).
+ * Used for click-to-walk approach, meet/greet push-out, and as the target for solid body boxes.
+ */
+export const PERSON_CLEAR = 1.7;
+/** If she is closer than this when meeting/greeting, she is shoved out immediately. */
+export const PERSON_PUSH = 1.4;
+/**
+ * Half-extent (m) of a person's solid AABB (folk Puppet + question NPCs + beggar).
+ * With CHARACTER_RADIUS 0.45 → centres stay ≈ ≥ 1.4 m (arrows cannot walk into them).
+ * Props must NOT use this — only person bodies.
+ */
+export const PERSON_BODY_HALF = 0.95;
 
 /** Something the player can walk up to and use. No UI marks it — discovery is by touching it. */
 export interface Interactable {
@@ -30,6 +46,15 @@ export interface Interactable {
   seat?: import('./props').SwingSeat;
   /** Tapping it from up to this far away uses it straight away (loungers: she walks/lies down directly). */
   reach?: number;
+  /**
+   * Stop this many metres short of `position` when walking toward it (people: PERSON_CLEAR), so she does not stand inside them.
+   */
+  keepClear?: number;
+  /**
+   * Things she can pick from it with a double click / double tap (or Enter next to it): a flower, an apple, a shell.
+   * Returns the bag item kind picked (items.ts), or null when there is nothing left to pick right now.
+   */
+  pick?(): string | null;
 }
 
 export interface InteractCtx {
@@ -64,6 +89,10 @@ export interface World {
   buildings: Set<Obstacle>;
   /** Remove every placeholder building overlapping `area` (plus margin m): meshes and obstacles. */
   clearArea(area: Obstacle, margin: number): void;
+  /** Ground height (m) where it isn't flat: the Moon's craters and hills, the arched bridge. Omitted = flat world. */
+  heightAt?(x: number, z: number): number;
+  /** Things she can walk on besides the ground (a bridge deck): a tap on them is a place to walk to. */
+  walkable?: THREE.Object3D[];
 }
 
 /**
@@ -137,7 +166,7 @@ export function createWorld(scene: THREE.Scene, city: City): World {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
-    const ob = { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 };
+    const ob = { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, roof: h };
     obstacles.push(ob);
     buildingMeshes.set(ob, mesh);
   }

@@ -5,6 +5,10 @@ metadata:
   type: project
 ---
 
+**Atualização de 2026-11-15:** o Telmo decidiu **não usar mapas reais** — seriam demasiado grandes para as crianças. O
+mundo gerado (grelha de ruas + edifícios low-poly) fica; cada cidade passa a distinguir-se pelos ex-líbris e pelo que lá
+se faz. O que abaixo fala de OpenStreetMap é a decisão antiga, mantida só como história. Não propor OSM outra vez.
+
 Three.js + Vite + TypeScript, dev na porta 1234. Mapa a partir de dados OpenStreetMap em estilo cartoon/low-poly.
 Voz das perguntas via Web Speech API (pt-PT). Progresso em localStorage, sem backend. Tempo real + hora local por
 cidade via Open-Meteo (grátis, sem chave, CORS) — único serviço externo em uso (2026-11-11).

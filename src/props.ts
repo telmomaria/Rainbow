@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SPAWN, onRoad, type Interactable, type Obstacle } from './world';
 import { AIRPORT_ZONE } from './airport';
 import { tone } from './audio';
+import { feel } from './bus';
 
 /**
  * Playful props scattered around the placeholder world (swing, fountain, floor xylophone, cat, dog…).
@@ -11,8 +12,8 @@ import { tone } from './audio';
 
 const TAU = Math.PI * 2;
 /** Walking room (m) between a prop's footprint and any building/solid; relaxed step by step only on crowded maps. */
-const ROOM = 2.2;
-const ROOM_STEPS = [ROOM, 1.6, 1.2] as const;
+const ROOM = 3;
+const ROOM_STEPS = [ROOM, 2.2, 1.5] as const;
 /** Margin to use after fraction `k` (0..1) of the search attempts: full room for the first half, then relaxing. */
 const roomFor = (k: number): number => (k < 0.5 ? ROOM_STEPS[0] : k < 0.8 ? ROOM_STEPS[1] : ROOM_STEPS[2]);
 /** A thin post (street lamp, pole): small enough that ~1 m beside it is plenty to walk past. */
@@ -364,6 +365,7 @@ function createSwing(k: Kit, at: Spot): Interactable {
       const local = g.worldToLocal(p.clone());
       rider = local.x < 0 ? 0 : 1;
       amp = Math.max(amp, 0.4);
+      feel('play');
       return rider;
     },
     pose(i) {
@@ -428,6 +430,8 @@ function createFountain(k: Kit, at: Spot): Interactable {
     radius: 2.6,
     interact() {
       boost = 1;
+      feel('drink'); // she drinks from the fountain: a little energy (life.ts)
+      [520, 440, 520, 440].forEach((f, i) => tone(f, 0.5 + i * 0.16, 0.09, 'sine', 0.05)); // glug glug
       for (let i = 0; i < 10; i++) tone(1200 + Math.random() * 1600, i * 0.03, 0.07, 'sine', 0.04);
       tone(260, 0, 0.25, 'triangle', 0.06);
       top.set(at.x, 3.5, at.z);
@@ -658,7 +662,7 @@ function createFlowerBed(k: Kit, at: Spot): Interactable {
     stem.add(head);
     mk(petalGeo, k.mat(c), head, 0, 0, 0).scale.set(1, 0.3, 1);
     mk(coreGeo, coreM, head, 0, 0.05, 0);
-    return { stem, head, phase: i * 0.9 };
+    return { stem, head, phase: i * 0.9, picked: 0 };
   });
 
   const grow = { x: 0, v: 0 };
@@ -677,12 +681,26 @@ function createFlowerBed(k: Kit, at: Spot): Interactable {
       [1568, 1976, 2349, 2637, 3136].forEach((f, i) => tone(f, i * 0.07, 0.3, 'sine', 0.06));
       k.sparks.burst(top, 18, [0xffe066, 0xffffff, 0xff8fab, 0xb197fc], 1.6, 3, 1.6, 0.07, 2.5);
     },
+    // double click: she picks one flower (it grows back after a couple of minutes)
+    pick() {
+      const f = flowers.find((x) => x.picked <= 0);
+      if (!f) return null;
+      f.picked = 120;
+      tone(1319, 0, 0.08, 'triangle', 0.07);
+      tone(1760, 0.07, 0.16, 'triangle', 0.06);
+      return 'flor';
+    },
     update(dt) {
       t += dt;
       bloom = Math.max(0, bloom - dt / 6);
       spinV *= Math.exp(-1.2 * dt);
       spring(grow, bloom, 60, 5, dt);
       for (const f of flowers) {
+        if (f.picked > 0) f.picked -= dt;
+        // a picked flower is gone, then grows back during its last 10 s
+        const there = f.picked <= 0 ? 1 : Math.max(0, 1 - f.picked / 10);
+        f.stem.visible = there > 0.01;
+        f.stem.scale.x = f.stem.scale.z = there;
         f.stem.scale.y = 1 + grow.x * 0.8;
         const hs = 0.75 + grow.x * 0.7;
         f.head.scale.set(hs, hs / f.stem.scale.y, hs); // undo the stem's vertical stretch
@@ -698,9 +716,10 @@ function createMailbox(k: Kit, at: Spot): Interactable {
   const g = k.group(at);
   g.scale.setScalar(1.3);
   mk(new THREE.BoxGeometry(0.12, 1.0, 0.12), k.mat(0x8d6e63), g, 0, 0.5, 0);
-  const red = k.mat(0x4dabf7);
-  mk(new THREE.BoxGeometry(0.42, 0.35, 0.6), red, g, 0, 1.15, 0);
-  const roof = mk(new THREE.CylinderGeometry(0.21, 0.21, 0.6, 14), red, g, 0, 1.32, 0);
+  // classic red mailbox (was blue by mistake — unreadable from afar)
+  const body = k.mat(0xe03131);
+  mk(new THREE.BoxGeometry(0.42, 0.35, 0.6), body, g, 0, 1.15, 0);
+  const roof = mk(new THREE.CylinderGeometry(0.21, 0.21, 0.6, 14), body, g, 0, 1.32, 0);
   roof.rotation.x = Math.PI / 2;
   mk(new THREE.BoxGeometry(0.3, 0.04, 0.02), k.mat(0x212529), g, 0, 1.2, 0.305); // letter slot
   k.block(at, 0, 0, 0.38, 0.45);
@@ -807,6 +826,18 @@ function createAppleTree(k: Kit, at: Spot): Interactable {
         a.vel.set(a.home.x * 0.5, 0, a.home.z * 0.5);
         dropped++;
       }
+    },
+    // double click: she picks one apple still hanging on the tree (it grows back like the fallen ones)
+    pick() {
+      const a = apples.find((x) => x.state === 'hang' && x.t >= 0.8);
+      if (!a) return null;
+      a.state = 'gone';
+      a.t = -20; // back after ~25 s
+      a.m.visible = false;
+      shake = 0.5;
+      tone(660, 0, 0.07, 'triangle', 0.07);
+      tone(880, 0.06, 0.14, 'triangle', 0.06);
+      return 'maca';
     },
     update(dt) {
       t += dt;

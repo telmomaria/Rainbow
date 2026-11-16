@@ -484,6 +484,8 @@ export class Weather {
   private cloudPos: Float32Array; // x, y, z per cloud
   private cloudVar: Float32Array; // scale variation per cloud
   private puffs: Float32Array; // dx, dy, dz, s per puff
+  /** Settings: how loud the rain sounds (0 = silent, 1 = normal). The rain itself still falls. */
+  rainVolume = 1;
   private rainMesh: THREE.InstancedMesh;
   private rainMat: THREE.MeshBasicMaterial;
   private rainPos: Float32Array;
@@ -1026,7 +1028,7 @@ export class Weather {
     if (!a) return;
     const kind = this.st.kind;
     const rainLevel = kind === 'storm' ? 0.07 : kind === 'rain' ? 0.05 : kind === 'drizzle' ? 0.025 : 0.05;
-    const rain = tabHidden ? 0 : Math.min(1, L.rain / 0.8) * rainLevel;
+    const rain = tabHidden ? 0 : Math.min(1, L.rain / 0.8) * rainLevel * this.rainVolume;
     const wind = tabHidden ? 0 : Math.min(0.045, Math.max(0, (this.st.wind - 22) / 40) * 0.045);
     const now = a.ctx.currentTime;
     if (Math.abs(rain - a.rainTarget) > 0.002) {

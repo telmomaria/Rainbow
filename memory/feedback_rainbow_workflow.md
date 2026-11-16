@@ -23,3 +23,5 @@ versão e atualizar o CLAUDE.md, sem discutir a anterior.
 Para pedidos grandes com #SUB (ex.: feira com 15 diversões), o que resultou: o master cria primeiro o contrato
 (types.ts, slots, helpers partilhados, stubs de ficheiro) e só depois lança 1 subagente por ficheiro; no fim o master
 corrige os problemas de contrato que eles reportam. Zero conflitos com 3 agentes em paralelo.
+
+O commit das sessões 2 e 3 já está em `main` e em `origin/main`: `68e30da` (2026-11-14). O SESSION_LOG desse dia foi escrito antes do commit e diz "ainda sem commit"; a entrada de 2026-11-15 corrige isso. No fecho, confirmar com `git rev-parse HEAD` e `git rev-parse origin/main`, não só com o log.

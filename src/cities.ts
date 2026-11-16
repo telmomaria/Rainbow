@@ -11,9 +11,22 @@ export interface City {
   ground: number;
   road: number;
   buildings: number[];
+  /**
+   * The two last levels are special: 'usa' has no flights out (a rocket leaves from Cabo Canaveral),
+   * 'moon' is the last level (craters, coins, martians and the place for the diamonds).
+   */
+  kind?: 'usa' | 'moon';
+  /** How the narrator names it as a destination ("…para os Estados Unidos"). Default: the name. */
+  dest?: string;
 }
 
 export const COINS_PER_LEVEL = 100;
+/**
+ * Fewest diamonds/jewels she must place on the Moon's stone circle to finish the game. 1 = no real minimum: she
+ * hands over whatever she has, so the game can never get stuck (there are always some lying on the Moon).
+ * Raise it to demand more.
+ */
+export const DIAMONDS_TO_FINISH = 1;
 
 export const CITIES: City[] = [
   { name: 'Porto', arrival: 'Vamos explorar o Porto!', seed: 7, sky: 0x8fd3ff, ground: 0x7ccf5b, road: 0xb8b2c4, buildings: [0xff8fab, 0xffc56e, 0x9be37a, 0x7ec8ff, 0xc9a4ff, 0xfff07a] },
@@ -30,6 +43,8 @@ export const CITIES: City[] = [
   { name: 'Cidade do México', arrival: 'Chegámos à Cidade do México!', seed: 43, sky: 0x8fd0ff, ground: 0x9ccf5b, road: 0xd9c3a0, buildings: [0xff4081, 0x00bcd4, 0xffc107, 0x8bc34a, 0xff5722] },
   { name: 'Reiquiavique', arrival: 'Chegámos a Reiquiavique!', seed: 47, sky: 0xb3d4ec, ground: 0x9cc79a, road: 0xa7adb8, buildings: [0xe53935, 0x1e88e5, 0xfdd835, 0xffffff, 0x43a047] },
   { name: 'Nuuk', arrival: 'Chegámos a Nuuk, na Gronelândia!', seed: 53, sky: 0xc9e4f5, ground: 0xf1f6f9, road: 0xb9c3cc, buildings: [0xd50000, 0x2962ff, 0xffd600, 0x00c853, 0xffffff] },
+  { name: 'Estados Unidos', dest: 'os Estados Unidos', kind: 'usa', arrival: 'Chegámos aos Estados Unidos!', seed: 61, sky: 0x8fcfff, ground: 0x86cf6a, road: 0xb9b9c4, buildings: [0xb22234, 0xffffff, 0x3c3b6e, 0xf2c14e, 0x9ad1f5] },
+  { name: 'Lua', dest: 'a Lua', kind: 'moon', arrival: 'Chegámos à Lua!', seed: 67, sky: 0x05060f, ground: 0x9a9da6, road: 0x777a84, buildings: [0x8d9099] },
 ];
 
 export function cityAt(level: number): City {

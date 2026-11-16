@@ -61,6 +61,19 @@ export class Flight {
       };
     };
 
+    /**
+     * Landing, filmed from the far side of the runway (+Z): the terminal and the tower are behind the runway
+     * and the plane comes in from the left of the picture to the right. The camera never leaves the strip the
+     * world keeps free of buildings (z < 50). `k` = how much the view leads the plane towards the gate.
+     */
+    const landShot = (camX: number, camY: number, k: number): CameraShot => {
+      const pl = this.airport.plane.position;
+      return {
+        pos: new THREE.Vector3(camX, camY, RUNWAY_Z + 15),
+        look: new THREE.Vector3(lerp(pl.x, PARK_X - 2, k), pl.y + 2, RUNWAY_Z),
+      };
+    };
+
     // 1. walk to the bottom of the stairs, then up to the door, then inside
     this.steps.push({
       dur: 1.6,
@@ -138,14 +151,14 @@ export class Flight {
         this.fade(false);
         this.onCruise();
       },
-      run: () => chase(16, 5, 14),
+      run: () => chase(10, 4, -18),
     });
-    // 5. cruise above the clouds
+    // 5. cruise above the clouds — already seen from the +Z side, so the plane flies towards the right of the picture
     this.steps.push({
       dur: 3.5,
       run: (t) => {
         a.plane.position.set(-110 + 14 * 3.5 * t, 55 + Math.sin(t * 6) * 0.4, RUNWAY_Z);
-        return chase(16, 4, 14);
+        return chase(10, 4, -18);
       },
     });
     // 6. descent to the runway threshold
@@ -158,7 +171,9 @@ export class Flight {
         const flare = t > 0.85 ? (t - 0.85) / 0.15 : 0;
         a.plane.position.y = 55 * (1 - t) * (1 - t * 0.15);
         a.plane.rotation.z = lerp(-0.08, 0.1, flare);
-        return chase(lerp(16, 24, t), lerp(4, 6, t), lerp(14, 18, t));
+        // the camera comes down with the plane and settles beside the runway, ahead of it, facing the airport
+        const e = ease(t);
+        return landShot(lerp(a.plane.position.x + 10, PARK_X - 6, e), lerp(a.plane.position.y + 4, 7, e), 0.5 * e);
       },
     });
     // 7. roll out and stop at the gate
@@ -169,7 +184,7 @@ export class Flight {
         a.plane.position.x = touchX + v0 * (t - (t * t) / 2) / 1;
         a.plane.position.y = 0;
         a.plane.rotation.z = lerp(0.1, 0, Math.min(1, t * 3));
-        return chase(24, 6, 18);
+        return landShot(PARK_X - 6, 7, 0.5); // fixed camera: the plane rolls in from the left and stops in front of the terminal
       },
     });
     // 8. stairs come back, door opens

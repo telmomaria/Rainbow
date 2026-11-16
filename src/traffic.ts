@@ -363,6 +363,13 @@ export class Traffic {
     return this.cars.filter((c) => c.mode !== 'hidden').map((c) => ({ x: c.x, z: c.z, speed: c.speed }));
   }
 
+  /** A traffic officer stops the cars (src/folk): every vehicle within `r` m of `p` brakes and waits `seconds`. */
+  haltNear(p: THREE.Vector3, r: number, seconds: number): void {
+    for (const car of this.cars) {
+      if (car.mode !== 'hidden' && Math.hypot(car.x - p.x, car.z - p.z) < r) car.stopTimer = Math.max(car.stopTimer, seconds);
+    }
+  }
+
   update(dt: number): void {
     this.debugDump();
     if (this.ctx.isPaused()) return;

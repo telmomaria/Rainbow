@@ -55,20 +55,36 @@ export function taunt(text: string): void {
 /** Every line handed to speech, in order (read by the ?debug QA bridge). */
 export const spokenLog: string[] = [];
 
-/** Speak a sequence of sentences; resolves when finished (or immediately if speech is unavailable). */
-export function speak(lines: string[]): Promise<void> {
+/** Questions and their answers are read slower than everything else, so a 7-year-old can follow them. */
+export const QUESTION_RATE = 0.75;
+
+/** An English voice for the lines spoken in English (the police officer in London): British if there is one. */
+function englishVoice(): SpeechSynthesisVoice | null {
+  const voices = speechSynthesis.getVoices();
+  const en = voices.filter((v) => v.lang.toLowerCase().startsWith('en'));
+  return en.find((v) => /en[-_]gb/i.test(v.lang) && FEMALE.test(v.name)) ?? en.find((v) => /en[-_]gb/i.test(v.lang)) ?? en[0] ?? null;
+}
+
+/**
+ * Speak a sequence of sentences; resolves when finished (or immediately if speech is unavailable).
+ * `lang` 'en' = said in English (en-GB), for the English questions; everything else is pt-PT.
+ */
+export function speak(lines: string[], rate = 0.95, lang: 'pt' | 'en' = 'pt'): Promise<void> {
   if (!('speechSynthesis' in window)) return Promise.resolve();
   speechSynthesis.cancel();
   spokenLog.push(...lines);
+  const en = lang === 'en' ? englishVoice() : null;
   return new Promise((resolve) => {
     // Safety net: some browsers never fire onend (missing voice, Chrome quirks) — never block the game on it.
     const chars = lines.reduce((n, l) => n + l.length, 0);
-    setTimeout(resolve, 2500 + chars * 110);
+    setTimeout(resolve, 2500 + (chars * 110) / rate);
     lines.forEach((text, i) => {
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'pt-PT';
-      if (voice) u.voice = voice;
-      u.rate = 0.95;
+      u.lang = lang === 'en' ? 'en-GB' : 'pt-PT';
+      if (lang === 'en') {
+        if (en) u.voice = en;
+      } else if (voice) u.voice = voice;
+      u.rate = rate;
       u.pitch = 1.1;
       if (i === lines.length - 1) {
         u.onend = () => resolve();

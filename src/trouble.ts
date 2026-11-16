@@ -17,6 +17,8 @@ const HIT_DIST = 1.15;
 
 // --- fans ---
 const STADIUM_R = 16;
+/** Free walking ring (m) kept outside the stadium wall — nothing may spawn inside it. */
+const STADIUM_CLEAR = 9;
 const FAN_SEE = 15;
 const FAN_CHASE_SPEED = 5.2;
 const FAN_WALK = 1.7;
@@ -266,7 +268,7 @@ function allSites(rng: () => number): Site[] {
 const isPost = (o: Obstacle): boolean => o.maxX - o.minX < 0.9 && o.maxZ - o.minZ < 0.9;
 
 /** Walking room (m) kept around the stadium/bar plot: full first, relaxed only on crowded maps. */
-const ROOM_STEPS = [2, 1.2] as const;
+const ROOM_STEPS = [4, 2.5, 1.5] as const;
 
 /**
  * How many sample points of a local rectangle collide with roads, obstacles (within `room` m), the airport or the
@@ -415,6 +417,11 @@ export class Trouble {
   private readonly stadium: Site | null;
   private readonly stadiumC = new THREE.Vector3();
   private readonly gateOut = new THREE.Vector3(); // just outside the gate
+  /**
+   * Soft keep-out around the stadium (wall + STADIUM_CLEAR). Used while the rest of the city is placed
+   * and as a no-spawn zone — not a solid the character collides with.
+   */
+  readonly clearance: Obstacle | null;
   private readonly team: [number, number];
   private crowd: THREE.InstancedMesh | null = null;
   private readonly crowdBase: { x: number; y: number; z: number; ph: number }[] = [];
@@ -461,6 +468,14 @@ export class Trouble {
       return d >= 60 && d <= 130;
     });
     if (this.stadium) this.buildStadium(this.stadium);
+    this.clearance = this.stadium
+      ? {
+          minX: this.stadiumC.x - (R + STADIUM_CLEAR),
+          maxX: this.stadiumC.x + (R + STADIUM_CLEAR),
+          minZ: this.stadiumC.z - (R + STADIUM_CLEAR),
+          maxZ: this.stadiumC.z + (R + STADIUM_CLEAR),
+        }
+      : null;
 
     // bar: 40-130 m from the spawn, in another quadrant than the stadium
     const sq = this.stadium ? quadrant(this.stadiumC.x, this.stadiumC.z) : -1;

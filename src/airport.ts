@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildCountryFlag, houseColors, type HouseColors } from './house';
 import type { Obstacle } from './world';
 
 /**
@@ -33,14 +34,17 @@ export class Airport {
   readonly parkPos = new THREE.Vector3(PARK_X, 0, RUNWAY_Z);
   private readonly towerLight: THREE.Mesh;
   private readonly stairsHome: THREE.Vector3;
+  private readonly flagCloth: THREE.Object3D | null;
   private time = 0;
 
-  constructor(scene: THREE.Scene, obstacles: Obstacle[]) {
+  constructor(scene: THREE.Scene, obstacles: Obstacle[], cityOrColors: string | HouseColors = 'Porto') {
+    const colors = typeof cityOrColors === 'string' ? houseColors(cityOrColors) : cityOrColors;
     scene.add(buildRunway());
 
-    const terminal = buildTerminal();
+    const terminal = buildTerminal(colors);
     terminal.position.set(42, 0, 18);
     scene.add(terminal);
+    this.flagCloth = (terminal.userData.flagCloth as THREE.Object3D | undefined) ?? null;
     obstacles.push({ minX: 30, maxX: 54, minZ: 15, maxZ: 21 });
 
     const { tower, light } = buildTower();
@@ -85,6 +89,7 @@ export class Airport {
   update(dt: number): void {
     this.time += dt;
     (this.towerLight.material as THREE.MeshStandardMaterial).emissiveIntensity = Math.sin(this.time * 4) > 0 ? 2 : 0.1;
+    if (this.flagCloth) this.flagCloth.rotation.y = Math.sin(this.time * 1.6) * 0.12;
   }
 }
 
@@ -119,7 +124,7 @@ function buildRunway(): THREE.Group {
   return g;
 }
 
-function buildTerminal(): THREE.Group {
+function buildTerminal(colors: HouseColors): THREE.Group {
   const g = new THREE.Group();
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(24, 6, 6),
@@ -141,6 +146,12 @@ function buildTerminal(): THREE.Group {
     sign.rotation.y = side < 0 ? Math.PI : 0;
     g.add(sign);
   }
+  // bandeira do país: canto oeste do terminal, virada para a estrada (−Z), fora do telhado
+  const flag = buildCountryFlag(colors);
+  flag.position.set(-12.2, 0, -4.2);
+  flag.rotation.y = Math.PI; // pano abre para −X (afastado do edifício), face para a cidade
+  g.add(flag);
+  g.userData.flagCloth = flag.userData.flagCloth;
   return g;
 }
 

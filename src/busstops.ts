@@ -89,7 +89,7 @@ export function createBusStops(scene: THREE.Scene, obstacles: Obstacle[], rand: 
   const stops: BusStop[] = [];
   const sides = STOP_LANES.map((l, i) => ({ l, i, k: rand() })).sort((a, b) => a.k - b.k);
   const want = 3;
-  for (const margin of [2, 1]) {
+  for (const margin of [4, 2, 1]) {
     for (const { l } of sides) {
       if (stops.length >= want) break;
       // one per road, and spread out (different parts of town)

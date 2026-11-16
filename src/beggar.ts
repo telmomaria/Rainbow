@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { speak, tone } from './audio';
 import { AIRPORT_ZONE } from './airport';
-import { SPAWN, onRoad, type Interactable, type Obstacle } from './world';
+import { receivers } from './gifts';
+import { PERSON_BODY_HALF, PERSON_CLEAR, SPAWN, onRoad, type Interactable, type Obstacle } from './world';
 
 /** Half-size of her blanket (solid footprint). */
 const HALF = 0.6;
@@ -106,7 +107,8 @@ export function createBeggar(scene: THREE.Scene, obstacles: Obstacle[], wanted: 
   cup.position.set(-0.3, 0.14, -0.75);
   g.add(cup);
 
-  obstacles.push({ minX: at.x - 0.6, maxX: at.x + 0.6, minZ: at.z - 0.6, maxZ: at.z + 0.6 });
+  const h = PERSON_BODY_HALF;
+  obstacles.push({ minX: at.x - h, maxX: at.x + h, minZ: at.z - h, maxZ: at.z + h, height: 1.9 });
 
   // effects
   const coin = new THREE.Mesh(
@@ -139,11 +141,21 @@ export function createBeggar(scene: THREE.Scene, obstacles: Obstacle[], wanted: 
     mouth.position.y = smile ? 1.39 : 1.36;
   };
   setSmile(false);
+  // she can be given a flower or an apple too (src/gifts.ts): she stands up, hops and smiles
+  receivers.add({
+    object: g,
+    position: at,
+    thank() {
+      happyT = 0;
+      setSmile(true);
+    },
+  });
 
   return {
     object: g,
     position: at.clone(),
     radius: 1.9,
+    keepClear: PERSON_CLEAR,
     interact(ctx) {
       if (!received && hooks.coins() > 0) {
         received = true;

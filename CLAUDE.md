@@ -6,8 +6,12 @@ de cidade em cidade. Ver [CONTEXT.md](CONTEXT.md) e [ROADMAP.md](ROADMAP.md).
 
 ## Stack
 - **Three.js + Vite + TypeScript** — jogo web 3D, sem servidor (deploy estático).
-- **Mapa:** dados reais do **OpenStreetMap** (ruas, edifícios) renderizados em estilo cartoon/low-poly.
-  Nunca Google 3D Tiles (custo, sem colisões, pesado em tablet).
+- **Mapa:** mundo **gerado** por cidade (grelha de ruas + edifícios low-poly), como está. **Sem mapas reais** (nem
+  OpenStreetMap nem Google 3D Tiles): seriam demasiado grandes para as crianças. (Decisão do Telmo a 2026-11-15, que
+  substitui a de 2026-11-11.) Cada cidade distingue-se pelos seus ex-líbris e pelo que lá se pode fazer; as cidades não
+  devem ser iguais nem ter todas as mesmas coisas; o último nível terá o dobro da área (pedido para Nuuk antes de a Lua
+  passar a ser o último; por confirmar se passa para a Lua). (Ex-líbris, cidades diferentes e área a dobrar ainda por
+  fazer — ver ROADMAP.)
 - **Voz:** Web Speech API (`speechSynthesis`, voz `pt-PT`). Fallback a definir se a voz pt-PT faltar no dispositivo.
 - **Persistência:** `localStorage` (progresso, moedas, roupa, morada de início). Sem contas, sem dados pessoais.
 
@@ -53,7 +57,7 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   interiores nos dois sentidos, e o anel exterior); 3 paragens (abrigo, banco, poste com sinal redondo) em ruas diferentes
   do anel, servidas por todas as linhas; os autocarros param ~5 s de portas abertas. Entrar = tocar no autocarro / ir à porta / Enter (paga 1 moeda; sem moedas o
   motorista abana a cabeça). Vai sentada à janela; sair = Espaço/Enter/toque/setas com as portas abertas (a meio da viagem toca a campainha e sai na paragem seguinte). Casa/menu/nova cidade tiram-na do autocarro.
-- **Botões fixos:** Casa (ponto de partida) e retrato → abre a página principal (Continuar · Novo jogo · ⚙ Definições), em qualquer momento exceto a meio do voo ou de uma pergunta (também no hospital). Definições: monstros Zero (sem monstros) / Fácil ×0.5 / Médio / Difícil ×2.
+- **Botões fixos:** Casa (ponto de partida) e retrato → abre a página principal (Continuar · Novo jogo · ⚙ Definições), em qualquer momento exceto a meio do voo ou de uma pergunta (também no hospital). Definições: monstros Zero (sem monstros) / Fácil ×0.5 / Médio / Difícil ×2; som da chuva Sem som / Médio (×0,4) / Normal (a chuva continua a ver-se).
 - **Ordem de construção da cidade:** mundo → aeroporto → extras (candeeiros, carro, pobre, adereços, gato, hospital, lojas, estádio/bar, trânsito) → só depois moedas, personagens das perguntas e monstros (nunca nascem dentro de edifícios).
 - **Arranque:** ecrã de escolha com "Continuar" (tudo como estava) e "Novo jogo" (tudo a zero, mantém personagem e definições).
 - **Situações por cidade (só movimento, sem texto):** gato na árvore (+5), padaria (pão = 2) → pombos, gelado 3 / chocolate 2 / chupa 1,
@@ -95,7 +99,8 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
 - **Baloiço:** clicar/tocar (ou Enter ao lado) = senta-se no assento mais próximo e baloiça; qualquer tecla/toque = sai.
 - **Depois de uma pergunta** a personagem acena e vai-se embora a pé (só desaparece longe/fora de vista).
 - **Artistas do concerto** só estão no palco durante o espetáculo: saem a pé pelo lado depois do final e voltam ~10 s antes do seguinte.
-- **Personagens das perguntas:** ~metade passeia devagar (1,3 m/s, nunca na estrada); param e viram-se quando ela está a < 8 m.
+- **Personagens das perguntas:** ninguém fica parado na rua — todas passeiam devagar (1,3 m/s, nunca na estrada); só param e se viram quando ela está a < 8 m.
+  As perguntas e as respostas são lidas devagar (`QUESTION_RATE` 0,75 em src/audio.ts; o resto da narração fica a 0,95).
   Quando já não há perguntas por resolver disponíveis, as resolvidas voltam como revisão (dão moedas, não contam no "?").
 - **Tempo real + hora local:** Open-Meteo (sem chave), por cidade, cache 15 min; luz segue a hora local real (nascer/pôr do sol); candeeiros de rua (src/streetlights.ts) acendem um a um quando escurece. Testes: `?weather=rain`, `?hour=21.5`.
 - **Compras:** só com clique/toque na loja (ou Enter junto ao balcão); itens vão para o inventário (lateral esquerda); tocar num doce = comer; tocar no pão = segurá-lo para os pombos.
@@ -104,10 +109,23 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   no Edge), senão a mesma voz com tom muito grave. O Windows não instala vozes masculinas pt-PT.
 - **Ordem das cidades:** Porto (futuro: morada nas Definições) → Roma → Madrid → Londres →
   Paris → Varsóvia → Vilnius → Moscovo → Pequim → Tóquio → Rio de Janeiro → Cidade do México → Reiquiavique → Nuuk.
+  (Estas 14 são as que existem no código.)
+- **Final do jogo (decisão do Telmo a 2026-11-15, por construir):** o penúltimo nível é os **Estados Unidos**, com
+  atrações de várias cidades (Estátua da Liberdade, ponte de São Francisco, parque de diversões) e **sem aeroporto**:
+  de **Cabo Canaveral** lança-se um foguetão para a **Lua**, o último nível. Na Lua há pouca coisa: crateras, moedas
+  espalhadas, subidas e descidas, areia, terra, rochas, pedras e **marcianos que tiram moedas**. **O objetivo do jogo é
+  colocar os diamantes (as joias) num local específico; aí o jogo termina.** Por decidir pelo Telmo: se Nuuk fica antes
+  dos EUA, onde fica o palácio ("o Caesars Palace é na Lua"), quantos diamantes são precisos, e os nomes — "Walt Disney
+  World" e "Caesars Palace" são marcas; pela regra das personagens originais, proposta de parque e palácio originais.
 - **Personagens: só originais.** Arquétipos pedidos (princesa, unicórnio, 3 caçadoras-cantoras K-pop,
   extraterrestre fofo, guerreira de ~1500 d.C., jogadora de vólei, bailarina, karateca) com nomes, visual e
   música próprios — **nunca** personagens, nomes ou arte da Disney, de "KPop Demon Hunters" ou outra IP existente.
-- **Atribuição OSM obrigatória** ("© OpenStreetMap contributors") visível no jogo (ex.: ecrã de créditos/definições).
+- **Gato a passear (src/wandercat.ts):** um gato cinzento por cidade anda pelos passeios (nunca na estrada); quando ela chega
+  perto, para, olha para ela, mia e dá um saltinho, e depois segue caminho.
+- **Sentada** (baloiço, sofá, cadeiras, autocarro, diversões): as pernas ficam para a frente, do lado da cara.
+- **Aterragem:** filmada do lado de lá da pista — o terminal e a torre ficam atrás da pista e o avião entra pela esquerda
+  e para à direita. A descolagem mantém a câmara antiga.
+- **Atribuição OSM:** só passa a ser obrigatória se algum dia se voltarem a usar dados do OpenStreetMap (hoje não se usam).
 - **Definition of done:** corre em `localhost:1234` sem erros na consola, testado no browser (skill `browser-automation`)
   e a ≥30 fps num tablet médio; validado pelo Telmo.
 

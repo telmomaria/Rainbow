@@ -18,6 +18,13 @@ const TAUNTS = [
   'Hoje estou mesmo mau!',
 ];
 const HIT_TAUNTS = ['Ah ah! Apanhei-te!', 'Toma lá!', 'Ui, que moedinhas tão boas!'];
+const MARTIAN_TAUNTS = [
+  'Blip blop! As moedas!',
+  'Marciano quer brilhar!',
+  'Não fujas, terráqueo!',
+  'Ziip! Moedinhas!',
+];
+const MARTIAN_HITS = ['Blip! Apanhei-te!', 'Toma, terráqueo!', 'Ziip ziip!'];
 
 /** How many creatures roam, given the coins the character carries: few at first, more as she gets richer. */
 export function monstersFor(coins: number): number {
@@ -47,19 +54,38 @@ export interface MonsterEvents {
 
 const COLORS = [0x8e44ad, 0x27ae60, 0x2c3e50, 0xc0392b, 0x16a085];
 
+export interface MonsterOpts {
+  /** Moon look + taunts (LUA4). */
+  martian?: boolean;
+  /** Keep feet on uneven ground (Moon hills). */
+  heightAt?: (x: number, z: number) => number;
+  /** Places they must not enter (deep craters — LUA6). */
+  blocked?: (x: number, z: number) => boolean;
+}
+
 export class Monsters {
   private readonly list: Monster[] = [];
   private tauntCooldown = 3;
   /** Settings difficulty: 0.5 = easy (half the creatures), 1 = medium, 2 = hard (double). */
   difficulty = 1;
+  /** Jewel shield (jewels.ts): while true the creatures run away from her shine and can't take coins. */
+  scared = false;
   /** The same creature may take coins at most twice in a row. */
   private lastHitter: Monster | null = null;
   private streak = 0;
+  private readonly martian: boolean;
+  private readonly heightAt?: (x: number, z: number) => number;
+  private readonly blocked?: (x: number, z: number) => boolean;
 
   constructor(
     private readonly scene: THREE.Scene,
     private readonly obstacles: Obstacle[],
-  ) {}
+    opts: MonsterOpts = {},
+  ) {
+    this.martian = !!opts.martian;
+    this.heightAt = opts.heightAt;
+    this.blocked = opts.blocked;
+  }
 
   get count(): number {
     return this.list.filter((m) => !m.leaving).length;
@@ -106,11 +132,14 @@ export class Monsters {
       const dz = player.z - g.position.z;
       const dist = Math.hypot(dx, dz);
 
+      // jewel shield: anyone who sees her backs off, and keeps backing off while she is near
+      if (this.scared && dist < SEE_DIST && (m.state !== 'retreat' || m.stateTime > 2)) this.setState(m, 'retreat');
       if (m.state === 'retreat' && m.stateTime > 3) this.setState(m, 'wander');
       if (m.state === 'wander' && dist < SEE_DIST) {
         this.setState(m, 'chase');
         if (this.tauntCooldown <= 0) {
-          ev.say = TAUNTS[Math.floor(Math.random() * TAUNTS.length)];
+          const bag = this.martian ? MARTIAN_TAUNTS : TAUNTS;
+          ev.say = bag[Math.floor(Math.random() * bag.length)];
           this.tauntCooldown = 7;
         }
       }
@@ -132,7 +161,7 @@ export class Monsters {
         const wz = m.wanderTo.z - g.position.z;
         const wd = Math.hypot(wx, wz);
         if (wd < 1 || m.stateTime > 8) {
-          m.wanderTo = randomFreeSpot(this.obstacles, { center: g.position, range: 15, radius: RADIUS });
+          m.wanderTo = this.freeSpot(g.position, 15);
           m.stateTime = 0;
         } else {
           vx = wx / wd;
@@ -144,26 +173,44 @@ export class Monsters {
       if (speed > 0) {
         const nx = g.position.x + vx * speed * dt;
         const nz = g.position.z + vz * speed * dt;
-        if (isFree(nx, g.position.z, RADIUS, this.obstacles)) g.position.x = nx;
-        if (isFree(g.position.x, nz, RADIUS, this.obstacles)) g.position.z = nz;
+        if (this.canStand(nx, g.position.z)) g.position.x = nx;
+        if (this.canStand(g.position.x, nz)) g.position.z = nz;
         g.rotation.y = Math.atan2(-vx, -vz);
       }
-      // bouncy walk
+      // bouncy walk (feet follow the ground on the Moon)
       const hop = Math.abs(Math.sin(m.phase * (m.state === 'chase' ? 12 : 6)));
+      const ground = this.heightAt?.(g.position.x, g.position.z) ?? 0;
+      g.position.y = ground;
       m.body.position.y = 0.7 + hop * 0.25;
       m.body.scale.set(1 + (1 - hop) * 0.08, 1 - (1 - hop) * 0.08, 1 + (1 - hop) * 0.08);
 
-      if (m.state === 'chase' && dist < HIT_DIST && !ev.hit) {
+      // rooftops / stairs: she is above them — they don't climb (I69)
+      if (m.state === 'chase' && dist < HIT_DIST && !ev.hit && player.y < 1.5) {
         this.setState(m, 'retreat');
         if (m === this.lastHitter && this.streak >= 2) continue; // third time in a row: it just backs off
         this.streak = m === this.lastHitter ? this.streak + 1 : 1;
         this.lastHitter = m;
         ev.hit = g.position.clone();
-        ev.say = HIT_TAUNTS[Math.floor(Math.random() * HIT_TAUNTS.length)];
+        const hits = this.martian ? MARTIAN_HITS : HIT_TAUNTS;
+        ev.say = hits[Math.floor(Math.random() * hits.length)];
         this.tauntCooldown = 5;
       }
     }
     return ev;
+  }
+
+  private canStand(x: number, z: number): boolean {
+    if (!isFree(x, z, RADIUS, this.obstacles)) return false;
+    if (this.blocked?.(x, z)) return false;
+    return true;
+  }
+
+  private freeSpot(center: THREE.Vector3, range: number): THREE.Vector3 {
+    for (let i = 0; i < 12; i++) {
+      const p = randomFreeSpot(this.obstacles, { center, range, radius: RADIUS });
+      if (!this.blocked?.(p.x, p.z)) return p;
+    }
+    return center.clone();
   }
 
   private setState(m: Monster, s: State): void {
@@ -172,9 +219,14 @@ export class Monsters {
   }
 
   private spawn(player: THREE.Vector3): void {
-    const p = randomFreeSpot(this.obstacles, { center: player, range: 60, radius: RADIUS, avoid: player, minDist: 25 });
-    const { group, body } = buildMonster();
+    let p = randomFreeSpot(this.obstacles, { center: player, range: 60, radius: RADIUS, avoid: player, minDist: 25 });
+    for (let i = 0; i < 10 && this.blocked?.(p.x, p.z); i++) {
+      p = randomFreeSpot(this.obstacles, { center: player, range: 60, radius: RADIUS, avoid: player, minDist: 20 });
+    }
+    if (this.blocked?.(p.x, p.z)) return;
+    const { group, body } = this.martian ? buildMartian() : buildMonster();
     group.position.copy(p);
+    group.position.y = this.heightAt?.(p.x, p.z) ?? 0;
     group.scale.setScalar(0.01);
     this.scene.add(group);
     this.list.push({ group, body, state: 'wander', stateTime: 0, wanderTo: p.clone(), phase: Math.random() * 10, scale: 0, leaving: false });
@@ -201,7 +253,6 @@ function buildMonster(): { group: THREE.Group; body: THREE.Mesh } {
     const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), black);
     pupil.position.set(0, 0, -0.12);
     eye.add(pupil);
-    // angry eyebrow, tilted down towards the middle
     const brow = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.06, 0.06), black);
     brow.position.set(side * 0.22, 0.36, -0.52);
     brow.rotation.z = side * -0.45;
@@ -210,9 +261,54 @@ function buildMonster(): { group: THREE.Group; body: THREE.Mesh } {
     h.rotation.z = side * -0.35;
     body.add(eye, brow, h);
   }
-  // grumpy mouth
   const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.03, 6, 12, Math.PI), black);
   mouth.position.set(0, -0.12, -0.55);
   body.add(mouth);
+  return { group, body };
+}
+
+/** Friendly green martian: antennae, big eyes, three fingers — same chase rules as the city creatures. */
+function buildMartian(): { group: THREE.Group; body: THREE.Mesh } {
+  const group = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({ color: 0x51cf66, roughness: 0.55 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 18, 14), skin);
+  body.position.y = 0.75;
+  body.castShadow = true;
+  group.add(body);
+  // oval head a bit bigger
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), skin);
+  head.scale.set(1, 1.15, 0.9);
+  head.position.y = 1.45;
+  head.castShadow = true;
+  group.add(head);
+  const white = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const black = new THREE.MeshStandardMaterial({ color: 0x111111 });
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), white);
+    eye.position.set(side * 0.18, 0.05, -0.32);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), black);
+    pupil.position.set(0, 0, -0.12);
+    eye.add(pupil);
+    head.add(eye);
+    // antenna
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 6), skin);
+    ant.position.set(side * 0.2, 0.55, 0);
+    ant.rotation.z = side * -0.35;
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), new THREE.MeshStandardMaterial({ color: 0xff6b9d, emissive: 0xff6b9d, emissiveIntensity: 0.4 }));
+    tip.position.y = 0.28;
+    ant.add(tip);
+    head.add(ant);
+  }
+  // smile
+  const smile = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.025, 6, 12, Math.PI), black);
+  smile.position.set(0, -0.12, -0.35);
+  smile.rotation.x = Math.PI;
+  head.add(smile);
+  // stubby legs
+  for (const side of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.45, 8), skin);
+    leg.position.set(side * 0.22, 0.25, 0);
+    group.add(leg);
+  }
   return { group, body };
 }

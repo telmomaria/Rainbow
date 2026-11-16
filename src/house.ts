@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { audioContext, tone } from './audio';
+import { feel } from './bus';
 import type { GameCtx } from './gamectx';
 import type { SwingSeat } from './props';
 import type { Interactable, Obstacle } from './world';
@@ -9,16 +10,17 @@ import { ball, box, cyl, findPlot, mat, toWorld, worldBox, type Plot } from './v
  * A house in every city that she can walk into: hall, kitchen, living + dining room, bathroom, bedroom.
  * Everything inside reacts to touch (no text/UI): doorbell, coat rack, light switch, fridge, stove, taps, TV, radio,
  * lamps, shower, toilet, wardrobe, toy box… Sofa, dining chairs and the bed are clicked (or Enter next to them)
- * to sit / lie down; any key or tap gets up again. The roof disappears while she's inside so the camera sees in.
+ * to sit / lie down; any key or tap gets up again. The roof disappears while she's inside; the camera stays normal.
  *
- * Local frame (venue.ts convention): front wall z = 0 facing the road (+Z), house spans x ∈ [-8, 8], z ∈ [-14, 0].
- * Rooms: kitchen (x -8..-2, z -6..0) · hall (-2..2, -6..0) · living + dining (2..8, -14..0) ·
- *        bathroom (-8..-3.5, -14..-6) · bedroom (-3.5..2, -14..-6).
+ * Local frame (venue.ts convention): front wall z = 0 facing the road (+Z), house spans x ∈ [-10, 10], z ∈ [-16, 0].
+ * Rooms: kitchen (x -10..-2, z -6..0) · hall (-2..2, -6..0) · living + dining (2..10, -16..0) ·
+ *        bathroom (-10..-3.5, -16..-6) · bedroom (-3.5..2, -16..-6).
+ * Taller walls (WALL_H) so the normal third-person camera works indoors with the roof hidden.
  */
 
-const HW = 8;
-const BACK = -14;
-const WALL_H = 2.6;
+const HW = 10;
+const BACK = -16;
+const WALL_H = 3.8;
 const T = 0.2;
 
 /** Outside colours of the house = the colours of the country's flag (walls · trims and door · roof). */
@@ -42,9 +44,62 @@ const FLAG_COLORS: Record<string, HouseColors> = {
   'Cidade do México': { wall: 0xffffff, trim: 0x006847, roof: 0xce1126 }, // México
   Reiquiavique: { wall: 0x02529c, trim: 0xffffff, roof: 0xdc1e35 }, // Islândia
   Nuuk: { wall: 0xd00c33, trim: 0xffffff, roof: 0xffffff }, // Gronelândia
+  'Estados Unidos': { wall: 0xffffff, trim: 0x3c3b6e, roof: 0xb22234 }, // Estados Unidos
 };
 export function houseColors(city: string): HouseColors {
   return FLAG_COLORS[city] ?? { wall: 0xffe8cc, trim: 0xffffff, roof: 0xc92a2a };
+}
+
+/**
+ * Mastro + pano com as 3 cores da bandeira (wall · trim · roof).
+ * Layout tipo Portugal: campo esquerdo (wall) + direito (roof) + círculo (trim) no meio —
+ * legível para crianças (silhueta clara, cores certas).
+ */
+export function buildCountryFlag(colors: HouseColors): THREE.Group {
+  const g = new THREE.Group();
+  const poleH = 8.2;
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.08, 0.1, poleH, 10),
+    new THREE.MeshStandardMaterial({ color: 0xc0c4cc, metalness: 0.55, roughness: 0.35 }),
+  );
+  pole.position.y = poleH / 2;
+  pole.castShadow = true;
+  const ball = new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0xffd60a, metalness: 0.4, roughness: 0.35 }),
+  );
+  ball.position.y = poleH + 0.12;
+  g.add(pole, ball);
+
+  const cloth = new THREE.Group();
+  cloth.position.set(0.08, poleH - 0.15, 0);
+  const fw = 2.6;
+  const fh = 1.65;
+  const leftW = fw * 0.4;
+  const rightW = fw * 0.6;
+  const left = new THREE.Mesh(
+    new THREE.BoxGeometry(leftW, fh, 0.06),
+    new THREE.MeshStandardMaterial({ color: colors.wall, roughness: 0.85, side: THREE.DoubleSide }),
+  );
+  left.position.set(leftW / 2, -fh / 2, 0);
+  const right = new THREE.Mesh(
+    new THREE.BoxGeometry(rightW, fh, 0.06),
+    new THREE.MeshStandardMaterial({ color: colors.roof, roughness: 0.85, side: THREE.DoubleSide }),
+  );
+  right.position.set(leftW + rightW / 2, -fh / 2, 0);
+  // disco amarelo (ou trim) dos dois lados — legível da estrada e da pista
+  const emblemMat = new THREE.MeshStandardMaterial({ color: colors.trim, roughness: 0.65, side: THREE.DoubleSide });
+  for (const side of [-1, 1] as const) {
+    const emblem = new THREE.Mesh(new THREE.CircleGeometry(0.42, 22), emblemMat);
+    emblem.position.set(leftW, -fh / 2, side * 0.05);
+    emblem.castShadow = true;
+    cloth.add(emblem);
+  }
+  for (const m of [left, right]) m.castShadow = true;
+  cloth.add(left, right);
+  g.add(cloth);
+  g.userData.flagCloth = cloth;
+  return g;
 }
 
 interface Toggle {
@@ -191,7 +246,10 @@ export class House {
   private seat(lx: number, ly: number, lz: number, face: number, offX: number, offZ: number, lying = false): SwingSeat {
     const plot = this.plot!;
     return {
-      take: () => 0,
+      take: () => {
+        feel(lying ? 'sleep' : 'rest'); // the bed fills her energy; sofa and chairs rest her a little
+        return 0;
+      },
       pose: () => {
         const p = this.root.localToWorld(new THREE.Vector3(lx, ly, lz));
         return { pos: p, heading: plot.rot + face, tilt: 0, lying };
@@ -217,7 +275,7 @@ export class House {
     this.wall(2, -6, 2, 0, [[-4.3, -2.7]], inner); // hall | dining
     this.wall(2, BACK, 2, -6, [], inner); // bedroom | living
     this.wall(-HW, -6, 2, -6, [[-1.3, 0.3]], inner); // front rooms | bathroom + bedroom
-    this.wall(-3.5, BACK, -3.5, -6, [[-9.6, -8.0]], inner); // bathroom | bedroom
+    this.wall(-3.5, BACK, -3.5, -6, [[-11.2, -9.6]], inner); // bathroom | bedroom
     // floors: wood in hall/living/bedroom, tiles in kitchen and bathroom
     this.floor(-2, 2, -6, 0, 0xc8a27a);
     this.floor(-HW, -2, -6, 0, 0xe9ecef);
@@ -231,8 +289,9 @@ export class House {
     const win = (x: number, z: number, alongX: boolean, sign: number) => {
       const fx = alongX ? 1.4 : 0.06;
       const fz = alongX ? 0.06 : 1.4;
-      box(g, mat(0xffffff), alongX ? 1.6 : 0.08, 1.2, alongX ? 0.08 : 1.6, x + (alongX ? 0 : sign * 0.13), 1.45, z + (alongX ? sign * 0.13 : 0));
-      box(g, glass, fx, 1.0, fz, x + (alongX ? 0 : sign * 0.16), 1.45, z + (alongX ? sign * 0.16 : 0));
+      const wy = 1.85;
+      box(g, mat(0xffffff), alongX ? 1.6 : 0.08, 1.4, alongX ? 0.08 : 1.6, x + (alongX ? 0 : sign * 0.13), wy, z + (alongX ? sign * 0.13 : 0));
+      box(g, glass, fx, 1.15, fz, x + (alongX ? 0 : sign * 0.16), wy, z + (alongX ? sign * 0.16 : 0));
     };
     win(-5, 0, true, 1);
     win(5, 0, true, 1);
@@ -269,8 +328,8 @@ export class House {
     const door = new THREE.Group();
     door.position.set(-0.9, 0, 0);
     g.add(door);
-    box(door, mat(this.colors.trim), 1.8, 2.2, 0.08, 0.9, 1.1, 0);
-    ball(door, mat(0xfcc419, 0.3), 0.07, 1.55, 1.05, 0.08);
+    box(door, mat(this.colors.trim), 1.8, 2.6, 0.08, 0.9, 1.3, 0);
+    ball(door, mat(0xfcc419, 0.3), 0.07, 1.55, 1.25, 0.08);
     this.frontDoor = door;
     box(g, mat(0xced4da), 2.2, 0.08, 1.2, 0, 0.04, 0.7);
     const path = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 8), mat(0xdee2e6));
@@ -578,7 +637,7 @@ export class House {
     ball(duck, mat(0xfcc419), 0.1, 0, 0.05, 0);
     ball(duck, mat(0xfcc419), 0.06, 0, 0.14, -0.06);
     ball(duck, mat(0xff922b), 0.03, 0, 0.13, -0.12);
-    this.solid(-HW, -5.35, -14, -12.8, 0.6);
+    this.solid(-HW, -5.35, BACK, -12.8, 0.6);
     const sh: Toggle = { on: false, t: 0 };
     this.thing(tub, -6.6, -12.3, 0.7, () => {
       sh.t = 4;
@@ -729,7 +788,7 @@ export class House {
 
   /* ------------------------------------------------------------ per frame */
 
-  /** True while she's inside the house (main: camera looks down from above; no idle pause). */
+  /** True while she's inside the house (main: no idle pause; roof hidden; normal camera). */
   isInside(): boolean {
     return this.inside;
   }

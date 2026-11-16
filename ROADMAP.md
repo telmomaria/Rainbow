@@ -12,46 +12,51 @@ Aplicar no Session End Protocol.
 
 | # | Action | Owner | Blocker |
 |---|---|---|---|
-| 1 | Telmo testa as sessões 2–3 (concerto, piscina, autocarro, casa, Tóquio, feira) e aprova o commit | Telmo | none |
-| 2 | Medir fps em tablet com feira (15 diversões)/concerto/piscina/casa/autocarros; otimizar se < 30 | agent | none |
-| 3 | Spike OSM: carregar um quarteirão real (Porto) → ruas + edifícios low-poly com colisões | agent | decidir fonte de dados (Overpass vs pré-processado) |
-| 4 | Afinar acessórios (chapéus vs coroa/laço, capa vs mochila) e gesto de atirar/arco | agent | none |
-| 5 | Morada de início nas Definições | agent | #3 |
-
----|---|---|---|
-| 1 | Telmo testa a sessão toda no browser (voz, dificuldade, situações, compras, voo) e valida as 36 perguntas em src/questions.ts | Telmo | none |
-| 2 | Roupas e acessórios (óculos, chapéus) para encontrar e trocar | agent | none |
-| 3 | Spike OSM: carregar um quarteirão real (Lisboa) → ruas + edifícios low-poly com colisões | agent | decidir fonte de dados (Overpass vs pré-processado) |
-| 4 | Morada de início nas Definições | agent | #3 |
-| 5 | Verificar o não-verificado: adeptos a perseguir, empurrões no bar, chuva/neve/trovoada, viragens do trânsito, fps em tablet | agent | none |
+| 1 | Telmo aprova as propostas de 2026-11-15 (90 interações · 30 ganhar · 50 gastar · joias · ex-líbris · 18 regras · EUA e Lua com 3 escolhas) na página `rainbow-propostas.canvas.tsx` (pasta `canvases` do projeto no Cursor; as escolhas ficam em `rainbow-propostas.canvas.data.json`) | Telmo | none |
+| 2 | Telmo joga e valida as 6 correções de 2026-11-15 (por commitar) e as sessões 2–3 (`68e30da`) | Telmo | none |
+| 3 | Fase 1 do brief: energia, humor, notas, joias com uso, duplo clique e dar | agent | #1 |
+| 4 | Fases 2–6 do brief, por esta ordem: personagens/profissões/polícia/perguntas do dia a dia → brincar/criar/natureza/escadas → serviços e lojas → cidades diferentes com ex-líbris, casa maior → EUA com Cabo Canaveral, Lua e final com os diamantes | agent | #1 |
+| 5 | Medir fps em tablet (feira, concerto, piscina, casa, autocarros); afinar chapéus, capa e gesto do arco | agent | none |
 
 ---
 
 ## 📋 Planned
 
 ### 🔴 Critical
-- ⬜ Mundo OSM estilizado por cidade (13 cidades) com cache local dos dados
-- ⬜ Morada de início nas Definições (geocoding com cache; respeitar política Nominatim)
-- ✅ Seleção de personagem: 10 personagens originais (princesa · unicórnio · 3 caçadoras-cantoras K-pop · extraterrestre · guerreira ~1500 d.C. · voleibolista · bailarina · karateca)
+- ⛔ Mundo OSM estilizado por cidade — o Telmo decidiu a 2026-11-15 não usar mapas reais (grandes demais para as crianças); o mundo gerado fica
+- ⛔ Morada de início nas Definições — dependia do mapa real; parada até o Telmo dizer se ainda a quer noutra forma
+- ⬜ **Brief de 2026-11-15** (decidido pelo Telmo; os números propostos estão por aprovar no canvas, regras R01–R18):
+  - ⬜ Indicadores de energia e de humor (5 caras; o humor desce um nível a cada 20 min de jogo); hospital grátis, serviços pagos
+  - ⬜ Notas de 20 moedas (1 por cada 100 moedas) · joias com uso (banco e outros) · uma joia em cada ex-líbris
+  - ⬜ Polícia que aparece raramente e faz uma pergunta simples (em inglês em Londres, 1.º ano) · perguntas do dia a dia
+  - ⬜ Personagens com quem falar (elfo, fada, rei, feiticeiro, aviador, corredor, futebolista) e profissões — I04 heróis, I05 astronauta e I08 guardião removidos (pedido Telmo)
+  - ⬜ Interações: pintar parede, carta nos correios, escorrega, bola, beber na fonte, praia, animais com som, pássaros, duplo clique apanha flor, dar flor
+  - ⬜ Serviços pagos: cabeleireiro (escolher penteado), sapatos, roupa, acessórios, massagem, SPA
+  - ⬜ Escadas em edifícios onde os monstros não sobem · gatinho na árvore com escada (o unicórnio voa) · palco para cantar e ganhar moedas
+  - ⬜ Cidades diferentes entre si, cada uma com os seus ex-líbris e algo para fazer em cada um · último nível com o dobro da área (pedido para Nuuk; por confirmar se passa para a Lua)
+  - ⬜ **Final do jogo:** penúltimo nível = Estados Unidos (Estátua da Liberdade, ponte de São Francisco, parque de diversões; sem aeroporto, foguetão em Cabo Canaveral) → último nível = Lua (crateras, moedas, subidas e descidas, areia, rochas, marcianos que tiram moedas) → colocar os diamantes num local específico termina o jogo. Por decidir: posição de Nuuk, onde fica o palácio, quantos diamantes, nomes originais para o parque e o palácio (canvas, separador "EUA e Lua")
+  - ⬜ Casa mais alta e maior, vista também com a câmara normal (não só de cima)
+- ✅ Seleção de personagem: 12 originais (Lia · Estrela · Bia, Nina, Inês · Zuca · Leonor · Rita · Clara · Tomás · Vega · Alice)
 - 🔄 Personagens-NPC com perguntas — base feita (36 perguntas, voz, 3 opções, sem repetição); errar → volta em ~3 min sem revelar; falta banco maior e voz pt-PT garantida
 - ✅ Bichos maus: spawn em função das moedas, falam, atrapalham, batem (perde moedas)
-- 🔄 Subida de nível aos 100 moedas → próxima cidade — viagem feita; cidades ainda são o mundo provisório com palete própria (falta OSM) (Portugal → Roma → Madrid → Londres → Paris → Varsóvia → Vilnius → Moscovo → Pequim → Rio → Cidade do México → Reiquiavique → Nuuk)
-- ⬜ Atribuição "© OpenStreetMap contributors" visível
+- 🔄 Subida de nível aos 100 moedas → próxima cidade — viagem feita; as cidades ainda só diferem na palete (faltam traçados próprios e ex-líbris). Porto → Roma → Madrid → Londres → Paris → Varsóvia → Vilnius → Moscovo → Pequim → Tóquio → Rio de Janeiro → Cidade do México → Reiquiavique → Nuuk
+- ⛔ Atribuição "© OpenStreetMap contributors" — sem dados OSM, não se aplica
+- ⬜ Saves anteriores a Tóquio: o índice 9 recua uma cidade entre Rio e Nuuk (sem migração)
 
 ### 🟡 Important
 - ✅ Interatividade sem UI: botão→luz, entrar/conduzir carro, dar moeda a um pobre, + 12 adereços por cidade
-- ⬜ Roupas e acessórios (óculos, chapéus) para encontrar e trocar
+- ⬜ Roupas para encontrar e trocar fora da feira. A feira já grava acessórios (`save.wear`); chapéus, capa e arco ficam no NEXT #4
 - ⬜ Áudio: músicas/sons originais por personagem e cidade
 - ⬜ Desempenho ≥30 fps em tablet médio (LOD, instancing, culling)
 
 ### 🟢 Nice-to-have
-- ⬜ Monumentos icónicos low-poly por cidade (Coliseu, Torre Eiffel, Big Ben…)
 - ⬜ Mais bancos de perguntas / dificuldade adaptativa
 - ⬜ Deploy estático (GitHub Pages)
+- ⬜ Limites conhecidos, sem data: autocarro não usa as pontas das ruas; bilhete do concerto não fica preso à sessão; espectadores atravessam-se
 
 ---
 
-## ✅ Completed (compressed)
+## <span style="color:#4ade80">✅ Completed (compressed)</span>
 
 - ✅ #NP — scaffold v7 gerado, stack decidida, repo ligado (2026-11-11)
 - ✅ Bootstrap Vite 8 + Three.js 0.187 + TS, porta 1234; mundo placeholder; personagem placeholder (2026-11-11)
@@ -68,6 +73,7 @@ Aplicar no Session End Protocol.
 - ✅ Casa com 5 divisões e objetos interativos (cores da bandeira), Tóquio, feira popular com 15 diversões e acessórios gravados (2026-11-14)
 - ✅ Concerto de 20 em 20 min (contagem, público e artistas entram/saem), piscina (cabines, 3 estilos, espreguiçadeiras), autocarro com paragens e linhas, baloiço montável, Vega e Alice, trânsito sem bloqueios, primeira cidade = Porto (2026-11-14)
 - ✅ Página principal acessível em jogo (também no hospital), ⚙ Definições com Zero/Fácil/Médio/Difícil, Novo jogo com confirmação (2026-11-12)
+- ✅ Perguntas lidas devagar (0,75), pernas para a frente ao sentar, som da chuva nas Definições (Sem som/Médio/Normal), aterragem vista do lado de lá da pista, gato a passear, ninguém parado na rua — verificado no browser, por commitar (2026-11-15)
 
 ---
 
@@ -84,6 +90,9 @@ Aplicar no Session End Protocol.
 | v1.6 | 2026-11-11 | Aeroporto e voo, ícone, Casa, 10 personagens, carro, pobre, 12 adereços |
 | v1.7 | 2026-11-11 | Cidade viva: lojas, pombos, adeptos, bar, trânsito, hospital, tempo real, gato na árvore; ecrã inicial e definições |
 | v1.8 | 2026-11-11 | Compra por clique, inventário, definições no início, dia/noite real com candeeiros |
+| v2.4 | 2026-11-15 | Final do jogo definido pelo Telmo: EUA (Cabo Canaveral) → Lua → entregar os diamantes; propostas US/LUA/FIM no canvas |
+| v2.3 | 2026-11-15 | Brief didático do Telmo: sem mapas reais; 6 correções feitas; propostas (90/30/50, joias, ex-líbris, regras) à espera de aprovação |
+| v2.2 | 2026-11-15 | #SEP: `68e30da` já em origin/main; NEXT duplicado (Lisboa) removido; 14 cidades e 12 personagens alinhados com o código |
 | v2.1 | 2026-11-14 | Sessão 3: casa, Tóquio, feira popular (15 diversões), acessórios (#SEP) |
 | v2.0 | 2026-11-14 | Sessão 2: concerto, piscina, autocarro, baloiço, 12 personagens, trânsito corrigido, Porto (#SEP) |
 | v1.9 | 2026-11-12 | Menu principal em jogo, Definições (Zero…Difícil), confirmação de Novo jogo — fecho da sessão 1 (#SEP) |

@@ -1,5 +1,5 @@
 import { itemDef, itemKinds } from './items';
-import { speak, sfx, stopSpeaking } from './audio';
+import { QUESTION_RATE, speak, sfx, stopSpeaking } from './audio';
 import type { Question } from './questions';
 
 const style = document.createElement('style');
@@ -46,6 +46,33 @@ style.textContent = `
   .quiz-opt.wrong { background: #e03131 !important; }
   .quiz-opt.dim { filter: grayscale(.8) opacity(.5); }
   .quiz.done .quiz-opt { pointer-events: none; }
+  .photo-view {
+    position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
+    background: rgba(20, 12, 40, .78); animation: fadein .25s; cursor: pointer;
+    font-family: system-ui, sans-serif;
+  }
+  .photo-view .photo-frame {
+    position: relative; max-width: min(92vw, 520px); max-height: min(88vh, 680px);
+    padding: 14px 14px 56px; background: #fffef8; border-radius: 18px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.45); transform: rotate(-1.2deg);
+    animation: photoPop .35s ease-out;
+  }
+  @keyframes photoPop { from { transform: rotate(-1.2deg) scale(.7); opacity: 0; } }
+  .photo-view img {
+    display: block; width: 100%; height: auto; max-height: min(78vh, 600px);
+    object-fit: contain; border-radius: 8px; background: #efe8ff;
+  }
+  .photo-view .photo-close {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    border: 0; border-radius: 999px; padding: 10px 28px; cursor: pointer;
+    background: #7c3aed; color: #fff; font: 900 22px/1 system-ui, sans-serif;
+    box-shadow: 0 5px 0 rgba(0,0,0,.18);
+  }
+  .photo-flash {
+    position: fixed; inset: 0; z-index: 45; background: #fff; pointer-events: none;
+    animation: flashOut .45s ease-out forwards;
+  }
+  @keyframes flashOut { 0% { opacity: 1; } 100% { opacity: 0; } }
 `;
 document.head.appendChild(style);
 
@@ -100,9 +127,12 @@ function el(tag: string, className: string): HTMLElement {
  * Answer by click/tap, by keys 1/2/3, or by arrows ← ↑ → (left / middle / right).
  * Resolves true if the answer was right. One try per meeting; a wrong answer is not corrected.
  */
-export function askQuestion(q: Question, reward: number): Promise<boolean> {
+export function askQuestion(q: Pick<Question, 'text' | 'answers'>, reward: number, lang: 'pt' | 'en' = 'pt'): Promise<boolean> {
   const options = shuffle([...q.answers]);
   const correct = q.answers[0];
+  // English questions (the police officer in London): question and answers are said in English, the rest in Portuguese
+  const hello = lang === 'en' ? 'Hello!' : 'Olá!';
+  const or = lang === 'en' ? 'Or' : 'Ou';
 
   const box = document.createElement('div');
   box.className = 'quiz';
@@ -115,7 +145,7 @@ export function askQuestion(q: Question, reward: number): Promise<boolean> {
     const b = document.createElement('button');
     b.className = 'quiz-opt';
     b.textContent = label;
-    b.addEventListener('mouseenter', () => void speak([label])); // hovering an answer reads it out
+    b.addEventListener('mouseenter', () => void speak([label], QUESTION_RATE, lang)); // hovering an answer reads it out
     opts.appendChild(b);
     return b;
   });
@@ -123,11 +153,11 @@ export function askQuestion(q: Question, reward: number): Promise<boolean> {
   again.className = 'quiz-repeat';
   again.setAttribute('aria-label', 'Repetir a pergunta');
   again.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="#7c3aed" stroke-width="2.6" stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="#7c3aed" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  again.addEventListener('click', () => void speak([q.text, `${options[0]}? ${options[1]}? Ou ${options[2]}?`]));
+  again.addEventListener('click', () => void speak([q.text, `${options[0]}? ${options[1]}? ${or} ${options[2]}?`], QUESTION_RATE, lang));
   box.append(again, text, opts);
   document.body.appendChild(box);
 
-  speak(['Olá!', q.text, `${options[0]}? ${options[1]}? Ou ${options[2]}?`]);
+  speak([hello, q.text, `${options[0]}? ${options[1]}? ${or} ${options[2]}?`], QUESTION_RATE, lang);
 
   return new Promise((resolve) => {
     let answered = false;
@@ -175,6 +205,102 @@ function shuffle<T>(a: T[]): T[] {
 }
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Spoken choice with big options (consent, yes/no…). Not a scored quiz — no “certo/errado”.
+ * Click/tap, keys 1…n, or ← / → (first / last). Resolves the chosen index.
+ */
+export function askChoice(text: string, options: string[]): Promise<number> {
+  const box = document.createElement('div');
+  box.className = 'quiz';
+  const p = document.createElement('p');
+  p.className = 'quiz-text';
+  p.textContent = text;
+  const opts = document.createElement('div');
+  opts.className = 'quiz-opts';
+  const buttons = options.map((label) => {
+    const b = document.createElement('button');
+    b.className = 'quiz-opt';
+    b.textContent = label;
+    b.addEventListener('mouseenter', () => void speak([label], QUESTION_RATE));
+    opts.appendChild(b);
+    return b;
+  });
+  const again = document.createElement('button');
+  again.className = 'quiz-repeat';
+  again.setAttribute('aria-label', 'Repetir a pergunta');
+  again.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="#7c3aed" stroke-width="2.6" stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="#7c3aed" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const spokenOpt = (o: string) => o.replace(/[!?.]+$/u, '');
+  const list =
+    options.length === 2
+      ? `${spokenOpt(options[0])}? Ou ${spokenOpt(options[1])}?`
+      : options.map((o, i) => (i === options.length - 1 ? `Ou ${spokenOpt(o)}?` : `${spokenOpt(o)}?`)).join(' ');
+  again.addEventListener('click', () => void speak([text, list], QUESTION_RATE));
+  box.append(again, p, opts);
+  document.body.appendChild(box);
+  void speak([text, list], QUESTION_RATE);
+
+  return new Promise((resolve) => {
+    let done = false;
+    const choose = (i: number) => {
+      if (done || i < 0 || i >= options.length) return;
+      done = true;
+      window.removeEventListener('keydown', onKey, true);
+      stopSpeaking();
+      box.remove();
+      resolve(i);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const n = options.length;
+      const map: Record<string, number> = { ArrowLeft: 0, ArrowRight: n - 1 };
+      if (n >= 3) map.ArrowUp = 1;
+      for (let k = 0; k < n; k++) map[String(k + 1)] = k;
+      if (e.key in map) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        choose(map[e.key]);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    buttons.forEach((b, i) => b.addEventListener('click', () => choose(i)));
+  });
+}
+
+/** Brief white camera flash on screen. */
+export function cameraFlash(): void {
+  const el = document.createElement('div');
+  el.className = 'photo-flash';
+  document.body.appendChild(el);
+  window.setTimeout(() => el.remove(), 480);
+}
+
+/**
+ * Maximised photo overlay. Closes on click/tap, the close button, or any key.
+ */
+export function showPhoto(dataUrl: string): Promise<void> {
+  const ov = document.createElement('div');
+  ov.className = 'photo-view';
+  ov.innerHTML = `<div class="photo-frame"><img alt="A tua foto" src="${dataUrl}"/><button type="button" class="photo-close">Fechar</button></div>`;
+  document.body.appendChild(ov);
+  return new Promise((resolve) => {
+    let closed = false;
+    const close = (e?: Event) => {
+      if (closed) return;
+      closed = true;
+      e?.preventDefault();
+      e?.stopImmediatePropagation();
+      window.removeEventListener('keydown', close, true);
+      ov.remove();
+      resolve();
+    };
+    window.addEventListener('keydown', close, true);
+    ov.addEventListener('pointerdown', (e) => {
+      if ((e.target as HTMLElement).closest('.photo-close') || e.target === ov) close(e);
+    });
+    ov.querySelector('.photo-close')?.addEventListener('click', close);
+  });
+}
 
 const travelStyle = document.createElement('style');
 travelStyle.textContent = `
@@ -371,7 +497,8 @@ pauseStyle.textContent = `
   .settings-box { background: #fff; border-radius: 28px; padding: 24px 28px; box-shadow: 0 10px 30px rgba(0,0,0,.25); text-align: center; }
   .settings-box h2 { margin: 0 0 6px; font: 900 30px/1.1 system-ui, sans-serif; color: #7c3aed; }
   .settings-box p { margin: 0 0 16px; font: 700 18px/1.2 system-ui, sans-serif; color: #7c6c99; }
-  .settings-opts { display: flex; gap: 12px; }
+  .settings-box p.settings-sub { margin-top: 22px; }
+  .settings-opts { display: flex; gap: 12px; justify-content: center; }
   .settings-opts button {
     border: 0; border-radius: 20px; padding: 14px 18px; min-width: 130px; cursor: pointer; background: #f3f0ff;
     font: 900 22px/1.1 system-ui, sans-serif; color: #3b2a5a; box-shadow: 0 5px 0 rgba(124,58,237,.18);
@@ -405,24 +532,18 @@ export function showIdlePause(): Promise<void> {
 export type Difficulty = 'zero' | 'facil' | 'medio' | 'dificil';
 export const DIFFICULTY_FACTOR: Record<Difficulty, number> = { zero: 0, facil: 0.5, medio: 1, dificil: 2 };
 
-/** Settings window (monster difficulty). Resolves when closed. */
-export function openSettings(get: () => Difficulty, set: (d: Difficulty) => void): Promise<void> {
-  const ov = document.createElement('div');
-  ov.className = 'settings';
-  const opts: [Difficulty, string, string][] = [
-    ['zero', '🌈', 'Zero'],
-    ['facil', '🐢', 'Fácil'],
-    ['medio', '🙂', 'Médio'],
-    ['dificil', '🔥', 'Difícil'],
-  ];
-  ov.innerHTML = '<div class="settings-box"><h2>Definições</h2><p>Monstros</p><div class="settings-opts"></div><button class="settings-close">OK</button></div>';
-  const row = ov.querySelector('.settings-opts')!;
-  const buttons = opts.map(([d, icon, label]) => {
+/** How loud the rain sounds (settings): it can be tiring on a long rainy day. */
+export type RainSound = 'off' | 'medio' | 'normal';
+export const RAIN_SOUND_FACTOR: Record<RainSound, number> = { off: 0, medio: 0.4, normal: 1 };
+
+/** One row of big choice buttons; the chosen one is highlighted and its name is spoken. */
+function optionRow<T extends string>(row: Element, opts: [T, string, string][], get: () => T, set: (v: T) => void): void {
+  const buttons = opts.map(([v, icon, label]) => {
     const b = document.createElement('button');
     b.innerHTML = `<span>${icon}</span>${label}`;
-    if (get() === d) b.classList.add('on');
+    if (get() === v) b.classList.add('on');
     b.addEventListener('click', () => {
-      set(d);
+      set(v);
       buttons.forEach((x) => x.classList.remove('on'));
       b.classList.add('on');
       void speak([label]);
@@ -430,6 +551,41 @@ export function openSettings(get: () => Difficulty, set: (d: Difficulty) => void
     row.appendChild(b);
     return b;
   });
+}
+
+/** Settings window (monster difficulty, rain sound). Resolves when closed. */
+export function openSettings(
+  get: () => Difficulty,
+  set: (d: Difficulty) => void,
+  rain: { get: () => RainSound; set: (r: RainSound) => void },
+): Promise<void> {
+  const ov = document.createElement('div');
+  ov.className = 'settings';
+  ov.innerHTML =
+    '<div class="settings-box"><h2>Definições</h2><p>Monstros</p><div class="settings-opts"></div>' +
+    '<p class="settings-sub">Som da chuva</p><div class="settings-opts settings-rain"></div>' +
+    '<button class="settings-close">OK</button></div>';
+  optionRow<Difficulty>(
+    ov.querySelector('.settings-opts')!,
+    [
+      ['zero', '🌈', 'Zero'],
+      ['facil', '🐢', 'Fácil'],
+      ['medio', '🙂', 'Médio'],
+      ['dificil', '🔥', 'Difícil'],
+    ],
+    get,
+    set,
+  );
+  optionRow<RainSound>(
+    ov.querySelector('.settings-rain')!,
+    [
+      ['off', '🔇', 'Sem som'],
+      ['medio', '🌦️', 'Médio'],
+      ['normal', '🌧️', 'Normal'],
+    ],
+    rain.get,
+    rain.set,
+  );
   document.body.appendChild(ov);
   return new Promise((resolve) => {
     const close = () => {

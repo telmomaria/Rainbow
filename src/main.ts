@@ -1,17 +1,21 @@
 import * as THREE from 'three';
 import { CHARACTER_RADIUS, Character } from './character';
 import { Input } from './input';
-import { SPAWN, createWorld, mulberry32, type Interactable } from './world';
+import { PERSON_CLEAR, PERSON_PUSH, SPAWN, createWorld, mulberry32, type Interactable, type Obstacle } from './world';
 import { createProps } from './props';
 import { Collectibles } from './collectibles';
 import { Npcs, type QuestionNpc } from './npcs';
 import { loadSave, writeSave } from './save';
-import { Hud, askQuestion, createHomeButton, setCompass, setFade, showArrival, showBanner, showCityName, showTravel } from './ui';
+import { Hud, askChoice, askQuestion, cameraFlash, createHomeButton, setCompass, setFade, showArrival, showBanner, showCityName, showPhoto, showTravel } from './ui';
 import { speak, sfx, spokenLog, taunt, tone, voiceInfo } from './audio';
 import { CITIES, COINS_PER_LEVEL, cityAt } from './cities';
 import { Monsters } from './monsters';
 import { Airport } from './airport';
 import { Flight } from './flight';
+import { Launch } from './launch';
+import { Spaceport } from './spaceport';
+import { UsaLandmarks } from './usa';
+import { LANDER, MoonAltar, createMoonWorld, inDeepCrater, moonHeight } from './moon';
 import { Car } from './car';
 import { createBeggar } from './beggar';
 import { chooseCharacter, createAvatarButton } from './select';
@@ -24,36 +28,95 @@ import { createHospital, type Hospital } from './hospital';
 import { Weather } from './weather';
 import { StreetLights } from './streetlights';
 import type { GameCtx } from './gamectx';
-import { DIFFICULTY_FACTOR, createBag, showIdlePause } from './ui';
+import { DIFFICULTY_FACTOR, RAIN_SOUND_FACTOR, createBag, showIdlePause, type RainSound } from './ui';
+import { WanderCat } from './wandercat';
 import { isFree, setNoSpawnZones } from './spawn';
 import { Concert } from './concert';
 import { itemDef } from './items';
 import { Pool } from './pool';
 import { House, houseColors } from './house';
 import { Fair } from './fair';
+import { Extras } from './extras';
+import { feel } from './bus';
+import { createPlaygrounds } from './play';
+import { createServices, type ServiceTown } from './services';
+import { createLandmarks, landmarksDebug } from './landmarks';
+import { setCityLampClearer } from './places';
 
 const WALK_SPEED = 6.5; // m/s
 const TURN_SPEED = 2.6; // rad/s (arrow keys)
 const ARRIVE_DIST = 0.6;
 /** `?debug` exposes state on <body data-debug> and accepts teleports, for automated browser checks. */
 const DEBUG = new URLSearchParams(location.search).has('debug');
-/** Debug-only aerial camera (null = normal camera). */
-let aerial: { x: number; z: number; h: number } | null = null;
+/** Soft aerial camera (tower lookouts + debug). null = normal third-person.
+ *  Optional `fromX`/`fromZ`/`lookY` = put the camera at (fromX,h,fromZ) looking at (x,lookY,z). */
+let aerial: { x: number; z: number; h: number; fromX?: number; fromZ?: number; lookY?: number } | null = null;
+window.addEventListener('rainbow-aerial', (e) => {
+  aerial = (e as CustomEvent<null | { x: number; z: number; h: number; fromX?: number; fromZ?: number; lookY?: number }>).detail;
+});
 if (DEBUG) {
   window.addEventListener('rainbow-teleport', (e) => {
     const { x, z, h } = (e as CustomEvent<{ x: number; z: number; h: number }>).detail;
     player.position.set(x, 0, z);
     player.heading = h;
-  });
-  window.addEventListener('rainbow-aerial', (e) => {
-    aerial = (e as CustomEvent<null | { x: number; z: number; h: number }>).detail;
+    camYaw = h; // keep the third-person camera behind her after a debug teleport
   });
   window.addEventListener('rainbow-hospital-end', () => {
     save.hospitalUntil = Date.now();
   });
+  window.addEventListener('rainbow-wear', (e) => {
+    const d = (e as CustomEvent<{ slot?: string; kind?: string | null; clear?: boolean }>).detail || {};
+    if (d.clear) {
+      save.wear = {};
+      player.setWear(save.wear);
+      writeSave(save);
+      return;
+    }
+    if (!d.slot) return;
+    if (d.kind) save.wear[d.slot] = d.kind;
+    else delete save.wear[d.slot];
+    player.setWear(save.wear);
+    writeSave(save);
+  });
   window.addEventListener('rainbow-coins', (e) => {
     save.coins = (e as CustomEvent<number>).detail;
     hud.set('coins', save.coins);
+  });
+  window.addEventListener('rainbow-jewels', (e) => {
+    save.jewels = (e as CustomEvent<number>).detail;
+    hud.set('jewels', save.jewels + save.diamonds);
+    refreshBag();
+  });
+  window.addEventListener('rainbow-diamonds', (e) => {
+    save.diamonds = (e as CustomEvent<number>).detail;
+    hud.set('jewels', save.jewels + save.diamonds);
+    writeSave(save);
+  });
+  // world point → screen pixels, written to <html data-proj> (so automated checks can click on things)
+  window.addEventListener('rainbow-project', (e) => {
+    const { x, y, z } = (e as CustomEvent<{ x: number; y: number; z: number }>).detail;
+    const v = new THREE.Vector3(x, y, z).project(camera);
+    document.documentElement.dataset.proj = JSON.stringify([Math.round(((v.x + 1) / 2) * window.innerWidth), Math.round(((1 - v.y) / 2) * window.innerHeight), +v.z.toFixed(3)]);
+  });
+  window.addEventListener('rainbow-note', (e) => {
+    const { x, z } = (e as CustomEvent<{ x: number; z: number }>).detail;
+    collectibles.debugNote(x, z);
+  });
+  // jump to a city by level index (0 = Porto … 14 = EUA · 15 = Lua)
+  window.addEventListener('rainbow-level', (e) => {
+    const level = (e as CustomEvent<number>).detail;
+    if (typeof level !== 'number' || level < 0 || level >= CITIES.length) return;
+    try {
+      save.level = level;
+      save.pos = null;
+      writeSave(save);
+      loadCity();
+      cityPill.textContent = city.name;
+      showArrival(city.arrival);
+    } catch (err) {
+      console.error('rainbow-level failed', level, err);
+      document.body.dataset.debug = JSON.stringify({ level: save.level, city: city?.name, loadError: String(err) });
+    }
   });
 }
 
@@ -67,8 +130,17 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
 const save = loadSave();
 let city = cityAt(save.level);
-let world = createWorld(scene, city);
+let world = city.kind === 'moon' ? createMoonWorld(scene, city) : createWorld(scene, city);
 const player = new Character(save.character ?? 'princesa');
+// drop broken stub cape (blue flat plate on the back) from older saves
+if (save.wear.back === 'srv-capa' || save.wear.body === 'srv-capa') {
+  delete save.wear.back;
+  delete save.wear.body;
+}
+if (save.wear.neck === 'srv-colar-sapato') {
+  delete save.wear.neck; // old fake "shoe charm" — sapataria now puts real shoes on feet
+  writeSave(save);
+}
 player.setWear(save.wear);
 scene.add(player.root);
 const input = new Input(canvas);
@@ -87,8 +159,16 @@ const questionRecyclable = (id: string) => solved.has(id) && (save.retryAt[id] ?
 let collectibles!: Collectibles;
 let npcs!: Npcs;
 let monsters!: Monsters;
-let airport = new Airport(scene, world.obstacles);
+let airport: Airport =
+  city.kind === 'moon'
+    ? ({ update() {}, setDoorOpen() {}, boardPoint: new THREE.Vector3(999, 0, 999), plane: new THREE.Group() } as unknown as Airport)
+    : new Airport(scene, world.obstacles, city.name);
+/** Cabo Canaveral pad (only on the USA level). */
+let spaceport: Spaceport | null = null;
+let usaLandmarks: UsaLandmarks | null = null;
+let moonAltar: MoonAltar | null = null;
 let catTree: CatTree; // assigned by addCityExtras()
+let wanderCat!: WanderCat; // assigned by spawnActors()
 let trouble: Trouble;
 let streetLights: StreetLights;
 let traffic: Traffic;
@@ -97,6 +177,7 @@ let concert: Concert;
 let pool: Pool;
 let house: House;
 let fair: Fair;
+let services: ServiceTown | null = null;
 const HIT_FLASH = 1.5;
 const RUN_OVER_COST = 30;
 const HOSPITAL_MS = 5 * 60 * 1000;
@@ -105,6 +186,8 @@ const HOSPITAL_MS = 5 * 60 * 1000;
 let carriedObj: THREE.Object3D | null = null;
 let carriedKind: string | null = null;
 
+/** A line waiting for the voice to be free (gameCtx.say). */
+let sayTimer = 0;
 /** What gameplay modules may ask of the game (see gamectx.ts). */
 const gameCtx: GameCtx = {
   get player() {
@@ -140,7 +223,120 @@ const gameCtx: GameCtx = {
     writeSave(save);
   },
   worn: () => ({ ...save.wear }),
+  // --- brief didático (2026-11-15): jewels as a second currency, module flags, small helpers ---
+  jewels: () => save.jewels,
+  spendJewels(n) {
+    if (save.jewels < n) return false;
+    save.jewels -= n;
+    hud.set('jewels', save.jewels + save.diamonds);
+    writeSave(save);
+    refreshBag();
+    return true;
+  },
+  addDiamond() {
+    save.diamonds += 1;
+    hud.set('jewels', save.jewels + save.diamonds);
+    writeSave(save);
+  },
+  flag: (key) => save.flags[key] ?? 0,
+  setFlag(key, value) {
+    save.flags[key] = value;
+    writeSave(save);
+  },
+  text: (key) => save.texts[key] ?? '',
+  setText(key, value) {
+    save.texts[key] = value;
+    writeSave(save);
+  },
+  city: () => city.name,
+  level: () => save.level,
+  isBoy: () => save.character === 'karateca',
+  say(lines) {
+    // never interrupts: waits a little for the line being said to end (only the newest waiting line is kept)
+    clearTimeout(sayTimer);
+    const attempt = (tries: number): void => {
+      if (document.querySelector('.quiz')) return;
+      if (!speechSynthesis.speaking) void speak(lines);
+      else if (tries > 0) sayTimer = window.setTimeout(() => attempt(tries - 1), 500);
+    };
+    attempt(8);
+  },
+  hold(on) {
+    paused = on;
+    if (!on) scriptedWalk = 0;
+    clearTarget();
+    input.releaseAll();
+    lastActivity = performance.now();
+  },
+  walkAnim(speed, faceX, faceZ) {
+    scriptedWalk = speed;
+    if (faceX !== undefined && faceZ !== undefined) {
+      const dx = faceX - player.position.x;
+      const dz = faceZ - player.position.z;
+      if (dx * dx + dz * dz > 0.002) player.heading = Math.atan2(-dx, -dz);
+    }
+  },
+  shielded: () => extras.shield.on,
+  async ask(q, reward, lang) {
+    if (paused || driving || flight || onBus() || document.querySelector('.quiz') || document.querySelector('.photo-view')) return false;
+    paused = true;
+    clearTarget();
+    input.releaseAll();
+    const pay = reward + extras.life.answerBonus();
+    const ok = await askQuestion(q, pay, lang);
+    if (ok) addCoins(pay);
+    paused = false;
+    lastActivity = performance.now();
+    canvas.focus();
+    return ok;
+  },
+  async choose(text, options) {
+    if (paused || driving || flight || onBus() || document.querySelector('.quiz') || document.querySelector('.photo-view')) return null;
+    paused = true;
+    clearTarget();
+    input.releaseAll();
+    const i = await askChoice(text, options);
+    paused = false;
+    lastActivity = performance.now();
+    canvas.focus();
+    return i;
+  },
+  async showPhoto(dataUrl) {
+    // keep the game paused while the portrait is on screen (caller may already have paused)
+    const was = paused;
+    paused = true;
+    clearTarget();
+    input.releaseAll();
+    await showPhoto(dataUrl);
+    paused = was;
+    lastActivity = performance.now();
+    canvas.focus();
+  },
+  flash() {
+    cameraFlash();
+  },
 };
+
+/** Everything from the 2026-11-15 brief (energy, mood, jewels with a use, picking and giving…): see extras.ts. */
+const extras = new Extras({
+  scene,
+  save,
+  ctx: gameCtx,
+  player,
+  hour: () => weather.localHour,
+  daylight: () => weather.daylight,
+  world: () => world,
+  npcs: () => npcs,
+  monsters: () => monsters,
+  free: () => !paused && !driving && !flight && !onBus() && !riding && !pool.swimming && !pool.lounging,
+  walkTo(p) {
+    buyTarget = null;
+    setTarget(p);
+  },
+  stop: () => clearTarget(),
+  stopTraffic: (at, radius, seconds) => traffic.haltNear(at, radius, seconds),
+});
+if (save.diamonds > 0) hud.set('jewels', save.jewels + save.diamonds);
 
 /** Show an item in her hand (display only — the bag counts are in save.bag). */
 function holdItem(kind: string | null, mesh?: THREE.Object3D): void {
@@ -163,6 +359,7 @@ function holdItem(kind: string | null, mesh?: THREE.Object3D): void {
 /** Eating a sweet from the bag: four bites, then it's gone. */
 let eating: { kind: string; t: number; bites: number } | null = null;
 function useBagItem(kind: string): void {
+  if (extras.useBagItem(kind)) return; // her jewels: holding one up = shield
   if (paused || driving || flight || (save.bag[kind] ?? 0) <= 0) return;
   holdItem(kind);
   if (kind !== 'pao' && (itemDef(kind)?.edible ?? true)) eating = { kind, t: 0, bites: 0 };
@@ -182,6 +379,7 @@ function updateEating(dt: number): void {
     save.bag[k] = Math.max(0, (save.bag[k] ?? 0) - 1);
     writeSave(save);
     holdItem(null);
+    feel('eat');
     [523, 659, 784].forEach((f, i) => tone(f, i * 0.08, 0.15, 'triangle', 0.05)); // yum
   }
 }
@@ -205,9 +403,20 @@ spawnActors();
 /** Coins, question characters and creatures — always after every building/object exists. */
 function spawnActors(): void {
   collectibles = new Collectibles(scene, world.obstacles);
+  if (city.kind === 'moon') {
+    // LUA2/LUA4: no question characters or street cat — only coins and martians
+    collectibles.heightAt = moonHeight;
+    collectibles.floatAmp = 0.35; // LUA5: coins float a little more
+    npcs = { list: [], update: () => null, dismiss() {} } as unknown as Npcs;
+    monsters = new Monsters(scene, world.obstacles, { martian: true, heightAt: moonHeight, blocked: inDeepCrater });
+    monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
+    wanderCat = { update() {}, debug: () => ({}) } as unknown as WanderCat;
+    return;
+  }
   npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position, questionRecyclable);
   monsters = new Monsters(scene, world.obstacles);
   monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
+  wanderCat = new WanderCat(scene, world.obstacles, player.position);
 }
 // restore after every obstacle (incl. the airport) exists, so she can never reappear inside something
 player.position.set(SPAWN.x, 0, SPAWN.z);
@@ -219,39 +428,146 @@ if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles
 
 /** Hand-made interactive situations in every city: a car to drive and someone to give a coin to. */
 function addCityExtras(): Car {
+  usaLandmarks?.dispose();
+  usaLandmarks = null;
+  moonAltar?.dispose();
+  moonAltar = null;
+  spaceport?.dispose();
+  spaceport = null;
+
+  // LUA2: bare Moon — lander + altar only (no fair, traffic, shops, venues, street lamps…)
+  if (city.kind === 'moon') {
+    services?.dispose();
+    services = null;
+    setNoSpawnZones([]);
+    moonAltar = new MoonAltar(
+      scene,
+      world.obstacles,
+      gameCtx,
+      () => save.diamonds + save.jewels,
+      (n) => {
+        save.delivered = n;
+        save.diamonds = 0;
+        save.jewels = 0;
+        save.finished = true;
+        hud.set('jewels', 0);
+        writeSave(save);
+        refreshBag();
+        void showTravel(null);
+      },
+    );
+    world.interactables.push(...moonAltar.things);
+    // silent stubs so the frame loop never hits null (nothing is drawn)
+    const quiet = {
+      update() {},
+      dispose() {},
+      isInside: () => false,
+      interior: null,
+      things: [] as Interactable[],
+      debug: () => ({ moon: true }),
+    };
+    streetLights = { update() {}, litCount: () => 0, count: () => 0, clearIn: () => 0, positions: () => [] } as unknown as StreetLights;
+    setCityLampClearer(null);
+    fair = quiet as unknown as Fair;
+    concert = quiet as unknown as Concert;
+    pool = {
+      ...quiet,
+      swimming: false,
+      lounging: false,
+      swimSpeed: 0,
+      waterWalls: [] as never[],
+      booth: null,
+      cabins: [],
+      release() {},
+      getUp() {},
+      nextStroke() {},
+    } as unknown as Pool;
+    house = quiet as unknown as House;
+    hospital = {
+      bed: { pos: new THREE.Vector3(), heading: 0 },
+      exit: new THREE.Vector3(),
+      exterior: new THREE.Vector3(),
+      group: new THREE.Group(),
+      setAmbulanceLights() {},
+      setClock() {},
+    } as unknown as Hospital;
+    trouble = { update() {}, positions: () => [], sites: () => [], clearance: null } as unknown as Trouble;
+    traffic = {
+      update() {},
+      haltNear() {},
+      tryBoard: () => 'no',
+      dropRider: () => null,
+      alight: () => null,
+      riderCanAlight: () => false,
+      hasRider: () => false,
+      ringBell() {},
+      kickRider: false,
+      riderSeat: () => null,
+      openDoorNear: () => null,
+      tappedBus: () => null,
+      positions: () => [],
+      busDebug: () => null,
+    } as unknown as Traffic;
+    catTree = {
+      update() {},
+      idleAfter() {},
+      waiting: false,
+      active: false,
+      interactable: { position: new THREE.Vector3(), object: new THREE.Group(), radius: 0, interact() {} },
+      begin() {},
+    } as unknown as CatTree;
+    if (!save.visited.includes(city.name)) save.visited.push(city.name);
+    const c = new Car(scene, world.obstacles, new THREE.Vector3(2000, 0, 2000), 0, 0x888888, () => false);
+    c.group.visible = false;
+    return c;
+  }
+
   // street lamps first (along the roads) so everything placed after avoids them
   streetLights = new StreetLights(scene, world.obstacles);
-  // the fair needs the most room: placed first; its grounds are kept free of everything placed after it
+  // shops/kiosks may clear a lamp that still sits in their door apron
+  setCityLampClearer((area, obs) => streetLights.clearIn(area, obs));
+  const clearLamps = (area: Obstacle, obs: Obstacle[]) => streetLights.clearIn(area, obs);
+  /** Soft keep-out ring around a venue footprint (m) — props / stops / lamps must stay outside. */
+  const VENUE_PAD = 8;
+  const padZone = (z: Obstacle, m = VENUE_PAD): Obstacle => ({
+    minX: z.minX - m,
+    maxX: z.maxX + m,
+    minZ: z.minZ - m,
+    maxZ: z.maxZ + m,
+  });
+  // USA landmarks early (fixed spots + clearArea) so the fair / playgrounds / shops keep clear of them
+  if (city.kind === 'usa') {
+    usaLandmarks = new UsaLandmarks(scene, world.obstacles, world, gameCtx, () => weather.daylight);
+    world.interactables.push(...usaLandmarks.things);
+  }
+  // Big venues FIRST (fair → stadium → concert → pool → house): their padded footprints stay in
+  // obstacles while bus stops / props / shops / services pick spots, so nothing glues to a wall.
   fair = new Fair(scene, world.obstacles, mulberry32(city.seed * 67 + 19), gameCtx, [], save.level, world);
   world.interactables.push(...fair.things);
-  const fairBlock = fair.interior ? { ...fair.interior } : null;
-  if (fairBlock) world.obstacles.push(fairBlock);
-  // bus stops along the bus lines, early so everything placed after keeps clear of them
-  const busStops = createBusStops(scene, world.obstacles, mulberry32(city.seed * 67 + 19));
-  const c = new Car(scene, world.obstacles, new THREE.Vector3(-16, 0, 7), Math.PI / 2, city.buildings[0], () => enterCar());
-  world.interactables.push(c.interactable);
-  world.interactables.push(
-    createBeggar(scene, world.obstacles, new THREE.Vector3(-8, 0, -8), {
-      coins: () => save.coins,
-      giveCoin: () => addCoins(-1),
-    }),
-  );
-  // playground props (swing, fountain, xylophone, cat, dog...) — placed last so they avoid everything else
-  world.interactables.push(...createProps(scene, world.obstacles, mulberry32(city.seed * 97 + 1)));
-  catTree = new CatTree(scene, world.obstacles, mulberry32(city.seed * 31 + 5));
-  hospital = createHospital(scene, world.obstacles, mulberry32(city.seed * 41 + 9));
-  world.interactables.push(...createShops(scene, world.obstacles, mulberry32(city.seed * 13 + 7), gameCtx));
+  const fairBlock = fair.interior ? padZone(fair.interior) : null;
+  if (fairBlock) {
+    world.obstacles.push(fairBlock);
+    clearLamps(fairBlock, world.obstacles);
+  }
   trouble = new Trouble(scene, world.obstacles, mulberry32(city.seed * 17 + 3), gameCtx);
-  // children's concert: ticket booth + fenced venue (nothing spawns inside it)
+  const stadiumBlock = trouble.clearance ? { ...trouble.clearance } : null;
+  if (stadiumBlock) {
+    world.obstacles.push(stadiumBlock);
+    clearLamps(stadiumBlock, world.obstacles);
+  }
+  // children's concert: ticket booth + fenced venue (nothing spawns inside / beside it)
   concert = new Concert(scene, world.obstacles, mulberry32(city.seed * 53 + 11), gameCtx, [
     ...world.interactables.map((i) => i.position),
-    catTree.interactable.position,
   ]);
   if (concert.booth) world.interactables.push(concert.booth);
+  const concertBlock = concert.interior ? padZone(concert.interior) : null;
+  if (concertBlock) {
+    world.obstacles.push(concertBlock);
+    clearLamps(concertBlock, world.obstacles);
+  }
   // swimming pool: ticket, beach cabins to change, swim among other swimmers
   pool = new Pool(scene, world.obstacles, mulberry32(city.seed * 59 + 13), gameCtx, [
     ...world.interactables.map((i) => i.position),
-    catTree.interactable.position,
   ], {
     player,
     hold(on) {
@@ -262,16 +578,72 @@ function addCityExtras(): Car {
     changed: () => holdItem(null),
   });
   if (pool.booth) world.interactables.push(pool.booth, ...pool.cabins);
+  const poolBlock = pool.interior ? padZone(pool.interior) : null;
+  if (poolBlock) {
+    world.obstacles.push(poolBlock);
+    clearLamps(poolBlock, world.obstacles);
+  }
   // a house to walk into (hall, kitchen, living/dining room, bathroom, bedroom) — everything inside reacts to touch
   house = new House(scene, world.obstacles, mulberry32(city.seed * 61 + 17), gameCtx, [
     ...world.interactables.map((i) => i.position),
-    catTree.interactable.position,
   ], houseColors(city.name));
   world.interactables.push(...house.things);
-  if (fairBlock) world.obstacles.splice(world.obstacles.indexOf(fairBlock), 1);
-  setNoSpawnZones([concert.interior, pool.interior, house.interior, fair.interior].filter((z): z is NonNullable<typeof z> => z !== null));
+  const houseBlock = house.interior ? padZone(house.interior, 4) : null;
+  if (houseBlock) {
+    world.obstacles.push(houseBlock);
+    clearLamps(houseBlock, world.obstacles);
+  }
+  // bus stops along the bus lines — after venues so they keep clear of stadium / fair / pool walls
+  const busStops = createBusStops(scene, world.obstacles, mulberry32(city.seed * 67 + 19));
+  const c = new Car(scene, world.obstacles, new THREE.Vector3(-16, 0, 7), Math.PI / 2, city.buildings[0], () => enterCar());
+  world.interactables.push(c.interactable);
+  world.interactables.push(
+    createBeggar(scene, world.obstacles, new THREE.Vector3(-8, 0, -8), {
+      coins: () => save.coins,
+      giveCoin: () => addCoins(-1),
+    }),
+  );
+  // playground props (swing, fountain, xylophone, cat, dog...) — placed after venues so they avoid walls
+  world.interactables.push(...createProps(scene, world.obstacles, mulberry32(city.seed * 97 + 1)));
+  // Fase 3: escorrega, balancé, macaca, bolas de sabão, piano, banco, baliza…
+  world.interactables.push(...createPlaygrounds(scene, world.obstacles, city.seed, gameCtx, world));
+  catTree = new CatTree(scene, world.obstacles, mulberry32(city.seed * 31 + 5));
+  hospital = createHospital(scene, world.obstacles, mulberry32(city.seed * 41 + 9));
+  world.interactables.push(...createShops(scene, world.obstacles, mulberry32(city.seed * 13 + 7), gameCtx, clearLamps));
+  // Fase 4: cabeleireiro, sapataria, roupa, SPA, médico… (S01–S10)
+  services?.dispose();
+  services = createServices(scene, world.obstacles, city.seed, gameCtx, player, clearLamps);
+  world.interactables.push(...services.things);
+  // Drop soft placement pads (real fences / stadium solids stay). Keep padded zones for no-spawn + landmarks.
+  for (const b of [fairBlock, stadiumBlock, concertBlock, poolBlock, houseBlock]) {
+    if (!b) continue;
+    const i = world.obstacles.indexOf(b);
+    if (i >= 0) world.obstacles.splice(i, 1);
+  }
+  // padded keep-outs: coins / NPCs / monsters also stay off the free ring around each big venue
+  const venueZones = [
+    concert.interior && padZone(concert.interior),
+    pool.interior && padZone(pool.interior),
+    house.interior && padZone(house.interior, 4),
+    fair.interior && padZone(fair.interior),
+    trouble.clearance,
+  ].filter((z): z is Obstacle => !!z);
+  setNoSpawnZones(venueZones);
+  // Keep venue footprints in obstacles while landmarks pick plots (soft pads were only temporary earlier).
+  const landmarkGuards = venueZones.map((z) => ({ ...z }));
+  world.obstacles.push(...landmarkGuards);
   traffic = new Traffic(scene, world.obstacles, gameCtx, (carPos) => runOver(carPos), busStops);
+  extras.buildCity(city.seed); // bank, jeweller, treasure chest… (extras.ts)
+  // Fase 5: ex-líbris por cidade + joia (I81–I90); USA tem usa.ts — after venues so openSpot / resolveSpot never land on them
+  world.interactables.push(...createLandmarks(scene, world.obstacles, city.seed, gameCtx, world));
+  for (const g of landmarkGuards) {
+    const i = world.obstacles.indexOf(g);
+    if (i >= 0) world.obstacles.splice(i, 1);
+  }
   world.interactables.push(catTree.interactable);
+  if (city.kind === 'usa') {
+    spaceport = new Spaceport(scene, world.obstacles);
+  }
   if (!save.visited.includes(city.name)) save.visited.push(city.name);
   return c;
 }
@@ -295,16 +667,36 @@ function loadCity(): void {
   pool?.dispose();
   house?.dispose();
   fair?.dispose();
+  services?.dispose();
+  services = null;
+  usaLandmarks?.dispose();
+  usaLandmarks = null;
+  moonAltar?.dispose();
+  moonAltar = null;
+  spaceport?.dispose();
+  spaceport = null;
+  extras.disposeCity();
   leavePool();
+  aerial = null; // clear tower lookout camera if she left mid-climb
   scene.clear();
   city = cityAt(save.level);
-  world = createWorld(scene, city);
+  world = city.kind === 'moon' ? createMoonWorld(scene, city) : createWorld(scene, city);
   scene.add(player.root, marker);
   player.position.set(SPAWN.x, 0, SPAWN.z);
   player.heading = SPAWN.h;
   camYaw = SPAWN.h;
   insideInteractable.clear();
-  airport = new Airport(scene, world.obstacles);
+  // The Moon has no airport; the USA keeps one for arrivals but leaves by rocket (spaceport).
+  airport = city.kind === 'moon' ? (null as unknown as Airport) : new Airport(scene, world.obstacles, city.name);
+  if (city.kind === 'moon') {
+    // placeholder airport object so Flight typing isn't needed; boarding is disabled on the Moon
+    airport = {
+      update() {},
+      setDoorOpen() {},
+      boardPoint: new THREE.Vector3(999, 0, 999),
+      plane: new THREE.Group(),
+    } as unknown as Airport;
+  }
   car = addCityExtras();
   spawnActors();
   cityPill.textContent = city.name;
@@ -313,12 +705,14 @@ function loadCity(): void {
   holdItem(null);
 }
 
-/** Travel = walk to the airport, board the plane, fly, land in the next city. */
-let flight: Flight | null = null;
+/** Travel = walk to the airport (or Cabo Canaveral rocket), board, fly/launch, land in the next city. */
+let flight: Flight | Launch | null = null;
 let travelHintGiven = false;
 let notEnoughCooldown = 0;
-const lastLevel = () => save.level >= CITIES.length - 1;
+const lastLevel = () => city.kind === 'moon' || save.level >= CITIES.length - 1;
 const readyToTravel = () => save.coins >= COINS_PER_LEVEL && !lastLevel();
+/** USA leaves by rocket; every earlier city leaves by plane. */
+const leavesByRocket = () => city.kind === 'usa';
 
 function startFlight(): void {
   paused = true;
@@ -326,21 +720,36 @@ function startFlight(): void {
   input.releaseAll();
   sfx.travel();
   const next = cityAt(save.level + 1);
+  const payAndLoad = (): void => {
+    save.coins -= COINS_PER_LEVEL;
+    save.level += 1;
+    save.pos = null;
+    writeSave(save);
+    hud.set('coins', save.coins);
+    loadCity();
+    player.root.visible = false;
+  };
+  if (leavesByRocket() && spaceport) {
+    flight = new Launch(
+      spaceport,
+      player,
+      () => {
+        payAndLoad();
+      },
+      setFade,
+      () => showBanner(`A caminho da ${next.name}  🚀`, 4000),
+    );
+    return;
+  }
   flight = new Flight(
     airport,
     player,
     () => {
-      save.coins -= COINS_PER_LEVEL;
-      save.level += 1;
-      save.pos = null;
-      writeSave(save);
-      hud.set('coins', save.coins);
-      loadCity();
-      player.root.visible = false;
+      payAndLoad();
       return airport;
     },
     setFade,
-    () => showBanner(`A voar para ${next.name}  ✈️`, 4000),
+    () => showBanner(`A voar para ${next.dest ?? next.name}  ✈️`, 4000),
   );
 }
 
@@ -356,18 +765,6 @@ function endFlight(): void {
   canvas.focus();
 }
 
-/** Last city: the whole journey is done. */
-async function finishJourney(): Promise<void> {
-  paused = true;
-  input.releaseAll();
-  sfx.travel();
-  await showTravel(null);
-  save.finished = true;
-  writeSave(save);
-  paused = false;
-  canvas.focus();
-}
-
 /** Casa: back to the city's starting point (quick white blink so the jump isn't confusing). */
 createHomeButton(() => {
   if (paused || flight || driving) return; // not during a question, a flight or a drive
@@ -378,9 +775,16 @@ createHomeButton(() => {
     knock.set(0, 0, 0);
     leaveBus(true);
     leavePool();
-    player.position.set(SPAWN.x, 0, SPAWN.z);
-    player.heading = SPAWN.h;
-    camYaw = SPAWN.h;
+    // LUA2: on the Moon, Casa brings her back to the lander
+    if (city.kind === 'moon') {
+      player.position.set(LANDER.x, moonHeight(LANDER.x, LANDER.z), LANDER.z);
+      player.heading = LANDER.h;
+      camYaw = LANDER.h;
+    } else {
+      player.position.set(SPAWN.x, 0, SPAWN.z);
+      player.heading = SPAWN.h;
+      camYaw = SPAWN.h;
+    }
     savePosition();
     setFade(false);
     canvas.focus();
@@ -410,6 +814,7 @@ function getOffSwing(): void {
   riding = null;
   player.sitting = false;
   player.lyingY = null;
+  player.prone = false;
   player.airborne = false;
   player.root.rotation.x = 0;
   player.position.set(off.x, 0, off.z);
@@ -417,6 +822,10 @@ function getOffSwing(): void {
 // Enter next to a shop counter buys too (keyboard players)
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || paused || driving || flight || onBus() || riding) return;
+  if (extras.enter()) {
+    e.preventDefault(); // Enter next to a flower bed / fruit tree = pick
+    return;
+  }
   const shop = world.interactables.find(
     (i) => i.requiresClick && Math.hypot(i.position.x - player.position.x, i.position.z - player.position.z) < i.radius,
   );
@@ -428,12 +837,13 @@ window.addEventListener('keydown', (e) => {
 });
 const refreshBag = (() => {
   const draw = createBag((kind) => useBagItem(kind));
-  return () => draw(save.bag, carriedKind);
+  return () => draw(extras.bagView(save.bag), carriedKind);
 })();
 refreshBag();
 
 /** Real weather of the current city (Open-Meteo), re-applied on every city change. */
 const weather = new Weather(scene, { hemi: world.hemi, sun: world.sun }, camera);
+weather.rainVolume = RAIN_SOUND_FACTOR[save.rainSound];
 void weather.setCity(city.name);
 
 /** Hospital: run over → fall → white fade → lying in the hospital bed while the clock fills (5 min). */
@@ -469,6 +879,7 @@ function leaveHospital(): void {
   player.position.y = 0;
   hospital.setClock(0);
   hospital.setAmbulanceLights(false);
+  feel('hospital'); // she leaves rested: energy full
   paused = false;
   lastActivity = performance.now();
   savePosition();
@@ -666,6 +1077,8 @@ setInterval(savePosition, 2000);
 window.addEventListener('pagehide', savePosition);
 /** True while a question is on screen: the character stands still. */
 let paused = false;
+/** Leg-cycle speed while hold()'d on stairs (landmarks / I69). 0 = idle. */
+let scriptedWalk = 0;
 
 function addCoins(n: number): void {
   save.coins = Math.max(0, save.coins + n);
@@ -674,6 +1087,8 @@ function addCoins(n: number): void {
 }
 
 async function meet(npc: QuestionNpc): Promise<void> {
+  // Never stand inside the question-giver: push out before freezing for the question.
+  keepAway(npc.group.position.x, npc.group.position.z, PERSON_CLEAR);
   paused = true;
   clearTarget();
   input.releaseAll();
@@ -684,17 +1099,18 @@ async function meet(npc: QuestionNpc): Promise<void> {
   const id = npc.question.id;
   save.retryAt[id] = Date.now() + RETRY_DELAY_MS; // set now: reloading mid-question can't give an instant retry
   writeSave(save);
-  const ok = await askQuestion(npc.question, QUESTION_REWARD);
+  const reward = QUESTION_REWARD + extras.life.answerBonus(); // "muito feliz" = one more coin
+  const ok = await askQuestion(npc.question, reward);
   if (ok && solved.has(id)) {
     // a review of an already-solved question: coins again, but it doesn't count twice (and waits ~3 min to come back)
-    addCoins(QUESTION_REWARD);
+    addCoins(reward);
   } else if (ok) {
     solved.add(id);
     save.solved = [...solved];
     delete save.retryAt[id];
     save.correct += 1;
     hud.set('correct', save.correct);
-    addCoins(QUESTION_REWARD);
+    addCoins(reward);
   }
   npcs.dismiss(npc);
   paused = false;
@@ -777,12 +1193,14 @@ function handleTap(x: number, y: number): void {
     }
     return;
   }
+  // double tap = pick (flower, fruit); tap on a person with a present in her hand = give it (extras.ts)
+  if (!driving && extras.tap(raycaster, x, y)) return;
   // Objects and characters first: tapping one walks the character up to it (touching it uses it).
-  const targets: { object: THREE.Object3D; position: THREE.Vector3; it?: Interactable }[] = [
+  const targets: { object: THREE.Object3D; position: THREE.Vector3; it?: Interactable; person?: boolean }[] = [
     ...world.interactables.map((i) => ({ object: i.object as THREE.Object3D, position: i.position, it: i })),
     ...npcs.list
       .filter((n) => n.leaving === null)
-      .map((n) => ({ object: n.group as THREE.Object3D, position: n.group.position })),
+      .map((n) => ({ object: n.group as THREE.Object3D, position: n.group.position, person: true })),
   ];
   const objHits = raycaster.intersectObjects(
     targets.map((t) => t.object),
@@ -795,12 +1213,15 @@ function handleTap(x: number, y: number): void {
         // shops: tapping = "I want to buy": walk there and buy on arrival (or right away if already there)
         const d = Math.hypot(hit.it.position.x - player.position.x, hit.it.position.z - player.position.z);
         if (d < Math.max(hit.it.radius, hit.it.reach ?? 0)) {
+          if (hit.it.keepClear) keepAway(hit.it.position.x, hit.it.position.z, hit.it.keepClear);
           useClickable(hit.it);
           return;
         }
         buyTarget = hit.it;
       }
-      setTarget(hit.position);
+      // People: ALWAYS stop ≥ PERSON_CLEAR short — never walk to group.position.
+      if (hit.it) setTarget(approachPoint(hit.it));
+      else setTarget(approachToward(hit.position.x, hit.position.z, PERSON_CLEAR));
       return;
     }
   }
@@ -809,6 +1230,48 @@ function handleTap(x: number, y: number): void {
     buyTarget = null; // changed her mind: walking somewhere else
     setTarget(groundHit.point);
   }
+}
+
+/** Walk-to point short of (tx,tz) by `clear` metres along the approach from the player. */
+function approachToward(tx: number, tz: number, clear: number): THREE.Vector3 {
+  const px = player.position.x;
+  const pz = player.position.z;
+  const dx = tx - px;
+  const dz = tz - pz;
+  const dist = Math.hypot(dx, dz);
+  if (dist <= clear + 0.05) return new THREE.Vector3(px, 0, pz);
+  const t = (dist - clear) / dist;
+  return new THREE.Vector3(px + dx * t, 0, pz + dz * t);
+}
+
+/** Walk-to point for an interactable: people (`keepClear`) stop ≥ PERSON_CLEAR short. */
+function approachPoint(it: Interactable): THREE.Vector3 {
+  const clear = it.keepClear;
+  if (!clear) return new THREE.Vector3(it.position.x, 0, it.position.z);
+  return approachToward(it.position.x, it.position.z, Math.max(clear, PERSON_CLEAR));
+}
+
+/** If she is closer than `clear` to (tx,tz), shove her out immediately (y = 0). */
+function keepAway(tx: number, tz: number, clear = PERSON_CLEAR): void {
+  // scripted lie-downs (massage table, clinic bed, pool lounger) must not be shoved / flattened
+  if (player.lyingY !== null || player.airborne) return;
+  const px = player.position.x;
+  const pz = player.position.z;
+  let dx = px - tx;
+  let dz = pz - tz;
+  let dist = Math.hypot(dx, dz);
+  if (dist >= clear) {
+    player.position.y = 0;
+    return;
+  }
+  if (dist < 0.05) {
+    dx = Math.sin(player.heading);
+    dz = Math.cos(player.heading);
+    dist = 1;
+  }
+  const s = clear / dist;
+  player.position.set(tx + dx * s, 0, tz + dz * s);
+  clearTarget();
 }
 
 function setTarget(p: THREE.Vector3): void {
@@ -829,7 +1292,7 @@ function isDescendant(obj: THREE.Object3D, root: THREE.Object3D): boolean {
 }
 
 /** Swimming is slower and only the pool edges stop her. */
-const moveSpeed = () => (pool?.swimming ? pool.swimSpeed : WALK_SPEED);
+const moveSpeed = () => (pool?.swimming ? pool.swimSpeed : WALK_SPEED) * extras.life.speedFactor(); // no energy = slow
 const moveObstacles = () => (pool?.swimming ? pool.waterWalls : world.obstacles);
 
 const timer = new THREE.Timer();
@@ -837,6 +1300,7 @@ timer.connect(document); // pauses the clock while the tab is hidden
 let elapsed = 0;
 
 function tick(time: number): void {
+  try {
   timer.update(time);
   const dt = Math.min(timer.getDelta(), 0.05);
   elapsed += dt;
@@ -941,7 +1405,12 @@ function tick(time: number): void {
       if (stuckTime > 0.4) clearTarget();
     }
   }
-  if (!flight) player.update(dt, driving ? 0 : speed);
+  // normal walk cycle here; stair climbs animate after interactable.update (walkAnim is set there)
+  if (!flight && scriptedWalk <= 0) player.update(dt, driving ? 0 : speed * extras.life.stepFactor());
+  // Moon hills / bridge deck: keep her feet on the surface (not during a scripted stair climb)
+  if (!flight && !riding && !pool.swimming && player.lyingY === null && scriptedWalk <= 0 && world.heightAt) {
+    player.position.y = world.heightAt(player.position.x, player.position.z);
+  }
   if (riding) {
     const p = riding.seat.pose(riding.i);
     player.heading = p.heading;
@@ -973,17 +1442,33 @@ function tick(time: number): void {
       if (buyTarget === it && d < it.radius) {
         buyTarget = null;
         clearTarget();
+        if (it.keepClear && d < PERSON_PUSH) keepAway(it.position.x, it.position.z, it.keepClear);
         useClickable(it);
       }
       continue;
     }
     if (d < it.radius) {
+      // People: if already too close (teleport, escape bug, etc.), shove out before greeting.
+      if (it.keepClear && d < PERSON_PUSH) keepAway(it.position.x, it.position.z, Math.max(it.keepClear, PERSON_CLEAR));
       if (!insideInteractable.has(it)) {
         insideInteractable.add(it);
         it.interact({ player: player.position });
       }
     } else if (d > it.radius + 0.5) {
       insideInteractable.delete(it);
+    }
+  }
+  // Hard separation every frame: teleports, rides, escape bugs and strolling NPCs must never leave her inside a person.
+  if (!driving && !onBus() && !flight && !riding && !pool?.swimming) {
+    for (const it of world.interactables) {
+      if (!it.keepClear) continue;
+      const d = Math.hypot(it.position.x - player.position.x, it.position.z - player.position.z);
+      if (d < it.keepClear) keepAway(it.position.x, it.position.z, it.keepClear);
+    }
+    for (const n of npcs.list) {
+      if (n.leaving !== null) continue;
+      const d = Math.hypot(n.group.position.x - player.position.x, n.group.position.z - player.position.z);
+      if (d < PERSON_CLEAR) keepAway(n.group.position.x, n.group.position.z, PERSON_CLEAR);
     }
   }
   world.update(dt);
@@ -999,7 +1484,10 @@ function tick(time: number): void {
       rescuing = true;
       clearTarget();
       input.releaseAll();
-      catTree.begin(player.root, () => addCoins(CAT_REWARD));
+      catTree.begin(player.root, () => {
+        addCoins(CAT_REWARD);
+        feel('rescue');
+      });
     }
   }
   if (rescuing) {
@@ -1017,6 +1505,8 @@ function tick(time: number): void {
   // (not while she's watching the concert — standing still is the whole point there)
   if (!paused && !flight && !onBus() && hospitalPhase === 'none' && !concert.isInside() && !pool.isInside() && !house.isInside() && !fair.isInside() && performance.now() - lastActivity > IDLE_MS) void idlePause();
   for (const it of world.interactables) it.update?.(dt);
+  // climb updates set walkAnim after the early player.update — refresh the walk cycle same frame
+  if (scriptedWalk > 0 && !flight && !rescuing) player.update(dt, scriptedWalk);
 
   // --- coins & jewels ---
   const got = collectibles.update(dt, onBus() ? NOWHERE : player.position);
@@ -1024,12 +1514,16 @@ function tick(time: number): void {
     const jewels = got.kinds.filter((k) => k === 'jewel').length;
     if (jewels > 0) {
       save.jewels += jewels;
-      hud.set('jewels', save.jewels);
+      hud.set('jewels', save.jewels + save.diamonds);
+      refreshBag();
     }
     addCoins(got.value);
+    extras.collected(got.kinds);
     if (got.kinds.includes('jewel')) sfx.jewel();
     else sfx.coin();
   }
+
+  extras.update(dt, !paused && !flight);
 
   // --- creatures ---
   const ev = monsters.update(dt, player.position, save.coins, paused || onBus());
@@ -1044,6 +1538,7 @@ function tick(time: number): void {
   pool.update(dt, k.up || k.down || walkTarget !== null, walkTarget);
   house.update(dt);
   fair.update(dt);
+  services?.update(dt);
   updateHospital(dt);
   weather.update(dt);
   streetLights.update(dt, weather.daylight, camera);
@@ -1056,21 +1551,29 @@ function tick(time: number): void {
     player.root.visible = invulnerable <= 0 || Math.floor(invulnerable * 10) % 2 === 0;
   }
 
-  // --- travel: 100 coins -> go to the airport and board the plane ---
+  // --- travel: 100 coins -> airport (or Cabo Canaveral rocket on the USA level) ---
   airport.update(dt);
+  spaceport?.update(dt);
+  usaLandmarks?.update(dt);
+  moonAltar?.update(dt);
   car.update(dt);
-  if (!flight) airport.setDoorOpen(readyToTravel()); // door shut until she has 100 coins
+  if (!flight && !leavesByRocket()) airport.setDoorOpen(readyToTravel());
+  if (!flight && spaceport) spaceport.setReady(readyToTravel());
   notEnoughCooldown -= dt;
   if (!paused && readyToTravel() && !travelHintGiven) {
     travelHintGiven = true;
-    const next = cityAt(save.level + 1).name;
-    showBanner('Vai ao aeroporto!  ✈️', 4000);
-    void speak(['Boa! Juntaste cem moedas!', `Vai ao aeroporto e apanha o avião para ${next}!`]);
+    const next = cityAt(save.level + 1);
+    if (leavesByRocket()) {
+      showBanner('Vai ao foguetão!  🚀', 4000);
+      void speak(['Boa! Juntaste cem moedas!', `Vai a Cabo Canaveral e sobe no foguetão para ${next.dest ?? next.name}!`]);
+    } else {
+      showBanner('Vai ao aeroporto!  ✈️', 4000);
+      void speak(['Boa! Juntaste cem moedas!', `Vai ao aeroporto e apanha o avião para ${next.dest ?? next.name}!`]);
+    }
   }
-  if (!paused && lastLevel() && save.coins >= COINS_PER_LEVEL && !save.finished) void finishJourney();
-  if (!paused && !flight && !driving && !onBus()) {
-    const b = airport.boardPoint;
-    if (Math.hypot(player.position.x - b.x, player.position.z - b.z) < 1.4) {
+  if (!paused && !flight && !driving && !onBus() && city.kind !== 'moon') {
+    const b = leavesByRocket() && spaceport ? spaceport.boardPoint : airport.boardPoint;
+    if (Math.hypot(player.position.x - b.x, player.position.z - b.z) < 1.6) {
       if (readyToTravel()) startFlight();
       else if (!lastLevel() && notEnoughCooldown <= 0) {
         notEnoughCooldown = 8;
@@ -1078,15 +1581,13 @@ function tick(time: number): void {
       }
     }
   }
-  setCompass(
-    readyToTravel() && !flight
-      ? Math.atan2(airport.boardPoint.x - player.position.x, airport.boardPoint.z - player.position.z) - camYaw
-      : null,
-  );
+  const board = leavesByRocket() && spaceport ? spaceport.boardPoint : airport.boardPoint;
+  setCompass(readyToTravel() && !flight ? Math.atan2(board.x - player.position.x, board.z - player.position.z) - camYaw : null);
 
   // --- question characters ---
   const met = npcs.update(dt, player.position, paused || onBus());
   if (met && !paused && !driving && !onBus()) void meet(met);
+  wanderCat.update(dt, player.position, paused);
 
   // --- camera follows behind the character, unless the player is looking around ---
   const turning = k.left || k.right;
@@ -1096,8 +1597,13 @@ function tick(time: number): void {
     camYaw += diff * Math.min(1, dt * 2.5);
   }
   if (aerial) {
-    camera.position.set(aerial.x, aerial.h, aerial.z + aerial.h * 0.35);
-    camera.lookAt(aerial.x, 0, aerial.z);
+    if (aerial.fromX !== undefined && aerial.fromZ !== undefined) {
+      camera.position.set(aerial.fromX, aerial.h, aerial.fromZ);
+      camera.lookAt(aerial.x, aerial.lookY ?? 1.0, aerial.z);
+    } else {
+      camera.position.set(aerial.x, aerial.h, aerial.z + aerial.h * 0.35);
+      camera.lookAt(aerial.x, aerial.lookY ?? 0, aerial.z);
+    }
   } else if (hospitalPhase === 'bed') {
     const shot = hospitalShot();
     camera.position.lerp(shot.pos, Math.min(1, dt * 3));
@@ -1111,17 +1617,25 @@ function tick(time: number): void {
   const target = player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
   const wanted = driving || onBus() ? Math.max(camDist, 12) : camDist;
   // don't let the camera end up inside a building: walk out from her towards the camera and stop before a wall
-  // inside the house the roof is hidden and the camera looks down from above, over the walls
-  const pitch = house.isInside() ? Math.max(camPitch, 1.05) : camPitch;
+  // inside the house the roof is hidden; camera stays normal (third-person), walls don't block while she's indoors
+  const pitch = camPitch;
   const dir = new THREE.Vector3(Math.sin(camYaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(camYaw) * Math.cos(pitch));
   let dist = wanted;
+  const indoors = house.isInside();
   for (let d = 1.2; d <= wanted; d += 0.4) {
     const px = target.x + dir.x * d;
     const pz = target.z + dir.z * d;
     const py = target.y + dir.y * d;
     if (py > 7) break; // above most rooftops
     // low things (fences, the concert crowd, the stage) only block the camera below their height
-    if (world.obstacles.some((o) => o !== driving?.obstacleBox && !(o.height !== undefined && py > o.height + 0.4) && px > o.minX - 0.3 && px < o.maxX + 0.3 && pz > o.minZ - 0.3 && pz < o.maxZ + 0.3)) {
+    // house walls are skipped while she's inside so the normal camera still works
+    if (world.obstacles.some((o) => {
+      if (o === driving?.obstacleBox) return false;
+      if (indoors && o === house.interior) return false;
+      if (indoors && house.interior && px > house.interior.minX - 0.5 && px < house.interior.maxX + 0.5 && pz > house.interior.minZ - 0.5 && pz < house.interior.maxZ + 0.5) return false;
+      if (o.height !== undefined && py > o.height + 0.4) return false;
+      return px > o.minX - 0.3 && px < o.maxX + 0.3 && pz > o.minZ - 0.3 && pz < o.maxZ + 0.3;
+    })) {
       dist = Math.max(1.5, d - 0.6);
       break;
     }
@@ -1132,67 +1646,103 @@ function tick(time: number): void {
   }
 
   if (DEBUG) {
-    const lamp = world.interactables[0].object.children.find((c) => c instanceof THREE.PointLight);
-    document.body.dataset.debug = JSON.stringify({
-      x: +player.position.x.toFixed(2),
-      z: +player.position.z.toFixed(2),
-      h: +player.heading.toFixed(2),
-      camYaw: +camYaw.toFixed(2),
-      lamp: (lamp as THREE.PointLight | undefined)?.intensity ?? null,
-      coins: save.coins,
-      jewels: save.jewels,
-      correct: save.correct,
-      jewelAt: collectibles.jewelPositions(),
-      solved: save.solved.length,
-      level: save.level,
-      difficulty: save.difficulty,
-      monsterCount: monsters.positions().length,
-      npcsInside: npcs.list.filter((n) => !isFree(n.group.position.x, n.group.position.z, 0.6, world.obstacles)).length,
-      rescuing,
-      hospital: hospitalPhase,
-      hospitalLeft: Math.max(0, save.hospitalUntil - Date.now()),
-      carried: carriedKind,
-      bag: save.bag,
-      weather: weather.state,
-      daylight: +weather.daylight.toFixed(2),
-      hour: +weather.localHour.toFixed(2),
-      lamps: [streetLights.litCount(), streetLights.count()],
-      traffic: traffic.positions().slice(0, 3),
-      trouble: trouble.positions(),
-      sites: trouble.sites(),
-      concert: concert.debug(),
-      riding: riding ? riding.i : null,
-      house: house.debug(),
-      fair: fair.debug(),
-      wear: save.wear,
-      onBus: onBus(),
-      bus: traffic.busDebug(),
-      buy: buyTarget ? [+buyTarget.position.x.toFixed(1), +buyTarget.position.z.toFixed(1)] : null,
-      pool: pool.debug(),
-      catAt: [+catTree.interactable.position.x.toFixed(1), +catTree.interactable.position.z.toFixed(1)],
-      flying: !!flight,
-      character: save.character,
-      things: world.interactables.map((i) => [+i.position.x.toFixed(1), +i.position.z.toFixed(1), i.radius]),
-      driving: !!driving,
-      car: [+car.position.x.toFixed(1), +car.position.z.toFixed(1), +car.speed.toFixed(1)],
-      visible: player.root.visible,
-      board: [airport.boardPoint.x, airport.boardPoint.z],
-      plane: [+airport.plane.position.x.toFixed(1), +airport.plane.position.y.toFixed(1)],
-      voices: voiceInfo(),
-      city: city.name,
-      monsters: monsters.positions(),
-      invulnerable: +invulnerable.toFixed(2),
-      retry: Object.keys(save.retryAt),
-      spoken: spokenLog,
-      paused,
-      npcs: npcs.list
-        .filter((n) => n.leaving === null)
-        .map((n) => ({ x: +n.group.position.x.toFixed(1), z: +n.group.position.z.toFixed(1), q: n.question.id })),
-    });
+    try {
+      const first = world.interactables[0];
+      const lamp = first?.object?.children?.find((c) => c instanceof THREE.PointLight);
+      document.body.dataset.debug = JSON.stringify({
+        x: +player.position.x.toFixed(2),
+        y: +player.position.y.toFixed(2),
+        z: +player.position.z.toFixed(2),
+        lyingY: player.lyingY,
+        prone: player.prone,
+        h: +player.heading.toFixed(2),
+        legs: player.legPitches().map((v) => +v.toFixed(3)),
+        walkAnim: +scriptedWalk.toFixed(2),
+        camYaw: +camYaw.toFixed(2),
+        lamp: (lamp as THREE.PointLight | undefined)?.intensity ?? null,
+        coins: save.coins,
+        jewels: save.jewels,
+        correct: save.correct,
+        jewelAt: collectibles.jewelPositions(),
+        solved: save.solved.length,
+        level: save.level,
+        city: city.name,
+        kind: city.kind ?? null,
+        finished: save.finished,
+        diamonds: save.diamonds,
+        difficulty: save.difficulty,
+        monsterCount: monsters.positions().length,
+        npcsInside: npcs.list.filter((n) => !isFree(n.group.position.x, n.group.position.z, 0.6, world.obstacles)).length,
+        rescuing,
+        hospital: hospitalPhase,
+        hospitalLeft: Math.max(0, save.hospitalUntil - Date.now()),
+        carried: carriedKind,
+        bag: save.bag,
+        weather: weather.state,
+        daylight: +weather.daylight.toFixed(2),
+        hour: +weather.localHour.toFixed(2),
+        lamps: [streetLights.litCount(), streetLights.count()],
+        lampPosts: streetLights.positions(),
+        traffic: traffic.positions().slice(0, 3),
+        trouble: trouble.positions(),
+        sites: trouble.sites(),
+        concert: concert.debug(),
+        riding: riding ? riding.i : null,
+        house: house.debug(),
+        fair: fair.debug(),
+        services: services?.debug() ?? null,
+        extras: extras.debug(),
+        usa: usaLandmarks?.debug() ?? null,
+        landmarks: landmarksDebug(),
+        wear: save.wear,
+        onBus: onBus(),
+        bus: traffic.busDebug(),
+        buy: buyTarget ? [+buyTarget.position.x.toFixed(1), +buyTarget.position.z.toFixed(1)] : null,
+        pool: pool.debug(),
+        catAt: [+catTree.interactable.position.x.toFixed(1), +catTree.interactable.position.z.toFixed(1)],
+        walkCat: wanderCat.debug(),
+        rainSound: save.rainSound,
+        flying: !!flight,
+        character: save.character,
+        things: world.interactables.map((i) => [+i.position.x.toFixed(1), +i.position.z.toFixed(1), i.radius]),
+        driving: !!driving,
+        car: [+car.position.x.toFixed(1), +car.position.z.toFixed(1), +car.speed.toFixed(1)],
+        visible: player.root.visible,
+        board: [airport.boardPoint.x, airport.boardPoint.z],
+        plane: [+airport.plane.position.x.toFixed(1), +airport.plane.position.y.toFixed(1)],
+        voices: voiceInfo(),
+        monsters: monsters.positions(),
+        invulnerable: +invulnerable.toFixed(2),
+        retry: Object.keys(save.retryAt),
+        spoken: spokenLog,
+        paused,
+        npcs: npcs.list
+          .filter((n) => n.leaving === null)
+          .map((n) => ({ x: +n.group.position.x.toFixed(1), z: +n.group.position.z.toFixed(1), q: n.question.id })),
+      });
+    } catch (err) {
+      document.body.dataset.debug = JSON.stringify({
+        level: save.level,
+        city: city.name,
+        kind: city.kind ?? null,
+        debugError: String(err),
+      });
+    }
   }
 
   marker.rotation.z += dt * 2;
   renderer.render(scene, camera);
+  } catch (err) {
+    if (DEBUG) {
+      console.error('tick', err);
+      document.body.dataset.debug = JSON.stringify({
+        level: save.level,
+        city: city?.name,
+        kind: city?.kind ?? null,
+        tickError: String(err),
+      });
+    }
+  }
   requestAnimationFrame(tick);
 }
 
@@ -1218,6 +1768,7 @@ function newGame(): void {
   buyTarget = null;
   holdItem(null);
   Object.assign(save, { wear: {}, bag: {}, hospitalUntil: 0, coins: 0, level: 0, finished: false, jewels: 0, correct: 0, solved: [], retryAt: {}, pos: null, visited: [] });
+  extras.reset(); // energy, mood, diamonds, module flags
   solved.clear();
   player.setWear(save.wear);
   hud.set('coins', 0);
@@ -1276,6 +1827,12 @@ function mainPageOptions(canContinue: boolean) {
     onDifficulty: (d: 'zero' | 'facil' | 'medio' | 'dificil') => {
       save.difficulty = d;
       monsters.difficulty = DIFFICULTY_FACTOR[d];
+      writeSave(save);
+    },
+    rainSound: save.rainSound,
+    onRainSound: (r: RainSound) => {
+      save.rainSound = r;
+      weather.rainVolume = RAIN_SOUND_FACTOR[r];
       writeSave(save);
     },
   };
