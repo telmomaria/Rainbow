@@ -123,28 +123,31 @@ const STYLES: { id: string; name: string; build: () => THREE.Object3D }[] = [
 ];
 STYLES.forEach((s) => registerWearable(s.id, { name: `penteado ${s.name}`, slot: 'head', build: s.build }));
 
-/** Kids-readable sunglasses: frame + blue lenses + temples (not two flat discs). */
+/** Kids-readable sunglasses: chunky frame + bright blue lenses + temples. */
 function buildSunglasses(): THREE.Group {
   const g = new THREE.Group();
   const frame = mat(0x212529);
   const lensMat = new THREE.MeshStandardMaterial({
     color: 0x1c7ed6,
-    roughness: 0.15,
-    metalness: 0.35,
-    transparent: true,
-    opacity: 0.72,
+    roughness: 0.12,
+    metalness: 0.4,
+    emissive: 0x1864ab,
+    emissiveIntensity: 0.35,
   });
   for (const s of [-1, 1]) {
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.018, 8, 16), frame);
-    rim.position.set(s * 0.13, 0.02, 0);
+    // thick oval frames
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.028, 8, 18), frame);
+    rim.position.set(s * 0.14, 0.02, 0);
+    rim.scale.set(1.15, 1, 1);
     g.add(rim);
-    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.085, 16), lensMat);
-    lens.position.set(s * 0.13, 0.02, 0.002);
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.095, 16), lensMat);
+    lens.position.set(s * 0.14, 0.02, 0.01);
+    lens.scale.set(1.15, 1, 1);
     g.add(lens);
-    const arm = box(g, frame, 0.02, 0.02, 0.22, s * 0.22, 0.03, 0.1);
-    arm.rotation.y = s * 0.35;
+    const arm = box(g, frame, 0.025, 0.025, 0.28, s * 0.26, 0.04, 0.12);
+    arm.rotation.y = s * 0.4;
   }
-  box(g, frame, 0.06, 0.02, 0.02, 0, 0.02, 0); // bridge
+  box(g, frame, 0.08, 0.025, 0.025, 0, 0.02, 0); // bridge
   return g;
 }
 
