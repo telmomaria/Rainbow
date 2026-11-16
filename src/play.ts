@@ -308,27 +308,31 @@ function buildSeesaw(scene: THREE.Scene, obstacles: Obstacle[], rng: () => numbe
 // I35 caixa de areia REMOVED from spawn (2026-11-16 review): wooden box + yellow sand +
 // block+2-cylinders "castelo" on tap — Telmo: "remove este castelo" (ridículo).
 
-/** Painted number on a hopscotch square (CanvasTexture — kids read 1…10 at a glance). */
-function hopNumTex(n: number, bg: number): THREE.CanvasTexture {
+/** Number decal for hopscotch (CanvasTexture on a flat plane facing up). */
+function hopNumPlane(n: number): THREE.Mesh {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
   const cx = c.getContext('2d')!;
-  cx.fillStyle = `#${bg.toString(16).padStart(6, '0')}`;
-  cx.fillRect(0, 0, 64, 64);
-  cx.strokeStyle = '#ffffff';
-  cx.lineWidth = 4;
-  cx.strokeRect(3, 3, 58, 58);
+  cx.clearRect(0, 0, 64, 64);
   cx.fillStyle = '#ffffff';
-  cx.font = 'bold 36px system-ui, sans-serif';
+  cx.font = 'bold 44px system-ui, sans-serif';
   cx.textAlign = 'center';
   cx.textBaseline = 'middle';
+  cx.strokeStyle = '#212529';
+  cx.lineWidth = 5;
+  cx.strokeText(String(n), 32, 34);
   cx.fillText(String(n), 32, 34);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.5, 0.5),
+    new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }),
+  );
+  m.rotation.x = -Math.PI / 2;
+  return m;
 }
 
-/** I36 — Macaca: colourful numbered squares (classic 1–10 layout). Hop in order. */
+/** I36 — Macaca: colourful numbered squares (classic 1–10). Solid colours + big numbers. */
 function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number, ctx: GameCtx): Interactable | null {
   const site = roadsideSite(obstacles, rng, 1.6, 6.5, { minD: 18, maxD: 95, front: 6.5 });
   if (!site) return null;
@@ -351,42 +355,50 @@ function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => nu
   const cells: THREE.Mesh[] = [];
   for (const cell of layout) {
     const col = COLORS[cell.n - 1];
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: col,
+      roughness: 0.45,
+      emissive: new THREE.Color(col),
+      emissiveIntensity: 0.15,
+    });
     const geo = cell.round
-      ? new THREE.CylinderGeometry(0.42, 0.42, 0.04, 20)
-      : new THREE.BoxGeometry(0.72, 0.04, 0.72);
-    const mesh = new THREE.Mesh(
-      geo,
-      new THREE.MeshStandardMaterial({
-        map: hopNumTex(cell.n, col),
-        color: 0xffffff,
-        roughness: 0.55,
-        emissive: new THREE.Color(col),
-        emissiveIntensity: 0,
-      }),
-    );
-    mesh.position.set(cell.x, 0.03, cell.z);
+      ? new THREE.CylinderGeometry(0.45, 0.45, 0.08, 20)
+      : new THREE.BoxGeometry(0.78, 0.08, 0.78);
+    const mesh = new THREE.Mesh(geo, bodyMat);
+    mesh.position.set(cell.x, 0.05, cell.z);
     mesh.receiveShadow = true;
+    mesh.castShadow = true;
     g.add(mesh);
-    // chalk outline so the square reads on grass even without the texture
+    // white chalk rim
     if (!cell.round) {
       const rim = mat(0xffffff);
-      box(g, rim, 0.78, 0.015, 0.06, cell.x, 0.025, cell.z - 0.36);
-      box(g, rim, 0.78, 0.015, 0.06, cell.x, 0.025, cell.z + 0.36);
-      box(g, rim, 0.06, 0.015, 0.78, cell.x - 0.36, 0.025, cell.z);
-      box(g, rim, 0.06, 0.015, 0.78, cell.x + 0.36, 0.025, cell.z);
+      box(g, rim, 0.86, 0.02, 0.07, cell.x, 0.04, cell.z - 0.4);
+      box(g, rim, 0.86, 0.02, 0.07, cell.x, 0.04, cell.z + 0.4);
+      box(g, rim, 0.07, 0.02, 0.86, cell.x - 0.4, 0.04, cell.z);
+      box(g, rim, 0.07, 0.02, 0.86, cell.x + 0.4, 0.04, cell.z);
+    } else {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.03, 8, 24), mat(0xffffff));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(cell.x, 0.1, cell.z);
+      g.add(ring);
     }
+    const num = hopNumPlane(cell.n);
+    num.position.set(cell.x, 0.1, cell.z);
+    g.add(num);
     cells.push(mesh);
   }
   let step = 0;
   let cool = 0;
+  const stand = siteToWorld(site, 0, 0.5);
+  g.userData.hopAt = [stand.x, stand.z];
   return {
     object: g,
-    position: siteToWorld(site, 0, 0.5),
+    position: stand,
     radius: 3.2,
     update(dt) {
       cool = Math.max(0, cool - dt);
       cells.forEach((c, i) => {
-        (c.material as THREE.MeshStandardMaterial).emissiveIntensity = i < step ? 0.55 : i === step ? 0.25 : 0;
+        (c.material as THREE.MeshStandardMaterial).emissiveIntensity = i < step ? 0.7 : i === step ? 0.35 : 0.15;
       });
       if (cool > 0 || ctx.isPaused()) return;
       const p = ctx.player;
