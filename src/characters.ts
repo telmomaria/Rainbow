@@ -646,16 +646,16 @@ function buildKarateca(): CharacterModel {
   kit.put(body, kit.box(0.05, 0.38, 0.02), lapel, [-0.07, 1.16, -0.222], [0, 0, 0.42]);
   kit.put(body, kit.box(0.05, 0.38, 0.02), lapel, [0.07, 1.16, -0.222], [0, 0, -0.42]);
   kit.put(body, kit.cone(0.1, 0.22, 3), skin, [0, 1.25, -0.2], [Math.PI, 0, 0], [1, 1, 0.25]);
-  // orange karate belt: flat wrap + clear square knot + long hanging tails (not a "pouch")
+  // orange karate belt: snug wrap + square knot + long hanging tails (reads as faixa, not a hoop/pouch)
   const belt = 0xff8c1a;
-  kit.put(body, kit.torus(0.27, 0.035), belt, [0, 0.88, 0], [Math.PI / 2, 0, 0]);
-  // square knot (two overlapping loops) at the front
-  kit.put(body, kit.box(0.12, 0.07, 0.05), belt, [-0.04, 0.9, -0.27], [0, 0, 0.35]);
-  kit.put(body, kit.box(0.12, 0.07, 0.05), belt, [0.04, 0.9, -0.27], [0, 0, -0.35]);
-  kit.put(body, kit.box(0.06, 0.06, 0.05), belt, [0, 0.88, -0.29]);
-  // long flat tails hanging down (reads as faixa, not a bag)
-  kit.put(body, kit.box(0.055, 0.38, 0.02), belt, [-0.05, 0.66, -0.3], [0.15, 0, 0.12]);
-  kit.put(body, kit.box(0.055, 0.34, 0.02), belt, [0.06, 0.68, -0.3], [0.12, 0, -0.15]);
+  kit.put(body, kit.torus(0.255, 0.022), belt, [0, 0.88, 0], [Math.PI / 2, 0, 0]);
+  // square knot (two overlapping flat loops) at the front (−Z)
+  kit.put(body, kit.box(0.11, 0.055, 0.04), belt, [-0.035, 0.9, -0.26], [0, 0, 0.4]);
+  kit.put(body, kit.box(0.11, 0.055, 0.04), belt, [0.035, 0.9, -0.26], [0, 0, -0.4]);
+  kit.put(body, kit.box(0.05, 0.05, 0.04), belt, [0, 0.875, -0.28]);
+  // long flat tails hanging down the front
+  kit.put(body, kit.box(0.05, 0.42, 0.018), belt, [-0.045, 0.64, -0.29], [0.12, 0, 0.1]);
+  kit.put(body, kit.box(0.05, 0.38, 0.018), belt, [0.055, 0.66, -0.29], [0.1, 0, -0.12]);
   // spiky black hair + red forehead band with side knot (not a full ring under the chin)
   const hair = 0x1a1a22;
   hairCap(b, hair, 0.4);
