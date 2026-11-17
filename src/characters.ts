@@ -236,21 +236,32 @@ function rod(
   return m;
 }
 
+/** Tag a mesh as stock hair so salon cut/dye can hide it (`WearableDef.replacesHair`). */
+function asHair(m: THREE.Mesh): THREE.Mesh {
+  m.userData.isHair = true;
+  return m;
+}
+
+/** Hair piece on the head (same args as kit.put, always tagged isHair). */
+function putHair(
+  b: Biped,
+  geo: THREE.BufferGeometry,
+  color: number,
+  pos?: V3,
+  rot?: V3,
+  scale?: V3,
+): THREE.Mesh {
+  return asHair(b.kit.put(b.head, geo, color, pos, rot, scale));
+}
+
 /** Hair cap over the head, tilted back so the face stays clear. */
 function hairCap(b: Biped, color: number, tilt = 0.35, theta = Math.PI * 0.56, grow = 1.07): THREE.Mesh {
-  return b.kit.put(b.head, b.kit.cap(b.headR * grow, theta), color, [0, 0.01, 0.0], [tilt, 0, 0]);
+  return putHair(b, b.kit.cap(b.headR * grow, theta), color, [0, 0.01, 0.0], [tilt, 0, 0]);
 }
 
 /** Long hair falling down the back. */
 function hairBack(b: Biped, color: number, len = 0.6, width = 0.32): THREE.Mesh {
-  return b.kit.put(
-    b.head,
-    b.kit.cyl(width, width * 0.85, len, 16),
-    color,
-    [0, -len / 2 + 0.08, 0.12],
-    undefined,
-    [1, 1, 0.7],
-  );
+  return putHair(b, b.kit.cyl(width, width * 0.85, len, 16), color, [0, -len / 2 + 0.08, 0.12], undefined, [1, 1, 0.7]);
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +284,7 @@ function buildPrincesa(): CharacterModel {
   const hair = 0x5a2e1a;
   hairCap(b, hair);
   hairBack(b, hair, 0.75, 0.3);
-  for (const side of [-1, 1]) kit.put(head, kit.sph(0.11), hair, [side * 0.3, -0.2, 0.04]);
+  for (const side of [-1, 1]) putHair(b, kit.sph(0.11), hair, [side * 0.3, -0.2, 0.04]);
   // tiara: gold band + three points + pink gem
   const gold = kit.mat(0xffd34d, 0.15, 0.3, 0.6);
   kit.put(head, kit.torus(0.24, 0.025), gold, [0, 0.27, 0.03], [Math.PI / 2 + 0.3, 0, 0]);
@@ -400,7 +411,7 @@ function buildBia(): CharacterModel {
   hairCap(b, s.hair, 0.3);
   hairBack(b, s.hair, 0.35, 0.3);
   for (const side of [-1, 1]) {
-    kit.put(head, kit.sph(0.13), s.hair, [side * 0.24, 0.27, 0.06]);
+    putHair(b, kit.sph(0.13), s.hair, [side * 0.24, 0.27, 0.06]);
     kit.put(head, kit.torus(0.08, 0.02), kit.mat(0xffffff, 0.3), [side * 0.22, 0.2, 0.06], [Math.PI / 2, 0, 0]);
   }
   // headset: band over the head, arm to the mouth, glowing mic tip
@@ -419,11 +430,11 @@ function buildNina(): CharacterModel {
   const { kit, body, head, armR } = b;
   hairCap(b, s.hair, 0.3);
   // fringe
-  kit.put(head, kit.sph(0.12), s.hair, [-0.12, 0.22, -0.24], undefined, [1.2, 0.6, 0.8]);
+  putHair(b, kit.sph(0.12), s.hair, [-0.12, 0.22, -0.24], undefined, [1.2, 0.6, 0.8]);
   // high ponytail
   kit.put(head, kit.torus(0.06, 0.025), kit.mat(0xffffff, 0.3), [0, 0.3, 0.22], [0.5, 0, 0]);
-  kit.put(head, kit.sph(0.13), s.hair, [0, 0.25, 0.36], undefined, [0.9, 1, 1]);
-  kit.put(head, kit.cone(0.13, 0.65, 12), s.hair, [0, -0.1, 0.42], [Math.PI - 0.15, 0, 0]);
+  putHair(b, kit.sph(0.13), s.hair, [0, 0.25, 0.36], undefined, [0.9, 1, 1]);
+  putHair(b, kit.cone(0.13, 0.65, 12), s.hair, [0, -0.1, 0.42], [Math.PI - 0.15, 0, 0]);
   // glowing ribbon wand in the right hand
   aim(armR, 0.35, -0.75, -0.55);
   const hand = handPos(armR);
@@ -443,9 +454,9 @@ function buildInes(): CharacterModel {
   const { kit, body, head, armR } = b;
   // bob: cap + rounded volume at the back and sides (face stays clear)
   hairCap(b, s.hair, 0.4, Math.PI * 0.58, 1.08);
-  kit.put(head, kit.sph(0.36, 20, 14), s.hair, [0, -0.06, 0.12], undefined, [1.08, 0.8, 0.8]);
+  putHair(b, kit.sph(0.36, 20, 14), s.hair, [0, -0.06, 0.12], undefined, [1.08, 0.8, 0.8]);
   // straight fringe
-  kit.put(head, kit.cyl(0.3, 0.3, 0.1, 20), s.hair, [0, 0.2, -0.06], [0.35, 0, 0], [1, 1, 0.95]);
+  putHair(b, kit.cyl(0.3, 0.3, 0.1, 20), s.hair, [0, 0.2, -0.06], [0.35, 0, 0], [1, 1, 0.95]);
   // star clip
   kit.put(head, kit.cone(0.07, 0.06, 5), kit.mat(0xffd34d, 0.4, 0.3, 0.5), [-0.24, 0.2, -0.24], [Math.PI / 2, 0, 0.3]);
   // microphone held up in front of the chin
@@ -525,7 +536,7 @@ function buildGuerreira(): CharacterModel {
   // brown braid at the back + simple steel cap with brim
   const hair = 0x6b3a1e;
   hairCap(b, hair, 0.35);
-  kit.put(head, kit.cyl(0.07, 0.04, 0.55, 8), hair, [0, -0.35, 0.3], [0.25, 0, 0]);
+  putHair(b, kit.cyl(0.07, 0.04, 0.55, 8), hair, [0, -0.35, 0.3], [0.25, 0, 0]);
   kit.put(head, kit.sph(0.05, 8, 6), 0xffd34d, [0, -0.63, 0.37]);
   const metal = kit.mat(steel, 0, 0.35, 0.6);
   kit.put(head, kit.cap(0.37, Math.PI * 0.42), metal, [0, 0.06, 0.02], [0.2, 0, 0]);
@@ -577,8 +588,8 @@ function buildVoleibol(): CharacterModel {
   const hair = 0x2a1a12;
   hairCap(b, hair, 0.3);
   kit.put(head, kit.torus(0.335, 0.03), 0xffe14d, [0, 0.12, 0.02], [Math.PI / 2 + 0.3, 0, 0]);
-  kit.put(head, kit.sph(0.1), hair, [0, 0.18, 0.36]);
-  kit.put(head, kit.cone(0.1, 0.45, 10), hair, [0, -0.08, 0.42], [Math.PI - 0.25, 0, 0]);
+  putHair(b, kit.sph(0.1), hair, [0, 0.18, 0.36]);
+  putHair(b, kit.cone(0.1, 0.45, 10), hair, [0, -0.08, 0.42], [Math.PI - 0.25, 0, 0]);
   // ball held in the left hand
   aim(armL, -0.2, -0.7, -0.55);
   const bp = handPos(armL).add(new THREE.Vector3(0.06, 0.02, -0.12));
@@ -618,7 +629,7 @@ function buildBailarina(): CharacterModel {
   // hair: golden-brown with a bun and a ribbon
   const hair = 0xb87333;
   hairCap(b, hair, 0.4, Math.PI * 0.58);
-  kit.put(head, kit.sph(0.13), hair, [0, 0.33, 0.12]);
+  putHair(b, kit.sph(0.13), hair, [0, 0.33, 0.12]);
   kit.put(head, kit.torus(0.11, 0.025), kit.mat(0xff5aa8), [0, 0.28, 0.1], [Math.PI / 2 - 0.4, 0, 0]);
   return b;
 }
@@ -665,7 +676,7 @@ function buildKarateca(): CharacterModel {
     [0.15, -0.05, -0.3, -0.5],
     [0, 0.12, 0.3, 0],
   ] as const) {
-    kit.put(head, kit.cone(0.1, 0.22, 6), hair, [x, 0.33, z], [rx, 0, rz]);
+    putHair(b, kit.cone(0.1, 0.22, 6), hair, [x, 0.33, z], [rx, 0, rz]);
   }
   const red = 0xe23b3b;
   // forehead strap only (arc across the front) — kids read “faixa de karate”
@@ -792,7 +803,7 @@ function buildAlice(): CharacterModel {
   hairCap(b, hair, 0.35, Math.PI * 0.57, 1.08);
   hairBack(b, hair, 0.9, 0.33);
   for (const side of [-1, 1]) {
-    kit.put(head, kit.cyl(0.08, 0.06, 0.5, 10), hair, [side * 0.3, -0.25, 0.02], [0, 0, side * 0.08]);
+    putHair(b, kit.cyl(0.08, 0.06, 0.5, 10), hair, [side * 0.3, -0.25, 0.02], [0, 0, side * 0.08]);
   }
   // blue hair ribbon (band) + bow on top
   kit.put(head, kit.torus(0.355, 0.028), blue, [0, 0.16, 0.03], [Math.PI / 2 + 0.55, 0, 0]);

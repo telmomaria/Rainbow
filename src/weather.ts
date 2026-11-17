@@ -486,6 +486,8 @@ export class Weather {
   private puffs: Float32Array; // dx, dy, dz, s per puff
   /** Settings: how loud the rain sounds (0 = silent, 1 = normal). The rain itself still falls. */
   rainVolume = 1;
+  /** Last level (Lua): no Earth weather — black sky, hard sun, stars, no rain/clouds. */
+  private space = false;
   private rainMesh: THREE.InstancedMesh;
   private rainMat: THREE.MeshBasicMaterial;
   private rainPos: Float32Array;
@@ -636,11 +638,29 @@ export class Weather {
     this.ensureAttached();
   }
 
+  /** Lua / vacuum: skip Earth weather so the Moon keeps its own sky and hard light. */
+  setSpace(on: boolean): void {
+    this.space = on;
+    if (on) {
+      this.cloudMesh.visible = false;
+      this.rainMesh.visible = false;
+      this.snowPts.visible = false;
+      this.moon.visible = false;
+      this.starMat.opacity = 1;
+      this.starPts.visible = true;
+    } else {
+      this.cloudMesh.visible = true;
+      this.rainMesh.visible = true;
+      this.snowPts.visible = true;
+    }
+  }
+
   /** Fetch (or reuse) the real weather of a city and transition to it. */
   async setCity(cityName: string): Promise<void> {
     const my = ++this.token;
     this.cityName = cityName;
     this.captureSceneBase();
+    if (this.space) return;
     if (this.forced) {
       this.setState(this.forcedReading(), 'forced', true);
       return;
@@ -670,6 +690,10 @@ export class Weather {
     dt = Math.min(Math.max(dt, 0), 0.1);
     this.time += dt;
     this.ensureAttached();
+    if (this.space) {
+      this.updateSpace();
+      return;
+    }
     this.captureSceneBase();
     this.clockT += dt;
     if (this.clockT >= CLOCK_EVERY_S) {
@@ -895,6 +919,36 @@ export class Weather {
       L.cloudColor.multiplyScalar(0.42).lerp(NIGHT_FOG, 0.25);
       L.stars = clearish;
       L.moon = clearish;
+    }
+  }
+
+  /** Hard lunar day: black sky, stars, bright sun, no Earth weather. */
+  private updateSpace(): void {
+    this.bg.setHex(0x05060f);
+    this.scene.background = this.bg;
+    this.fog.color.setHex(0x05060f);
+    this.fog.near = 90;
+    this.fog.far = 300;
+    this.scene.fog = this.fog;
+    this.hemi.color.setHex(0xd0d5de);
+    this.hemi.groundColor.setHex(0x1a1c22);
+    this.hemi.intensity = 0.4;
+    this.sun.color.setHex(0xfff5e6);
+    this.sun.intensity = 2.15;
+    this.sun.position.set(55, 70, 25);
+    this.camera.getWorldPosition(this.center);
+    this.starPts.position.copy(this.center);
+    this.starMat.opacity = 1;
+    this.starPts.visible = true;
+    this.moon.visible = false;
+    this.cloudMesh.visible = false;
+    this.rainMesh.visible = false;
+    this.snowPts.visible = false;
+    if (ambient) {
+      const now = ambient.ctx.currentTime;
+      ambient.rain.gain.setTargetAtTime(0, now, 0.3);
+      ambient.wind.gain.setTargetAtTime(0, now, 0.3);
+      ambient.rainTarget = ambient.windTarget = 0;
     }
   }
 

@@ -15,8 +15,9 @@ import { Flight } from './flight';
 import { Launch } from './launch';
 import { Spaceport } from './spaceport';
 import { UsaLandmarks } from './usa';
-import { LANDER, MoonAltar, createMoonWorld, inDeepCrater, moonHeight } from './moon';
+import { LANDER, MoonAltar, createMoonWorld, inDeepCrater, moonHeight, seedMoonLoot } from './moon';
 import { Car } from './car';
+import { createScooter, noScooter, type Scooter } from './scooter';
 import { createBeggar } from './beggar';
 import { chooseCharacter, createAvatarButton } from './select';
 import { CAT_REWARD, CatTree } from './cattree';
@@ -30,6 +31,12 @@ import { StreetLights } from './streetlights';
 import type { GameCtx } from './gamectx';
 import { DIFFICULTY_FACTOR, RAIN_SOUND_FACTOR, createBag, showIdlePause, type RainSound } from './ui';
 import { WanderCat } from './wandercat';
+import { Butterflies, noButterflies } from './butterflies';
+import { createRabbit, noRabbit, type WanderRabbit } from './rabbit';
+import { createParrot, noParrot, type RioParrot } from './parrot';
+import { createStreetSinger, noStreetSinger, type StreetSinger } from './streetsinger';
+import { createPostman, noPostman, type Postman } from './postman';
+import { createLivingStatue, noLivingStatue, type LivingStatue } from './livingstatue';
 import { isFree, setNoSpawnZones } from './spawn';
 import { Concert } from './concert';
 import { itemDef } from './items';
@@ -169,6 +176,21 @@ let usaLandmarks: UsaLandmarks | null = null;
 let moonAltar: MoonAltar | null = null;
 let catTree: CatTree; // assigned by addCityExtras()
 let wanderCat!: WanderCat; // assigned by spawnActors()
+let butterflies: Butterflies = noButterflies();
+/** I58 rabbit — only Vilnius (pavement hop / freeze when near). */
+let rabbit: WanderRabbit = noRabbit();
+/** I38 parrot — only Rio de Janeiro (tree perch; says Olá + name). */
+let parrot: RioParrot = noParrot();
+/** Street singer — only Londres (guitar + tip hat; proximity song). */
+let streetSinger: StreetSinger = noStreetSinger();
+/** Carteiro — Paris (index 4) onward; pavement walk + postal once/day. */
+let postman: Postman = noPostman();
+/** Homem-estátua — Vilnius (index 6) onward; freeze / surprise. */
+let livingStatue: LivingStatue = noLivingStatue();
+/** Kick scooter from Londres onward (null-ish stub before then / on the Moon). */
+let scooter: Scooter = noScooter();
+/** The kick scooter she is riding (null = on foot). Declared early: addCityExtras clears it. */
+let scooting: Scooter | null = null;
 let trouble: Trouble;
 let streetLights: StreetLights;
 let traffic: Traffic;
@@ -210,7 +232,7 @@ const gameCtx: GameCtx = {
     refreshBag();
   },
   carried: () => carriedKind,
-  isDriving: () => !!driving || onBus(),
+  isDriving: () => !!driving || !!scooting || onBus(),
   isPaused: () => paused,
   give(kind) {
     const m = buildItem(kind);
@@ -328,7 +350,7 @@ const extras = new Extras({
   world: () => world,
   npcs: () => npcs,
   monsters: () => monsters,
-  free: () => !paused && !driving && !flight && !onBus() && !riding && !pool.swimming && !pool.lounging,
+  free: () => !paused && !driving && !scooting && !flight && !onBus() && !riding && !pool.swimming && !pool.lounging,
   walkTo(p) {
     buyTarget = null;
     setTarget(p);
@@ -386,7 +408,7 @@ function updateEating(dt: number): void {
 
 /** Knock her away from `from`, flash, lose `cost` coins. False if she can't be hurt right now. */
 function hurt(from: THREE.Vector3, cost: number): boolean {
-  if (paused || driving || flight || onBus() || invulnerable > 0) return false;
+  if (paused || driving || scooting || flight || onBus() || invulnerable > 0) return false;
   const lost = Math.min(cost, save.coins);
   if (lost > 0) addCoins(-lost);
   sfx.bonk();
@@ -407,6 +429,7 @@ function spawnActors(): void {
     // LUA2/LUA4: no question characters or street cat — only coins and martians
     collectibles.heightAt = moonHeight;
     collectibles.floatAmp = 0.35; // LUA5: coins float a little more
+    seedMoonLoot(collectibles); // crater rims, hilltops, path to the altar
     npcs = { list: [], update: () => null, dismiss() {} } as unknown as Npcs;
     monsters = new Monsters(scene, world.obstacles, { martian: true, heightAt: moonHeight, blocked: inDeepCrater });
     monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
@@ -434,6 +457,21 @@ function addCityExtras(): Car {
   moonAltar = null;
   spaceport?.dispose();
   spaceport = null;
+  butterflies.dispose();
+  butterflies = noButterflies();
+  rabbit.dispose();
+  rabbit = noRabbit();
+  parrot.dispose();
+  parrot = noParrot();
+  streetSinger.dispose();
+  streetSinger = noStreetSinger();
+  postman.dispose();
+  postman = noPostman();
+  livingStatue.dispose();
+  livingStatue = noLivingStatue();
+  scooting = null;
+  player.scooterRiding = false;
+  scooter = noScooter();
 
   // LUA2: bare Moon — lander + altar only (no fair, traffic, shops, venues, street lamps…)
   if (city.kind === 'moon') {
@@ -597,6 +635,9 @@ function addCityExtras(): Car {
   const busStops = createBusStops(scene, world.obstacles, mulberry32(city.seed * 67 + 19));
   const c = new Car(scene, world.obstacles, new THREE.Vector3(-16, 0, 7), Math.PI / 2, city.buildings[0], () => enterCar());
   world.interactables.push(c.interactable);
+  // I42 kick scooter (real vehicle) — Londres (index 3) onward; park/pavement pad with setback
+  scooter = createScooter(scene, world.obstacles, world, city.seed, save.level, () => enterScooter()) ?? noScooter();
+  if (scooter.debug().on) world.interactables.push(scooter.interactable);
   world.interactables.push(
     createBeggar(scene, world.obstacles, new THREE.Vector3(-8, 0, -8), {
       coins: () => save.coins,
@@ -607,6 +648,39 @@ function addCityExtras(): Car {
   world.interactables.push(...createProps(scene, world.obstacles, mulberry32(city.seed * 97 + 1)));
   // Fase 3: escorrega, balancé, macaca, bolas de sabão, piano, banco, baliza…
   world.interactables.push(...createPlaygrounds(scene, world.obstacles, city.seed, gameCtx, world));
+  // I63 real butterflies (fly / perch / flee) — Roma onward; park garden with clearArea
+  butterflies = new Butterflies(scene, world.obstacles, world, city.seed, save.level);
+  // I58 rabbit (real hop/wander) — only Vilnius; clearArea at spawn; never on the road
+  rabbit = createRabbit(scene, world.obstacles, world, city.name, player.position);
+  // I38 parrot (real mesh on perch) — only Rio de Janeiro; says Olá + name
+  parrot = createParrot(scene, world.obstacles, world, city.seed, city.name);
+  world.interactables.push(...parrot.things);
+  // Street singer — only Londres; guitar + tip hat; sings when near
+  streetSinger = createStreetSinger(
+    scene,
+    world.obstacles,
+    world,
+    city.seed,
+    city.name,
+    () => save.coins,
+    () => addCoins(-1),
+  );
+  world.interactables.push(...streetSinger.things);
+  // Carteiro — Paris+; postal no inventário (uma vez por cidade/dia)
+  postman = createPostman(
+    scene,
+    world.obstacles,
+    world,
+    city.seed,
+    save.level,
+    city.name,
+    player.position,
+    gameCtx,
+  );
+  world.interactables.push(...postman.things);
+  // Homem-estátua — Vilnius+; pedestal + surpresa ao ficar quieta / tocar
+  livingStatue = createLivingStatue(scene, world.obstacles, world, city.seed, save.level, gameCtx);
+  world.interactables.push(...livingStatue.things);
   catTree = new CatTree(scene, world.obstacles, mulberry32(city.seed * 31 + 5));
   hospital = createHospital(scene, world.obstacles, mulberry32(city.seed * 41 + 9));
   world.interactables.push(...createShops(scene, world.obstacles, mulberry32(city.seed * 13 + 7), gameCtx, clearLamps));
@@ -663,6 +737,7 @@ function leavePool(): void {
 
 function loadCity(): void {
   leaveBus(true);
+  forceOffScooter();
   concert?.dispose();
   pool?.dispose();
   house?.dispose();
@@ -701,6 +776,7 @@ function loadCity(): void {
   spawnActors();
   cityPill.textContent = city.name;
   weather.setLights({ hemi: world.hemi, sun: world.sun });
+  weather.setSpace(city.kind === 'moon');
   void weather.setCity(city.name);
   holdItem(null);
 }
@@ -774,6 +850,7 @@ createHomeButton(() => {
     input.releaseAll();
     knock.set(0, 0, 0);
     leaveBus(true);
+    forceOffScooter();
     leavePool();
     // LUA2: on the Moon, Casa brings her back to the lander
     if (city.kind === 'moon') {
@@ -799,7 +876,7 @@ let riding: { seat: NonNullable<Interactable['seat']>; i: number } | null = null
 function useClickable(it: Interactable): void {
   if (riding) return; // already on a ride: taps steer / get off, they never buy another
   const ok = it.interact({ player: player.position }) !== false;
-  if (ok && it.seat && !riding && !paused && !driving && !pool.swimming) {
+  if (ok && it.seat && !riding && !paused && !driving && !scooting && !pool.swimming) {
     clearTarget();
     input.releaseAll();
     riding = { seat: it.seat, i: it.seat.take(player.position) };
@@ -821,7 +898,7 @@ function getOffSwing(): void {
 }
 // Enter next to a shop counter buys too (keyboard players)
 window.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter' || paused || driving || flight || onBus() || riding) return;
+  if (e.key !== 'Enter' || paused || driving || scooting || flight || onBus() || riding) return;
   if (extras.enter()) {
     e.preventDefault(); // Enter next to a flower bed / fruit tree = pick
     return;
@@ -844,6 +921,7 @@ refreshBag();
 /** Real weather of the current city (Open-Meteo), re-applied on every city change. */
 const weather = new Weather(scene, { hemi: world.hemi, sun: world.sun }, camera);
 weather.rainVolume = RAIN_SOUND_FACTOR[save.rainSound];
+weather.setSpace(city.kind === 'moon');
 void weather.setCity(city.name);
 
 /** Hospital: run over → fall → white fade → lying in the hospital bed while the clock fills (5 min). */
@@ -932,7 +1010,7 @@ async function idlePause(): Promise<void> {
 let driving: Car | null = null;
 
 function enterCar(): void {
-  if (paused || flight || driving || onBus()) return;
+  if (paused || flight || driving || scooting || onBus() || riding) return;
   driving = car;
   car.enter(player.root); // door opens, she climbs in and stays visible at the wheel
   clearTarget();
@@ -946,6 +1024,40 @@ function exitCar(): void {
     driving = null;
     savePosition();
   });
+}
+
+function enterScooter(): void {
+  if (paused || flight || driving || scooting || onBus() || riding || pool?.swimming) return;
+  scooting = scooter;
+  player.scooterRiding = true;
+  player.sitting = false;
+  scooter.mount(player.root);
+  clearTarget();
+  input.releaseAll();
+}
+
+function exitScooter(): void {
+  if (!scooting || !scooting.riding) return;
+  clearTarget();
+  scooting.dismount(() => {
+    player.scooterRiding = false;
+    player.root.rotation.x = 0;
+    scooting = null;
+    savePosition();
+  });
+}
+
+/** Instant hop-off (Casa / nova cidade / novo jogo). */
+function forceOffScooter(): void {
+  if (!scooting && !player.scooterRiding) {
+    scooter.forcePark();
+    return;
+  }
+  scooter.forcePark();
+  player.scooterRiding = false;
+  player.root.rotation.x = 0;
+  player.root.scale.setScalar(1);
+  scooting = null;
 }
 
 /* ---------- bus (traffic.ts + busstops.ts) ---------- */
@@ -963,7 +1075,7 @@ function onBus(): boolean {
   return traffic?.hasRider() ?? false;
 }
 function boardBus(): void {
-  if (paused || driving || flight || onBus() || riding || pool?.swimming) return;
+  if (paused || driving || scooting || flight || onBus() || riding || pool?.swimming) return;
   if (traffic.tryBoard(player.position, 3) !== 'ok') return;
   clearTarget();
   input.releaseAll();
@@ -1051,6 +1163,11 @@ window.addEventListener('keydown', (e) => {
   if (driving && (e.key === ' ' || e.key === 'Enter')) {
     e.preventDefault();
     exitCar();
+    return;
+  }
+  if (scooting && (e.key === ' ' || e.key === 'Enter')) {
+    e.preventDefault();
+    exitScooter();
   }
 });
 
@@ -1177,13 +1294,17 @@ function handleTap(x: number, y: number): void {
     exitCar();
     return;
   }
+  if (scooting && raycaster.intersectObject(scooting.group, true).length > 0) {
+    exitScooter();
+    return;
+  }
   // on the bus: any tap = "I want to get off" (now if the doors are open, else at the next stop)
   if (onBus()) {
     requestOffBus();
     return;
   }
   // tapping a bus standing at a stop with its doors open: walk to the door (touching it gets her on)
-  const bus = !driving ? traffic.tappedBus(raycaster) : null;
+  const bus = !driving && !scooting ? traffic.tappedBus(raycaster) : null;
   if (bus?.open && bus.door) {
     buyTarget = null;
     if (Math.hypot(bus.door.x - player.position.x, bus.door.z - player.position.z) < BUS_DOOR_R) boardBus();
@@ -1373,6 +1494,27 @@ function tick(time: number): void {
     if (driving.drive(dt, throttle, steer)) clearTarget();
     player.heading = driving.heading; // her position is placed by the car (seat / door animation)
     speed = Math.abs(driving.speed);
+  } else if (scooting) {
+    let throttle = (k.up ? 1 : 0) - (k.down ? 1 : 0);
+    let steer = (k.left ? 1 : 0) - (k.right ? 1 : 0);
+    if (throttle || steer) clearTarget();
+    else if (walkTarget) {
+      const dx = walkTarget.x - scooting.position.x;
+      const dz = walkTarget.z - scooting.position.z;
+      const dist = Math.hypot(dx, dz);
+      let diff = Math.atan2(-dx, -dz) - scooting.heading;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      steer = THREE.MathUtils.clamp(diff * 2, -1, 1);
+      throttle = dist > 3 ? (Math.abs(diff) > 1.6 ? 0.35 : 0.9) : -1;
+      if (dist < 3 && Math.abs(scooting.speed) < 0.5) clearTarget();
+    }
+    if (scooting.busy) {
+      throttle = 0;
+      steer = 0;
+    }
+    if (scooting.drive(dt, throttle, steer)) clearTarget();
+    player.heading = scooting.heading;
+    speed = Math.abs(scooting.speed);
   } else if (k.up || k.down || k.left || k.right) {
     clearTarget(); // keyboard always takes over from click-to-walk
     buyTarget = null;
@@ -1406,9 +1548,12 @@ function tick(time: number): void {
     }
   }
   // normal walk cycle here; stair climbs animate after interactable.update (walkAnim is set there)
-  if (!flight && scriptedWalk <= 0) player.update(dt, driving ? 0 : speed * extras.life.stepFactor());
+  if (!flight && scriptedWalk <= 0) {
+    const animSpeed = driving ? 0 : scooting ? speed : speed * extras.life.stepFactor();
+    player.update(dt, animSpeed);
+  }
   // Moon hills / bridge deck: keep her feet on the surface (not during a scripted stair climb)
-  if (!flight && !riding && !pool.swimming && player.lyingY === null && scriptedWalk <= 0 && world.heightAt) {
+  if (!flight && !riding && !scooting && !pool.swimming && player.lyingY === null && scriptedWalk <= 0 && world.heightAt) {
     player.position.y = world.heightAt(player.position.x, player.position.z);
   }
   if (riding) {
@@ -1435,7 +1580,7 @@ function tick(time: number): void {
 
   // --- touch-to-interact (edge triggered: fires once when the character reaches the object) ---
   for (const it of world.interactables) {
-    if (onBus()) break; // riding past things doesn't touch them
+    if (onBus() || scooting) break; // riding past things doesn't touch them
     const d = Math.hypot(it.position.x - player.position.x, it.position.z - player.position.z);
     if (it.requiresClick) {
       // only when the child asked for it (tap, or Enter next to it)
@@ -1459,7 +1604,7 @@ function tick(time: number): void {
     }
   }
   // Hard separation every frame: teleports, rides, escape bugs and strolling NPCs must never leave her inside a person.
-  if (!driving && !onBus() && !flight && !riding && !pool?.swimming) {
+  if (!driving && !scooting && !onBus() && !flight && !riding && !pool?.swimming) {
     for (const it of world.interactables) {
       if (!it.keepClear) continue;
       const d = Math.hypot(it.position.x - player.position.x, it.position.z - player.position.z);
@@ -1477,7 +1622,7 @@ function tick(time: number): void {
   // --- kitten stuck in a tree: touch the trunk to climb up and rescue it ---
   catTree.update(dt, player.position);
   catTree.idleAfter(dt);
-  if (!paused && !driving && !flight && !onBus() && catTree.waiting) {
+  if (!paused && !driving && !scooting && !flight && !onBus() && catTree.waiting) {
     const tp = catTree.interactable.position;
     if (Math.hypot(player.position.x - tp.x, player.position.z - tp.z) < 1.75) {
       paused = true;
@@ -1557,6 +1702,7 @@ function tick(time: number): void {
   usaLandmarks?.update(dt);
   moonAltar?.update(dt);
   car.update(dt);
+  scooter.update(dt);
   if (!flight && !leavesByRocket()) airport.setDoorOpen(readyToTravel());
   if (!flight && spaceport) spaceport.setReady(readyToTravel());
   notEnoughCooldown -= dt;
@@ -1571,7 +1717,7 @@ function tick(time: number): void {
       void speak(['Boa! Juntaste cem moedas!', `Vai ao aeroporto e apanha o avião para ${next.dest ?? next.name}!`]);
     }
   }
-  if (!paused && !flight && !driving && !onBus() && city.kind !== 'moon') {
+  if (!paused && !flight && !driving && !scooting && !onBus() && city.kind !== 'moon') {
     const b = leavesByRocket() && spaceport ? spaceport.boardPoint : airport.boardPoint;
     if (Math.hypot(player.position.x - b.x, player.position.z - b.z) < 1.6) {
       if (readyToTravel()) startFlight();
@@ -1586,8 +1732,13 @@ function tick(time: number): void {
 
   // --- question characters ---
   const met = npcs.update(dt, player.position, paused || onBus());
-  if (met && !paused && !driving && !onBus()) void meet(met);
+  if (met && !paused && !driving && !scooting && !onBus()) void meet(met);
   wanderCat.update(dt, player.position, paused);
+  butterflies.update(dt, player.position, paused);
+  rabbit.update(dt, player.position, paused);
+  streetSinger.update(dt, player.position, paused);
+  postman.update(dt, player.position, paused);
+  livingStatue.update(dt, player.position, paused);
 
   // --- camera follows behind the character, unless the player is looking around ---
   const turning = k.left || k.right;
@@ -1615,7 +1766,7 @@ function tick(time: number): void {
     if (flight.done) endFlight();
   } else {
   const target = player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
-  const wanted = driving || onBus() ? Math.max(camDist, 12) : camDist;
+  const wanted = driving || scooting || onBus() ? Math.max(camDist, 12) : camDist;
   // don't let the camera end up inside a building: walk out from her towards the camera and stop before a wall
   // inside the house the roof is hidden; camera stays normal (third-person), walls don't block while she's indoors
   const pitch = camPitch;
@@ -1630,7 +1781,7 @@ function tick(time: number): void {
     // low things (fences, the concert crowd, the stage) only block the camera below their height
     // house walls are skipped while she's inside so the normal camera still works
     if (world.obstacles.some((o) => {
-      if (o === driving?.obstacleBox) return false;
+      if (o === driving?.obstacleBox || o === scooting?.obstacleBox) return false;
       if (indoors && o === house.interior) return false;
       if (indoors && house.interior && px > house.interior.minX - 0.5 && px < house.interior.maxX + 0.5 && pz > house.interior.minZ - 0.5 && pz < house.interior.maxZ + 0.5) return false;
       if (o.height !== undefined && py > o.height + 0.4) return false;
@@ -1701,12 +1852,20 @@ function tick(time: number): void {
         pool: pool.debug(),
         catAt: [+catTree.interactable.position.x.toFixed(1), +catTree.interactable.position.z.toFixed(1)],
         walkCat: wanderCat.debug(),
+        butterflies: butterflies.debug(),
+        rabbit: rabbit.debug(),
+        parrot: parrot.debug(),
+        singer: streetSinger.debug(),
+        postman: postman.debug(),
+        statue: livingStatue.debug(),
         rainSound: save.rainSound,
         flying: !!flight,
         character: save.character,
         things: world.interactables.map((i) => [+i.position.x.toFixed(1), +i.position.z.toFixed(1), i.radius]),
         driving: !!driving,
         car: [+car.position.x.toFixed(1), +car.position.z.toFixed(1), +car.speed.toFixed(1)],
+        scooter: scooter.debug(),
+        scooting: !!scooting,
         visible: player.root.visible,
         board: [airport.boardPoint.x, airport.boardPoint.z],
         plane: [+airport.plane.position.x.toFixed(1), +airport.plane.position.y.toFixed(1)],
@@ -1762,6 +1921,7 @@ function newGame(): void {
   player.root.rotation.x = 0;
   hospital?.setAmbulanceLights(false);
   driving = null; // the old car is thrown away with the city
+  forceOffScooter();
   player.root.scale.setScalar(1);
   player.root.visible = true;
   rescuing = false;
@@ -1803,6 +1963,7 @@ const setAvatar = createAvatarButton(save.character ?? 'princesa', () => {
 async function openMainPage(): Promise<void> {
   menuOpen = true;
   leaveBus(true);
+  forceOffScooter();
   const wasPaused = paused;
   paused = true;
   clearTarget();

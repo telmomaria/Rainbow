@@ -3,7 +3,7 @@ import { tone } from '../audio';
 import { feel } from '../bus';
 import { giftable, greetSpot, personClick } from './common';
 import { registerFolk } from './folk';
-import { Puppet, Seq, Sparkles, apron, ball, box, clickSpot, cyl, helmet, mat } from './kit';
+import { Puppet, Sparkles, box, clickSpot, cyl, helmet, mat } from './kit';
 
 /** I21 — Polícia de trânsito: whistle, stop cars; in London asks a simple English question (G01). */
 registerFolk({
@@ -137,211 +137,20 @@ registerFolk({
   },
 });
 
-/** I25 — Contabilista: count coins on abacus (G03 = 5). */
-registerFolk({
-  id: 'contabilista',
-  ref: 'I25',
-  group: 'profissao',
-  hw: 2.5,
-  depth: 3.8,
-  where: 'street',
-  build(ctx) {
-    const g = ctx.root;
-    box(g, mat(0x8d5a3b), 1.6, 1.0, 0.3, 0, 1.0, -2.0);
-    const beads: THREE.Mesh[] = [];
-    let answer = 3;
-    for (let row = 0; row < 2; row++) {
-      for (let i = 0; i < 5; i++) {
-        const b = ball(g, mat(row ? 0xe03131 : 0x228be6), 0.1, -0.6 + i * 0.3, 0.7 + row * 0.35, -1.85);
-        beads.push(b);
-      }
-    }
-    const accountant = new Puppet(ctx, { shirt: 0x4263eb, pants: 0x343a40, hair: 0x212529 }, 0.7, -1.4);
-    let waiting = false;
-    const ask = async (): Promise<boolean> => {
-      if (waiting || !ctx.free()) return false;
-      waiting = true;
-      answer = 2 + Math.floor(ctx.rng() * 4); // 2..5
-      beads.forEach((b, i) => {
-        b.visible = i < answer;
-      });
-      accountant.talk(2);
-      ctx.say([ctx.greeting(), 'Conta as contas do ábaco!']);
-      const opts: [string, string, string] = [`${answer}`, `${answer + 1}`, `${Math.max(1, answer - 1)}`];
-      // shuffle wrong positions but keep right first for ask()
-      const ok = await ctx.game.ask({ text: 'Quantas contas estão no ábaco?', answers: opts }, 5);
-      waiting = false;
-      if (ok) {
-        accountant.hop(1.3);
-        feel('play');
-      } else accountant.shake(1);
-      return true;
-    };
-    return {
-      things: [
-        greetSpot(ctx, accountant, 0.7, -1.4, 'Vamos contar juntos?'),
-        clickSpot(ctx, g, 0, -1.8, 2.5, () => {
-          void ask();
-          return true;
-        }, 5),
-      ],
-      people: [giftable(accountant, 0.7, -1.4, ctx)],
-      update: (dt) => accountant.update(dt),
-      debug: () => ({ answer, waiting }),
-    };
-  },
-});
+/** I25 — Contabilista: REMOVIDO (2026-11-17, qualidade).
+ *  Ábaco + pergunta de contar — interação fraca. Não repor. */
 
 /** I26 — Professor: REMOVIDO (2026-11-16, qualidade).
  *  Quadro + barra branca a fingir letra + só fala — sem letra legível. Não repor. */
 
-/** I27 — Político: speech on podium; she climbs and crowd cheers. */
-registerFolk({
-  id: 'politico',
-  ref: 'I27',
-  group: 'profissao',
-  hw: 2.5,
-  depth: 4,
-  where: 'street',
-  build(ctx) {
-    const g = ctx.root;
-    box(g, mat(0x868e96), 1.4, 0.7, 1.0, 0, 0.35, -2.2); // podium
-    ctx.block(-0.7, 0.7, -2.7, -1.7, 0.8);
-    const pol = new Puppet(ctx, { shirt: 0x228be6, pants: 0x212529, hair: 0x5c3d2e }, 0, -2.0);
-    const sparks = new Sparkles(ctx.scene);
-    const seq = new Seq();
-    let busy = false;
-    const speech = (): boolean => {
-      if (busy || !ctx.free()) return false;
-      busy = true;
-      ctx.game.hold(true);
-      pol.talk(2);
-      ctx.say([ctx.greeting(), 'Sobe ao palanque e diz olá à praça!']);
-      const stand = ctx.at(0, -1.5, 0.7);
-      seq.after(0.3, () => {
-        ctx.player.position.set(stand.x, 0.7, stand.z);
-        ctx.player.heading = ctx.heading(Math.PI);
-      });
-      seq.after(1.2, () => {
-        sparks.burst(stand.clone().setY(1.5), 18);
-        [523, 659, 784, 988, 1175].forEach((f, i) => tone(f, i * 0.07, 0.15, 'triangle', 0.05));
-        ctx.say(['A praça aplaude!']);
-      });
-      seq.after(2.8, () => {
-        ctx.player.position.set(stand.x, 0, stand.z + 1.5);
-        ctx.game.hold(false);
-        busy = false;
-        feel('play');
-        if (ctx.ready('speech')) ctx.pay(2, stand.clone().setY(1));
-      });
-      return true;
-    };
-    return {
-      things: [greetSpot(ctx, pol, 0, -2.0, 'Queres discursar?'), clickSpot(ctx, g, 0, -1.8, 2.5, speech, 5)],
-      people: [giftable(pol, 0, -2.0, ctx)],
-      update(dt) {
-        pol.update(dt);
-        seq.update(dt);
-        sparks.update(dt);
-      },
-      dispose() {
-        if (busy) ctx.game.hold(false);
-      },
-      debug: () => ({ busy }),
-    };
-  },
-});
+/** I27 — Político: REMOVIDO (2026-11-17, qualidade).
+ *  Palanque + aplauso forçado — interação fraca. Não repor. */
 
-/** I28 — Criadora de vídeos: three-step dance. */
-registerFolk({
-  id: 'criadora',
-  ref: 'I28',
-  group: 'profissao',
-  hw: 2.4,
-  depth: 3.6,
-  where: 'street',
-  build(ctx) {
-    const creator = new Puppet(ctx, { shirt: 0xff6b9d, pants: 0x212529, hair: 0xfaa2c1, longHair: true }, 0, -1.5);
-    const phone = box(ctx.root, mat(0x212529), 0.18, 0.35, 0.05, 0.4, 1.3, -1.1);
-    const seq = new Seq();
-    let busy = false;
-    const dance = (): boolean => {
-      if (busy || !ctx.free()) return false;
-      busy = true;
-      ctx.game.hold(true);
-      ctx.say([ctx.greeting(), 'Passo um… dois… três! Copia a dança!']);
-      creator.cheer(1);
-      seq.after(0.8, () => creator.wave(0.8));
-      seq.after(1.6, () => creator.hop(0.8));
-      seq.after(2.4, () => {
-        creator.cheer(1.2);
-        ctx.player.airborne = true;
-        ctx.player.root.rotation.order = 'YXZ';
-        ctx.player.root.rotation.x = -0.2;
-      });
-      seq.after(3.4, () => {
-        ctx.player.root.rotation.x = 0;
-        ctx.player.airborne = false;
-        ctx.game.hold(false);
-        busy = false;
-        feel('play');
-        if (ctx.ready('dance')) ctx.pay(2, ctx.at(0, -1.5, 1));
-        ctx.say(['Que vídeo giro!']);
-      });
-      return true;
-    };
-    return {
-      things: [greetSpot(ctx, creator, 0, -1.5, 'Vamos gravar uma dança?'), clickSpot(ctx, phone, 0.4, -1.1, 2.2, dance, 5)],
-      people: [giftable(creator, 0, -1.5, ctx)],
-      update(dt) {
-        creator.update(dt);
-        seq.update(dt);
-      },
-      dispose() {
-        if (busy) {
-          ctx.player.root.rotation.x = 0;
-          ctx.player.airborne = false;
-          ctx.game.hold(false);
-        }
-      },
-      debug: () => ({ busy }),
-    };
-  },
-});
+/** I28 — Criadora de vídeos: REMOVIDO (2026-11-17, qualidade).
+ *  Dança em 3 passos sem ela copiar de verdade. Não repor. */
 
 /** I29 — Cantor de rua: REMOVIDO (2026-11-16, qualidade).
  *  Pedía «bate palmas» sem ela bater; só fala + tons. Não repor. */
 
-/** I30 — Empregada de mesa: tray with water glass (feel drink). */
-registerFolk({
-  id: 'empregada',
-  ref: 'I30',
-  group: 'profissao',
-  hw: 2.4,
-  depth: 3.6,
-  where: 'street',
-  build(ctx) {
-    const waiter = new Puppet(ctx, { shirt: 0xffffff, pants: 0x212529, hair: 0xfaa2c1, dress: true }, 0, -1.5);
-    apron(waiter.folk.body);
-    const tray = box(ctx.root, mat(0xdee2e6), 0.55, 0.05, 0.4, 0.45, 1.35, -1.1);
-    const glass = cyl(ctx.root, mat(0x74c0fc), 0.08, 0.22, 0.45, 1.5, -1.1);
-    (glass.material as THREE.MeshStandardMaterial).transparent = true;
-    (glass.material as THREE.MeshStandardMaterial).opacity = 0.7;
-    const serve = (): boolean => {
-      if (!ctx.free()) return false;
-      waiter.work('reach', 1.2);
-      ctx.say([ctx.greeting(), 'Um copo de água fresquinha!']);
-      feel('drink');
-      tone(1200, 0, 0.08, 'sine', 0.04);
-      tone(1500, 0.1, 0.12, 'sine', 0.04);
-      if (ctx.ready('water')) ctx.pay(1, ctx.at(0.45, -1.1, 1));
-      return true;
-    };
-    return {
-      things: [greetSpot(ctx, waiter, 0, -1.5, 'Queres água?'), clickSpot(ctx, tray, 0.45, -1.1, 2.2, serve, 5)],
-      people: [giftable(waiter, 0, -1.5, ctx)],
-      update: (dt) => waiter.update(dt),
-      debug: () => ({}),
-    };
-  },
-});
+/** I30 — Empregada de mesa: REMOVIDO (2026-11-17, qualidade).
+ *  Tabuleiro + copo de água — interação fraca. Não repor. */

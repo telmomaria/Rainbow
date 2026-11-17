@@ -31,6 +31,7 @@ const COOLDOWN_YES = 150;
  */
 export class Photographer {
   readonly things: Interactable[] = [];
+  private group: THREE.Group | null = null;
   private folk: Folk | null = null;
   private stand: THREE.Vector3 | null = null;
   private busy = false;
@@ -52,6 +53,7 @@ export class Photographer {
     if (!site) return;
 
     const g = siteGroup(scene, site);
+    this.group = g;
     // little coloured backdrop so the “studio” reads from the street
     box(g, mat(0xffe066), 2.4, 2.6, 0.12, 0, 1.35, -depth + 0.05);
     box(g, mat(0xff6b9d), 2.55, 0.12, 0.18, 0, 2.7, -depth + 0.05);
@@ -171,6 +173,16 @@ export class Photographer {
       this.ctx.hold(false);
       this.busy = false;
     }
+  }
+
+  dispose(): void {
+    if (this.busy) {
+      this.ctx.hold(false);
+      this.busy = false;
+    }
+    this.group?.removeFromParent();
+    this.group = null;
+    this.folk = null;
   }
 
   debug(): Record<string, unknown> {

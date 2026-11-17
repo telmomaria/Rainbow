@@ -868,12 +868,12 @@ function ball(parent: THREE.Object3D, m: THREE.Material, r: number, x: number, y
 }
 
 // I37 saltar à corda REMOVED from spawn (2026-11-16 hunt): "crianças" = cylinder + sphere.
-// I38 papagaio REMOVED from spawn (2026-11-16): ConeGeometry vermelho a fingir papagaio + fala.
-// I42 trotinete REMOVED from spawn (2026-11-16): mesh mínima + boost invisível (sem conduzir).
+// I38 papagaio stub REMOVED (2026-11-16): ConeGeometry vermelho. Real parrot: src/parrot.ts (Rio only).
+// I42 trotinete: real vehicle in src/scooter.ts (Londres+), wired from main.ts — not this list.
 // I58 coelho REMOVED from spawn (2026-11-16 hunt): white SphereGeometry + 2 pink cylinders
 // ("ears") + brown circle hole — same class of generic spheres Telmo called ridículo.
-// I63 borboletas REMOVED from spawn (2026-11-16 hunt): 4 flat blue spheres + 3 cones as
-// "flowers" — not butterflies; "As borboletas seguem-te!" was a lie to the eye.
+// I63 borboletas stub REMOVED (2026-11-16 hunt): 4 flat blue spheres + cones. Real butterflies:
+// src/butterflies.ts (Roma+, fly/perch/flee) — wired from main.ts, not this playground list.
 // I74 ecopontos REMOVED from spawn (2026-11-16): contentores sem lixo/escolha — só fala.
 
 /** I75 — Biblioteca: casinha de livros; toque = história curta completa (PT-PT, 7–8 anos). */
@@ -949,8 +949,8 @@ export function createPlaygrounds(
   // Landmark tower climbs (Clérigos, castelo, cultura…) stay in landmarks.ts.
   //
   // Quantity→quality cull (2026-11-16 hunt): kept out of spawn —
-  // I35 sandbox, I37 jump-rope (cyl kids), I38 kite, I39 bubbles (bare pole), I42 scooter,
-  // I58 rabbit, I63 butterflies, I74 bins, I76 living statue.
+  // I35 sandbox, I37 jump-rope (cyl kids), I38 kite, I39 bubbles (bare pole),
+  // I58 rabbit, I74 bins, I76 living statue. (I42 → scooter.ts · I63 → butterflies.ts)
   void world;
   void buildTerraceStairs;
   return out;

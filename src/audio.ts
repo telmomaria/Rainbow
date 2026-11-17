@@ -52,6 +52,21 @@ export function taunt(text: string): void {
   speechSynthesis.speak(u);
 }
 
+/** Birds / small animals: high funny voice; skipped if anything is already being said. */
+export function chirp(lines: string | string[], pitch = 1.65): void {
+  if (!('speechSynthesis' in window) || speechSynthesis.speaking || speechSynthesis.pending) return;
+  const list = Array.isArray(lines) ? lines : [lines];
+  spokenLog.push(...list);
+  for (const text of list) {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'pt-PT';
+    if (voice) u.voice = voice;
+    u.rate = 1.1;
+    u.pitch = pitch;
+    speechSynthesis.speak(u);
+  }
+}
+
 /** Every line handed to speech, in order (read by the ?debug QA bridge). */
 export const spokenLog: string[] = [];
 

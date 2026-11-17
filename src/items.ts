@@ -26,8 +26,12 @@ export function itemKinds(): string[] {
   return [...items.keys()];
 }
 
-/** Where an accessory sits on the character. `body` = full outfit (rebuilds torso; same head/hair). `feet` = shoes on both legs. */
-export type WearSlot = 'head' | 'face' | 'neck' | 'back' | 'body' | 'feet';
+/**
+ * Where an accessory sits on the character.
+ * `body` = full outfit (rebuilds torso; same head/hair). `feet` = shoes on both legs.
+ * `hands` = painted nails on both hand spheres (manicure).
+ */
+export type WearSlot = 'head' | 'face' | 'neck' | 'back' | 'body' | 'feet' | 'hands';
 export interface WearableDef {
   name: string;
   slot: WearSlot;
@@ -36,9 +40,12 @@ export interface WearableDef {
    * (z = 0 at the face, -Z points forward), neck = base of the head, back = between the shoulders (+Z = behind her).
    * `body` outfits are handled by Character via buildShopOutfit — `build` is only for shop-window previews.
    * `feet` = one shoe mesh (Character clones it onto each leg pivot; hides meshes tagged `userData.isShoe`).
+   * `hands` = nail tips for one hand (Character clones onto each arm at the hand; unicorn gets a body pair).
    * Sizes are for a head radius of ~0.34 m; the game scales it to each character.
    */
   build: () => THREE.Object3D;
+  /** Salon cut/dye: hide meshes tagged `userData.isHair` so the new style replaces the stock hair. */
+  replacesHair?: boolean;
 }
 const wearables = new Map<string, WearableDef>();
 export function registerWearable(kind: string, def: WearableDef): void {

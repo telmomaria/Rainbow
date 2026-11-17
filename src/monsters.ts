@@ -133,9 +133,11 @@ export class Monsters {
       const dist = Math.hypot(dx, dz);
 
       // jewel shield: anyone who sees her backs off, and keeps backing off while she is near
-      if (this.scared && dist < SEE_DIST && (m.state !== 'retreat' || m.stateTime > 2)) this.setState(m, 'retreat');
+      // martians see a bit farther on the open mare so the chase is obvious
+      const see = this.martian ? SEE_DIST * 1.35 : SEE_DIST;
+      if (this.scared && dist < see && (m.state !== 'retreat' || m.stateTime > 2)) this.setState(m, 'retreat');
       if (m.state === 'retreat' && m.stateTime > 3) this.setState(m, 'wander');
-      if (m.state === 'wander' && dist < SEE_DIST) {
+      if (m.state === 'wander' && dist < see) {
         this.setState(m, 'chase');
         if (this.tauntCooldown <= 0) {
           const bag = this.martian ? MARTIAN_TAUNTS : TAUNTS;
@@ -143,7 +145,7 @@ export class Monsters {
           this.tauntCooldown = 7;
         }
       }
-      if (m.state === 'chase' && (dist > SEE_DIST * 1.6 || m.stateTime > 12)) this.setState(m, 'wander');
+      if (m.state === 'chase' && (dist > see * 1.6 || m.stateTime > 12)) this.setState(m, 'wander');
 
       let vx = 0;
       let vz = 0;
@@ -151,7 +153,7 @@ export class Monsters {
       if (m.state === 'chase') {
         vx = dx / dist;
         vz = dz / dist;
-        speed = CHASE_SPEED;
+        speed = this.martian ? CHASE_SPEED * 1.05 : CHASE_SPEED;
       } else if (m.state === 'retreat') {
         vx = -dx / dist;
         vz = -dz / dist;
@@ -219,9 +221,12 @@ export class Monsters {
   }
 
   private spawn(player: THREE.Vector3): void {
-    let p = randomFreeSpot(this.obstacles, { center: player, range: 60, radius: RADIUS, avoid: player, minDist: 25 });
+    // on the open mare, spawn nearer so the green chase is easy to notice
+    const near = this.martian ? 14 : 25;
+    const range = this.martian ? 40 : 60;
+    let p = randomFreeSpot(this.obstacles, { center: player, range, radius: RADIUS, avoid: player, minDist: near });
     for (let i = 0; i < 10 && this.blocked?.(p.x, p.z); i++) {
-      p = randomFreeSpot(this.obstacles, { center: player, range: 60, radius: RADIUS, avoid: player, minDist: 20 });
+      p = randomFreeSpot(this.obstacles, { center: player, range, radius: RADIUS, avoid: player, minDist: Math.max(10, near - 5) });
     }
     if (this.blocked?.(p.x, p.z)) return;
     const { group, body } = this.martian ? buildMartian() : buildMonster();
@@ -270,45 +275,72 @@ function buildMonster(): { group: THREE.Group; body: THREE.Mesh } {
 /** Friendly green martian: antennae, big eyes, three fingers — same chase rules as the city creatures. */
 function buildMartian(): { group: THREE.Group; body: THREE.Mesh } {
   const group = new THREE.Group();
-  const skin = new THREE.MeshStandardMaterial({ color: 0x51cf66, roughness: 0.55 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 18, 14), skin);
-  body.position.y = 0.75;
+  // everything hangs off `body` so the hop animation in update() keeps the silhouette together
+  const skin = new THREE.MeshStandardMaterial({ color: 0x40c057, roughness: 0.5, emissive: 0x2b8a3e, emissiveIntensity: 0.28 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.62, 18, 14), skin);
+  body.position.y = 0.85;
   body.castShadow = true;
   group.add(body);
-  // oval head a bit bigger
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), skin);
-  head.scale.set(1, 1.15, 0.9);
-  head.position.y = 1.45;
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.48, 16, 12), skin);
+  head.scale.set(1.05, 1.2, 0.95);
+  head.position.y = 0.78;
   head.castShadow = true;
-  group.add(head);
-  const white = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  body.add(head);
+
+  const white = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.15 });
   const black = new THREE.MeshStandardMaterial({ color: 0x111111 });
   for (const side of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), white);
-    eye.position.set(side * 0.18, 0.05, -0.32);
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), black);
-    pupil.position.set(0, 0, -0.12);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), white);
+    eye.position.set(side * 0.2, 0.06, -0.38);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), black);
+    pupil.position.set(0, 0, -0.14);
     eye.add(pupil);
     head.add(eye);
-    // antenna
-    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 6), skin);
-    ant.position.set(side * 0.2, 0.55, 0);
-    ant.rotation.z = side * -0.35;
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), new THREE.MeshStandardMaterial({ color: 0xff6b9d, emissive: 0xff6b9d, emissiveIntensity: 0.4 }));
-    tip.position.y = 0.28;
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.55, 6), skin);
+    ant.position.set(side * 0.22, 0.62, 0);
+    ant.rotation.z = side * -0.4;
+    const tip = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xff6b9d, emissive: 0xff6b9d, emissiveIntensity: 0.7 }),
+    );
+    tip.position.y = 0.32;
     ant.add(tip);
     head.add(ant);
   }
-  // smile
-  const smile = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.025, 6, 12, Math.PI), black);
-  smile.position.set(0, -0.12, -0.35);
+  const smile = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.03, 6, 12, Math.PI), black);
+  smile.position.set(0, -0.14, -0.4);
   smile.rotation.x = Math.PI;
   head.add(smile);
-  // stubby legs
+
+  // stubby arms that reach forward while chasing (readable silhouette)
   for (const side of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.45, 8), skin);
-    leg.position.set(side * 0.22, 0.25, 0);
-    group.add(leg);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.55, 8), skin);
+    arm.position.set(side * 0.55, 0.05, -0.15);
+    arm.rotation.z = side * 0.85;
+    arm.rotation.x = -0.6;
+    arm.castShadow = true;
+    body.add(arm);
+    const hand = new THREE.Group();
+    hand.position.set(0, -0.32, 0);
+    arm.add(hand);
+    for (let f = 0; f < 3; f++) {
+      const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.025, 0.18, 5), skin);
+      finger.position.set((f - 1) * 0.07, -0.08, 0);
+      finger.rotation.x = 0.4;
+      hand.add(finger);
+    }
+  }
+
+  for (const side of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.5, 8), skin);
+    leg.position.set(side * 0.26, -0.55, 0.05);
+    leg.castShadow = true;
+    body.add(leg);
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), skin);
+    foot.scale.set(1.1, 0.55, 1.3);
+    foot.position.set(0, -0.28, -0.05);
+    leg.add(foot);
   }
   return { group, body };
 }

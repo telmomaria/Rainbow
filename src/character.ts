@@ -43,6 +43,8 @@ export class Character {
   prone = false;
   /** Sitting on a swing: legs forward (main.ts places her and sets the tilt). */
   sitting = false;
+  /** Standing on a kick scooter: hands on the bars (main.ts places her on the deck). */
+  scooterRiding = false;
   private swimPhase = 0;
 
   constructor(id: string) {
@@ -125,6 +127,14 @@ export class Character {
       r = 0.3;
     }
     const k = r / 0.34;
+    // Salon cut/dye: hide stock hair meshes so the new style replaces them (not stacked on top).
+    const headWear = this.wearing.head ? wearableDef(this.wearing.head) : undefined;
+    const hideStockHair = !!headWear?.replacesHair;
+    if (head) {
+      head.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh && o.userData?.isHair) o.visible = !hideStockHair;
+      });
+    }
     for (const [slot, kind] of Object.entries(this.wearing)) {
       if (slot === 'body') continue; // baked into the rebuilt torso
       const def = wearableDef(kind);
@@ -134,15 +144,47 @@ export class Character {
         this.applyShoes(kind);
         continue;
       }
+      if (slot === 'hands') {
+        this.applyNails(kind);
+        continue;
+      }
       const o = def.build();
       o.scale.multiplyScalar(k);
-      if (slot === 'head') o.position.set(0, r * 0.92, 0);
-      else if (slot === 'face') o.position.set(0, 0, -r * 0.97);
+      if (slot === 'head') {
+        // full hair replacement sits centred on the crown; hats/bows stay on top
+        o.position.set(0, def.replacesHair ? r * 0.15 : r * 0.92, def.replacesHair ? 0.02 : 0);
+      } else if (slot === 'face') o.position.set(0, 0, -r * 0.97);
       else if (slot === 'neck') o.position.set(0, -r - 0.02, 0);
       else o.position.set(0, -r - 0.35, r * 0.6); // back
       head.add(o);
       this.wornObjs.push(o);
     }
+  }
+
+  /** Paint both hands (or unicorn front “paws”) with the registered nail mesh. */
+  private applyNails(kind: string): void {
+    const def = wearableDef(kind);
+    if (!def) return;
+    const arms = this.model.arms;
+    if (arms && arms.length >= 2) {
+      for (const arm of arms) {
+        const nails = def.build();
+        // HAND in characters.ts is [0, -0.55, 0]; tips sit on the palm, slightly forward (−Z)
+        nails.position.set(0, -0.55, -0.06);
+        arm.add(nails);
+        this.wornObjs.push(nails);
+      }
+      return;
+    }
+    // unicorn / non-biped: little polished tips near the front
+    const pair = new THREE.Group();
+    for (const s of [-1, 1]) {
+      const nails = def.build();
+      nails.position.set(s * 0.2, 0.52, -0.55);
+      pair.add(nails);
+    }
+    this.model.body.add(pair);
+    this.wornObjs.push(pair);
   }
 
   /** Hide stock biped shoes and put a pair of shop shoes on both leg pivots. */
@@ -271,6 +313,16 @@ export class Character {
       for (const l of legs) l.pivot.rotation.set(1.45, 0, 0);
       return;
     }
+    if (this.scooterRiding) {
+      this.root.rotation.order = 'YXZ';
+      this.root.rotation.x = 0.12; // slight lean over the stem
+      this.root.rotation.z = 0;
+      inner.position.set(0, 0, 0);
+      inner.rotation.y = 0;
+      poseScooter(this.model.arms ?? [], legs, speed);
+      body.position.y = this.bodyBaseY;
+      return;
+    }
     if (this.lyingY !== null) {
       this.root.rotation.order = 'YXZ';
       inner.position.set(0, 0, 0);
@@ -310,6 +362,24 @@ export class Character {
       for (const l of legs) l.pivot.rotation.x *= 0.8;
       body.position.y = this.bodyBaseY + (body.position.y - this.bodyBaseY) * 0.8;
     }
+  }
+}
+
+/** Hands on the T-bar; one foot slightly forward on the deck. */
+function poseScooter(arms: THREE.Object3D[], legs: CharacterModel['legs'], speed: number): void {
+  arms.forEach((a, i) => {
+    const z0 = (a.userData.z0 ??= a.rotation.z) as number;
+    const side = i === 0 ? -1 : 1;
+    // rest z-spread, then reach hard forward (−X) and a little in toward the bar
+    a.rotation.set(0, 0, z0);
+    a.rotateX(-1.35);
+    a.rotateY(side * 0.2);
+    a.rotateZ(side * -0.15);
+  });
+  const bob = Math.min(1, Math.abs(speed) / 6) * 0.08;
+  for (const l of legs) {
+    const forward = l.phase === 0 ? 0.4 : 0.15;
+    l.pivot.rotation.set(forward + bob * Math.sin(performance.now() / 90), 0, 0);
   }
 }
 

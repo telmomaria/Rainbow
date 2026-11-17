@@ -3,21 +3,43 @@ import { tone } from './audio';
 import { feel } from './bus';
 import type { GameCtx } from './gamectx';
 import { registerItem, registerWearable } from './items';
-import { Flyers, GEM_COLORS, box, buildKiosk, coinMesh, cyl, gemMesh, mat, openSpot, roadsideSite, type Kiosk } from './places';
+import {
+  Flyers,
+  GEM_COLORS,
+  box,
+  coinMesh,
+  cyl,
+  gemMesh,
+  mat,
+  openSpot,
+  roadsideSite,
+  siteBox,
+  siteGroup,
+  siteToWorld,
+} from './places';
+import { buildFolk, pick, HAIRS, SKINS, type Folk } from './venue';
 import type { Interactable, Obstacle } from './world';
 
 /**
  * Uses for the jewels (rule R18: they are a second currency — picked up in the street, kept, and spent here).
  *
- *  - Banco (J1 / G30): a jewel for 8 coins.
- *  - Joalheiro (J3): three jewels make a necklace, then a ring, then a crown — she wears / carries them.
+ *  - Banco (J1 / G30): a jewel for 8 coins — covered bank building (not a fair kiosk).
+ *  - Joalheiro (J3): three jewels make a necklace, then a ring, then a crown — covered jeweller with montra.
  *  - Baú do tesouro (J4 / G09): in the most out-of-the-way spot of each city; a jewel is the key; 15 coins inside.
  *  - Escudo (J6): tapping the jewel in her bag holds it up — for one minute the creatures run from its shine.
  *
  * Landmark diamonds are never spent here (rule FIM3): `ctx.jewels()` only counts street jewels.
- * No text or icons in the world: a big coin on the bank's roof, a big gem on the jeweller's; coins and jewels
- * visibly fly between her and the counter, and the clerk nods or shakes his head.
  */
+
+interface JewelShop {
+  group: THREE.Group;
+  clerk: Folk;
+  stand: THREE.Vector3;
+  counter: THREE.Vector3;
+  no(): void;
+  yes(): void;
+  update(dt: number): void;
+}
 
 export const BANK_COINS = 8;
 export const JEWELLER_COST = 3;
@@ -168,9 +190,9 @@ export class JewelShield {
 export class JewelPlaces {
   readonly things: Interactable[] = [];
   private readonly flyers: Flyers;
-  private readonly kiosks: Kiosk[] = [];
-  private bank: Kiosk | null = null;
-  private jeweller: Kiosk | null = null;
+  private readonly shops: JewelShop[] = [];
+  private bank: JewelShop | null = null;
+  private jeweller: JewelShop | null = null;
   private chest: { at: THREE.Vector3; lid: THREE.Group; open: boolean; t: number; rattle: number; glow: THREE.Mesh } | null = null;
   private ornaments: THREE.Object3D[] = [];
   private time = 0;
@@ -190,26 +212,119 @@ export class JewelPlaces {
   /** Her hands, roughly (where coins and jewels leave from / arrive at). */
   private hand = (): THREE.Vector3 => new THREE.Vector3(this.ctx.player.x, 1.2, this.ctx.player.z);
 
+  private makeClerkShop(
+    site: { x: number; z: number; rot: number },
+    g: THREE.Group,
+    rng: () => number,
+    look: { shirt: number; dress?: boolean },
+    counterLocal: { x: number; z: number },
+  ): JewelShop {
+    const clerk = buildFolk({
+      shirt: look.shirt,
+      pants: pick(rng, [0x343a40, 0x212529]),
+      skin: pick(rng, SKINS),
+      hair: pick(rng, HAIRS),
+      dress: look.dress,
+      longHair: look.dress,
+    });
+    clerk.group.position.set(0, 0, -2.0);
+    clerk.group.rotation.y = Math.PI;
+    g.add(clerk.group);
+    let mood: 'idle' | 'no' | 'yes' = 'idle';
+    let t = 0;
+    return {
+      group: g,
+      clerk,
+      stand: siteToWorld(site, 0, 1.2),
+      counter: siteToWorld(site, counterLocal.x, counterLocal.z, 1.1),
+      no() {
+        mood = 'no';
+        t = 0;
+        tone(196, 0, 0.3, 'sine', 0.13);
+        tone(174.6, 0.28, 0.45, 'sine', 0.11);
+      },
+      yes() {
+        mood = 'yes';
+        t = 0;
+      },
+      update(dt) {
+        t += dt;
+        clerk.head.rotation.y = mood === 'no' ? Math.sin(t * 11) * 0.55 * Math.max(0, 1 - t / 1.4) : 0;
+        clerk.head.rotation.x = mood === 'yes' ? Math.sin(t * 12) * 0.3 * Math.max(0, 1 - t / 1.2) : 0;
+        clerk.armR.rotation.z =
+          mood === 'yes'
+            ? Math.min(1, t * 4) * 2.4 * Math.max(0, 1 - Math.max(0, t - 1.2)) +
+              Math.sin(t * 10) * 0.2 * (t < 1.4 ? 1 : 0)
+            : 0;
+        if (t > 1.6) mood = 'idle';
+      },
+    };
+  }
+
+  private buildCoveredShop(
+    obstacles: Obstacle[],
+    rng: () => number,
+    colors: { wall: number; trim: number; roof: number; floor: number },
+  ): { site: { x: number; z: number; rot: number }; g: THREE.Group; hw: number; depth: number } | null {
+    const hw = 2.4;
+    const depth = 3.6;
+    const site = roadsideSite(obstacles, rng, hw, depth, { minD: 35, maxD: 125, apron: 4 });
+    if (!site) return null;
+    const g = siteGroup(this.scene, site);
+    const wall = mat(colors.wall);
+    const trim = mat(colors.trim);
+    box(g, mat(colors.floor), hw * 2, 0.14, depth, 0, 0.07, -depth / 2);
+    box(g, trim, hw * 2 + 0.08, 0.1, depth + 0.08, 0, 0.03, -depth / 2);
+    box(g, wall, hw * 2, 2.7, 0.2, 0, 1.4, -depth + 0.1);
+    for (const s of [-1, 1]) {
+      box(g, wall, 0.2, 2.7, depth, s * (hw - 0.1), 1.4, -depth / 2);
+      box(g, trim, 0.22, 0.28, depth, s * (hw - 0.1), 0.28, -depth / 2);
+    }
+    const doorW = 1.7;
+    box(g, wall, hw - doorW / 2, 2.7, 0.2, -(hw + doorW / 2) / 2, 1.4, -0.1);
+    box(g, wall, hw - doorW / 2, 2.7, 0.2, (hw + doorW / 2) / 2, 1.4, -0.1);
+    for (const s of [-1, 1]) box(g, trim, 0.12, 2.4, 0.22, s * (doorW / 2 + 0.04), 1.25, -0.05);
+    box(g, trim, doorW + 0.3, 0.4, 0.24, 0, 2.5, -0.05);
+    const roof = mat(colors.roof);
+    const rL = box(g, roof, hw + 0.35, 0.12, depth + 0.5, -hw / 2, 3.0, -depth / 2);
+    rL.rotation.z = 0.16;
+    const rR = box(g, roof, hw + 0.35, 0.12, depth + 0.5, hw / 2, 3.0, -depth / 2);
+    rR.rotation.z = -0.16;
+    box(g, wall, 0.3, 0.3, depth + 0.55, 0, 3.18, -depth / 2);
+    // indoor counter
+    box(g, mat(0xfff3d6), 2.2, 0.12, 0.7, 0, 1.0, -1.2);
+    box(g, wall, 2.2, 0.9, 0.55, 0, 0.5, -1.2);
+    box(g, mat(0xadb5bd), doorW + 0.2, 0.08, 0.35, 0, 0.04, 0.2);
+    obstacles.push(siteBox(site, -hw, hw, -depth, 0));
+    obstacles.push(siteBox(site, -1.1, 1.1, -1.55, -0.85, 1.05));
+    return { site, g, hw, depth };
+  }
+
   private buildBank(obstacles: Obstacle[], rng: () => number): void {
-    const site = roadsideSite(obstacles, rng, 2.2, 3, { minD: 35, maxD: 120 });
-    if (!site) return;
-    const k = buildKiosk(this.scene, obstacles, site, { wall: 0xf1f3f5, roof: 0x5c7cfa, awning: 0x5c7cfa, shirt: 0x364fc7 }, rng);
-    // classic bank front: two white columns, and a big gold coin standing on the roof
-    for (const s of [-1, 1]) cyl(k.group, mat(0xffffff), 0.16, 2.6, s * 1.95, 1.3, 0.15);
-    const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.16, 28), mat(0xffd23f, 0.45));
+    const built = this.buildCoveredShop(obstacles, rng, {
+      wall: 0xf1f3f5,
+      trim: 0x5c7cfa,
+      roof: 0x364fc7,
+      floor: 0xe9ecef,
+    });
+    if (!built) return;
+    const { site, g } = built;
+    // columns + big gold coin on the ridge
+    for (const s of [-1, 1]) cyl(g, mat(0xffffff), 0.14, 2.5, s * 1.7, 1.3, -0.05);
+    const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.14, 28), mat(0xffd23f, 0.45));
     coin.rotation.x = Math.PI / 2;
-    coin.position.set(0, 3.95, -1.5);
+    coin.position.set(0, 3.55, -1.6);
     coin.castShadow = true;
-    k.group.add(coin);
+    g.add(coin);
     this.ornaments.push(coin);
-    // a little tray of coins on the counter
-    for (let i = 0; i < 3; i++) cyl(k.group, mat(0xffd23f, 0.3), 0.1, 0.05 + i * 0.03, 0.9 + i * 0.18, 1.08 + i * 0.015, -0.4);
-    this.bank = k;
-    this.kiosks.push(k);
+    for (let i = 0; i < 3; i++) cyl(g, mat(0xffd23f, 0.3), 0.1, 0.05 + i * 0.03, 0.5 + i * 0.22, 1.08 + i * 0.015, -1.2);
+    const shop = this.makeClerkShop(site, g, rng, { shirt: 0x364fc7 }, { x: 0, z: -1.2 });
+    this.bank = shop;
+    this.shops.push(shop);
     this.things.push({
-      object: k.group,
-      position: k.stand,
-      radius: 2.2,
+      object: g,
+      position: shop.stand,
+      radius: 2.3,
       requiresClick: true,
       interact: () => this.useBank(),
     });
@@ -224,7 +339,6 @@ export class JewelPlaces {
     }
     k.yes();
     tone(1568, 0, 0.25, 'triangle', 0.07);
-    // the jewel flies to the counter, then eight coins fly back to her one by one
     this.flyers.send(gemMesh(undefined, 1), this.hand(), k.counter, 0.55, 0, () => {
       for (let i = 0; i < BANK_COINS; i++) {
         this.flyers.send(coinMesh(), k.counter, this.hand, 0.45, 0.25 + i * 0.13, () => {
@@ -238,26 +352,32 @@ export class JewelPlaces {
   }
 
   private buildJeweller(obstacles: Obstacle[], rng: () => number): void {
-    const site = roadsideSite(obstacles, rng, 2.2, 3, { minD: 35, maxD: 125 });
-    if (!site) return;
-    const k = buildKiosk(this.scene, obstacles, site, { wall: 0xfff0f6, roof: 0xcc5de8, awning: 0xcc5de8, dress: true, shirt: 0x9c36b5 }, rng);
-    // a big gem turning on the roof, and small jewellery on the counter
-    const gem = gemMesh(0x3bc9ff, 3.4);
-    gem.position.set(0, 3.95, -1.5);
-    gem.castShadow = true;
-    k.group.add(gem);
-    this.ornaments.push(gem);
-    GEM_COLORS.forEach((c, i) => {
-      const g = gemMesh(c, 0.45);
-      g.position.set(-0.8 + i * 0.4, 1.16, -0.4);
-      k.group.add(g);
+    const built = this.buildCoveredShop(obstacles, rng, {
+      wall: 0xfff0f6,
+      trim: 0xcc5de8,
+      roof: 0x9c36b5,
+      floor: 0xf3d9fa,
     });
-    this.jeweller = k;
-    this.kiosks.push(k);
+    if (!built) return;
+    const { site, g } = built;
+    const gem = gemMesh(0x3bc9ff, 2.8);
+    gem.position.set(0, 3.55, -1.6);
+    gem.castShadow = true;
+    g.add(gem);
+    this.ornaments.push(gem);
+    // montra gems on the counter
+    GEM_COLORS.forEach((c, i) => {
+      const piece = gemMesh(c, 0.45);
+      piece.position.set(-0.8 + i * 0.4, 1.16, -1.2);
+      g.add(piece);
+    });
+    const shop = this.makeClerkShop(site, g, rng, { shirt: 0x9c36b5, dress: true }, { x: 0, z: -1.2 });
+    this.jeweller = shop;
+    this.shops.push(shop);
     this.things.push({
-      object: k.group,
-      position: k.stand,
-      radius: 2.2,
+      object: g,
+      position: shop.stand,
+      radius: 2.3,
       requiresClick: true,
       interact: () => this.useJeweller(),
     });
@@ -275,9 +395,10 @@ export class JewelPlaces {
     this.ctx.setFlag('joalheiro', made + 1);
     const piece = JEWELLERY[made % JEWELLERY.length];
     for (let i = 0; i < JEWELLER_COST; i++) {
-      this.flyers.send(gemMesh(GEM_COLORS[i], 1), this.hand(), k.counter, 0.5, i * 0.18, () => tone(1175 + i * 200, 0, 0.12, 'triangle', 0.06));
+      this.flyers.send(gemMesh(GEM_COLORS[i], 1), this.hand(), k.counter, 0.5, i * 0.18, () =>
+        tone(1175 + i * 200, 0, 0.12, 'triangle', 0.06),
+      );
     }
-    // tap-tap-tap of the little hammer, then the new piece comes to her in a sparkle
     for (let i = 0; i < 5; i++) tone(2093, 1.0 + i * 0.16, 0.05, 'square', 0.04);
     const show = gemMesh(0xffe14d, 1.2);
     this.flyers.send(show, k.counter, this.hand, 0.6, 2.0, () => {
@@ -369,7 +490,7 @@ export class JewelPlaces {
   update(dt: number): void {
     this.time += dt;
     this.flyers.update(dt);
-    for (const k of this.kiosks) k.update(dt);
+    for (const k of this.shops) k.update(dt);
     for (const o of this.ornaments) o.rotation.y += dt * 0.9;
     const c = this.chest;
     if (c) {

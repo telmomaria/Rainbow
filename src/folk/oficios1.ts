@@ -128,81 +128,14 @@ registerFolk({
   },
 });
 
-/** I13 — Sapateiro: hammer sole, shoes shine. */
-registerFolk({
-  id: 'sapateiro',
-  ref: 'I13',
-  group: 'profissao',
-  hw: 2.4,
-  depth: 3.8,
-  where: 'street',
-  build(ctx) {
-    const g = ctx.root;
-    box(g, mat(0x8d5a3b), 1.8, 0.8, 1.0, 0, 0.4, -2);
-    ctx.block(-0.9, 0.9, -2.5, -1.5, 0.9);
-    const cobbler = new Puppet(ctx, { shirt: 0xa0613b, pants: 0x343a40, hair: 0x212529 }, 0, -2.4);
-    apron(cobbler.folk.body, 0x5c3d2e);
-    const shoe = box(g, mat(0x212529), 0.45, 0.18, 0.22, 0.4, 0.95, -1.7);
-    let shine = 0;
-    const work = (): boolean => {
-      if (!ctx.free()) return false;
-      cobbler.work('hammer', 1.5);
-      for (let i = 0; i < 5; i++) tone(300, i * 0.15, 0.05, 'square', 0.05);
-      shine = 1;
-      ctx.say([ctx.greeting(), 'Os sapatos ficam a brilhar!']);
-      feel('groom');
-      if (ctx.ready('shoes')) ctx.pay(1, ctx.at(0.4, -1.7, 1));
-      return true;
-    };
-    return {
-      things: [greetSpot(ctx, cobbler, 0, -2.4, 'Precisas de sapatos novos?'), clickSpot(ctx, shoe, 0.4, -1.7, 2.2, work, 5)],
-      people: [giftable(cobbler, 0, -2.4, ctx)],
-      update(dt) {
-        cobbler.update(dt);
-        shine = Math.max(0, shine - dt * 0.25);
-        (shoe.material as THREE.MeshStandardMaterial).emissiveIntensity = shine * 0.5;
-        (shoe.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(0xffe066);
-      },
-      debug: () => ({ shine: +shine.toFixed(2) }),
-    };
-  },
-});
+/** I13 — Sapateiro: REMOVIDO (2026-11-17, qualidade).
+ *  Martelo + brilho no sapato — interação fraca. Não repor. */
 
 /** I14 — Advogado: REMOVIDO (2026-11-16, qualidade).
  *  Mesa cinzenta + só fala «quem parte, arranja» — sem cena visível. Não repor. */
 
-/** I15 — Juiz: bang the gavel (she can too). */
-registerFolk({
-  id: 'juiz',
-  ref: 'I15',
-  group: 'profissao',
-  hw: 2.5,
-  depth: 4,
-  where: 'street',
-  build(ctx) {
-    const g = ctx.root;
-    box(g, mat(0x5c3d2e), 2.2, 1.0, 1.2, 0, 0.5, -2.3);
-    ctx.block(-1.1, 1.1, -2.9, -1.7, 1.1);
-    const judge = new Puppet(ctx, { shirt: 0x212529, pants: 0x212529, hair: 0xf8f9fa }, 0, -2.5);
-    const gavel = cyl(g, mat(0x8d5a3b), 0.08, 0.35, 0.5, 1.15, -1.8);
-    box(g, mat(0x8d5a3b), 0.25, 0.12, 0.12, 0.5, 1.35, -1.8);
-    const bang = (): boolean => {
-      judge.work('hammer', 0.7);
-      tone(150, 0, 0.12, 'square', 0.07);
-      tone(120, 0.12, 0.15, 'square', 0.06);
-      ctx.say([ctx.greeting(), 'Ordem na sala! Tu também podes bater!']);
-      feel('play');
-      if (ctx.ready('gavel')) ctx.pay(1, ctx.at(0.5, -1.8, 1));
-      return true;
-    };
-    return {
-      things: [greetSpot(ctx, judge, 0, -2.5, 'Bem-vinda ao tribunal!'), clickSpot(ctx, gavel, 0.5, -1.8, 2.2, bang, 5)],
-      people: [giftable(judge, 0, -2.5, ctx)],
-      update: (dt) => judge.update(dt),
-      debug: () => ({}),
-    };
-  },
-});
+/** I15 — Juiz: REMOVIDO (2026-11-17, qualidade).
+ *  Martelo de juiz + «ordem na sala» — interação fraca. Não repor. */
 
 /** I16 — Cozinheiro: stir the pot, taste the soup. */
 registerFolk({

@@ -47,6 +47,11 @@ export class Collectibles {
   debugNote(x: number, z: number): void {
     this.place('note', new THREE.Vector3(x, 0, z));
   }
+
+  /** Place a coin or jewel at an exact spot (Moon crater rims / altar path). */
+  placeAt(kind: 'coin' | 'jewel', x: number, z: number): void {
+    this.place(kind, new THREE.Vector3(x, 0, z));
+  }
   private time = 0;
   private respawnTimer = 0;
 
