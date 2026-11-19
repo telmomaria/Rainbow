@@ -19,7 +19,8 @@ export type LifeEvent =
   | 'doctor'
   | 'spa'
   | 'hospital' // left the hospital
-  | 'rescue'; // saved the kitten
+  | 'rescue' // saved the kitten
+  | 'capsule'; // space-food capsule from her spaceship (the only food on the Moon)
 
 type Handler = (e: LifeEvent) => void;
 const handlers = new Set<Handler>();

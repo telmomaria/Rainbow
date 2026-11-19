@@ -35,6 +35,7 @@ const EFFECTS: Record<LifeEvent, { energy?: number | 'full'; mood?: number; ever
   spa: { energy: 2, mood: 2, every: 0 },
   hospital: { energy: 'full', every: 0 },
   rescue: { mood: 1, every: 0 },
+  capsule: { energy: 'full', every: 0 },
 };
 
 const MOOD_NAMES = ['Muito triste', 'Triste', 'Normal', 'Feliz', 'Muito feliz'];

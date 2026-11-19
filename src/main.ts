@@ -15,7 +15,9 @@ import { Flight } from './flight';
 import { Launch } from './launch';
 import { Spaceport } from './spaceport';
 import { UsaLandmarks } from './usa';
-import { LANDER, MoonAltar, createMoonWorld, inDeepCrater, moonHeight, seedMoonLoot } from './moon';
+import { LANDER, createMoonWorld, inDeepCrater, moonHeight, seedMoonLoot } from './moon';
+import { Comets, DizzyStars, LanderFood, TimeMachine } from './moonplay';
+import { ENERGY_MAX } from './life';
 import { Car } from './car';
 import { createScooter, noScooter, type Scooter } from './scooter';
 import { createBeggar } from './beggar';
@@ -68,6 +70,8 @@ if (DEBUG) {
     player.heading = h;
     camYaw = h; // keep the third-person camera behind her after a debug teleport
   });
+  // QA: drop a comet on her now (Moon only)
+  window.addEventListener('rainbow-comet', () => moonPlay?.comets.dropNow());
   window.addEventListener('rainbow-hospital-end', () => {
     save.hospitalUntil = Date.now();
   });
@@ -176,7 +180,10 @@ let airport: Airport =
 /** Cabo Canaveral pad (only on the USA level). */
 let spaceport: Spaceport | null = null;
 let usaLandmarks: UsaLandmarks | null = null;
-let moonAltar: MoonAltar | null = null;
+/** Moon level: time machine (the end), food capsule at the lander, comets (moonplay.ts). */
+let moonPlay: { machine: TimeMachine; food: LanderFood; comets: Comets; dizzy: DizzyStars } | null = null;
+/** Seconds she still lies dizzy after a comet hit (Moon only; also kept in the save as flag moon:down). */
+let knocked = 0;
 let catTree: CatTree; // assigned by addCityExtras()
 let wanderCat!: WanderCat; // assigned by spawnActors()
 let butterflies: Butterflies = noButterflies();
@@ -450,7 +457,7 @@ function spawnActors(): void {
     wanderCat = { update() {}, debug: () => ({}) } as unknown as WanderCat;
     return;
   }
-  npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position, questionRecyclable);
+  npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position, questionRecyclable, city.name);
   monsters = new Monsters(scene, world.obstacles);
   monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
   wanderCat = new WanderCat(scene, world.obstacles, player.position);
@@ -467,8 +474,7 @@ if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles
 function addCityExtras(): Car {
   usaLandmarks?.dispose();
   usaLandmarks = null;
-  moonAltar?.dispose();
-  moonAltar = null;
+  disposeMoonPlay();
   spaceport?.dispose();
   spaceport = null;
   butterflies.dispose();
@@ -492,12 +498,9 @@ function addCityExtras(): Car {
     services?.dispose();
     services = null;
     setNoSpawnZones([]);
-    moonAltar = new MoonAltar(
-      scene,
-      world.obstacles,
-      gameCtx,
-      () => save.diamonds + save.jewels,
-      (n) => {
+    const machine = new TimeMachine(scene, world.obstacles, gameCtx, () => save.diamonds + save.jewels, {
+      setPlayerVisible: (v) => (player.root.visible = v),
+      onFinish: (n) => {
         save.delivered = n;
         save.diamonds = 0;
         save.jewels = 0;
@@ -505,10 +508,16 @@ function addCityExtras(): Car {
         hud.set('jewels', 0);
         writeSave(save);
         refreshBag();
-        void showTravel(null);
+        void showTravel(null, 'timemachine');
       },
-    );
-    world.interactables.push(...moonAltar.things);
+    });
+    const food = new LanderFood(scene, gameCtx, () => save.energy >= ENERGY_MAX);
+    const comets = new Comets(scene, gameCtx, knockDown);
+    moonPlay = { machine, food, comets, dizzy: new DizzyStars(scene) };
+    world.interactables.push(...machine.things, ...food.things);
+    // a comet hit survives a reload (she keeps lying for what is left of the minute)
+    const downLeft = gameCtx.flag('moon:down') - Date.now() / 1000;
+    if (downLeft > 0) knocked = Math.min(60, downLeft); // the frame loop lays her down (main.ts may still be loading here)
     // silent stubs so the frame loop never hits null (nothing is drawn)
     const quiet = {
       update() {},
@@ -760,8 +769,7 @@ function loadCity(): void {
   services = null;
   usaLandmarks?.dispose();
   usaLandmarks = null;
-  moonAltar?.dispose();
-  moonAltar = null;
+  disposeMoonPlay();
   spaceport?.dispose();
   spaceport = null;
   extras.disposeCity();
@@ -1383,6 +1391,41 @@ function approachToward(tx: number, tz: number, clear: number): THREE.Vector3 {
   return new THREE.Vector3(px + dx * t, 0, pz + dz * t);
 }
 
+/** A comet hit her (Moon): she lies dizzy for a minute (or what is left of it after a reload), nothing moves. */
+function knockDown(seconds = 60): void {
+  const fresh = knocked <= 0 && seconds >= 60;
+  knocked = seconds;
+  paused = true;
+  clearTarget();
+  input.releaseAll();
+  player.prone = false;
+  player.lyingY = moonHeight(player.position.x, player.position.z) + 0.15;
+  if (fresh) {
+    gameCtx.setFlag('moon:down', Date.now() / 1000 + seconds);
+    sfx.bonk();
+    void speak([gameCtx.isBoy() ? 'Ai! O cometa acertou-te! Ficas tonto um minuto.' : 'Ai! O cometa acertou-te! Ficas tonta um minuto.']);
+  }
+}
+function getUpFromComet(quiet = false): void {
+  knocked = 0;
+  paused = false;
+  player.lyingY = null;
+  player.root.rotation.x = 0;
+  player.root.rotation.z = 0;
+  gameCtx.setFlag('moon:down', 0);
+  lastActivity = performance.now();
+  if (!quiet) gameCtx.say(['Pronto, já passou! Cuidado com os cometas.']);
+}
+function disposeMoonPlay(): void {
+  if (knocked > 0) getUpFromComet(true);
+  if (!moonPlay) return;
+  moonPlay.machine.dispose();
+  moonPlay.food.dispose();
+  moonPlay.comets.dispose();
+  moonPlay.dizzy.dispose();
+  moonPlay = null;
+}
+
 /** Walk-to point for an interactable: people (`keepClear`) stop ≥ PERSON_CLEAR short. */
 function approachPoint(it: Interactable): THREE.Vector3 {
   const clear = it.keepClear;
@@ -1718,7 +1761,19 @@ function tick(time: number): void {
   airport.update(dt);
   spaceport?.update(dt);
   usaLandmarks?.update(dt);
-  moonAltar?.update(dt);
+  if (moonPlay) {
+    moonPlay.machine.update(dt);
+    moonPlay.food.update(dt);
+    moonPlay.comets.update(dt, !paused && !save.finished);
+    if (knocked > 0) {
+      knocked -= dt;
+      paused = true; // menus may un-pause; she stays down until the minute is over
+      clearTarget();
+      player.lyingY = moonHeight(player.position.x, player.position.z) + 0.15;
+      if (knocked <= 0) getUpFromComet();
+    }
+    moonPlay.dizzy.update(dt, knocked > 0, player.position);
+  }
   car.update(dt);
   scooter.update(dt);
   if (!flight && !leavesByRocket()) airport.setDoorOpen(readyToTravel());
@@ -1880,6 +1935,7 @@ function tick(time: number): void {
         flying: !!flight,
         character: save.character,
         things: world.interactables.map((i) => [+i.position.x.toFixed(1), +i.position.z.toFixed(1), i.radius]),
+        moon: moonPlay ? { ...moonPlay.machine.debug(), knocked: +knocked.toFixed(1), energy: save.energy } : null,
         driving: !!driving,
         car: [+car.position.x.toFixed(1), +car.position.z.toFixed(1), +car.speed.toFixed(1)],
         scooter: scooter.debug(),

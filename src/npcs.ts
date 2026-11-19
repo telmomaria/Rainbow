@@ -52,12 +52,14 @@ export class Npcs {
     player: THREE.Vector3,
     /** solved questions that may come back as a review when nothing else is left */
     private readonly recyclable: (id: string) => boolean = () => false,
+    /** current city name: its own questions (Question.city) are only asked here */
+    private readonly city?: string,
   ) {
     for (let i = 0; i < MAX_NPCS; i++) this.spawn(player, 8);
   }
 
   private spawn(player: THREE.Vector3, minDist: number): void {
-    const q = nextQuestion(this.available, this.reserved, this.recyclable);
+    const q = nextQuestion(this.available, this.reserved, this.recyclable, this.city);
     if (!q) return; // nothing available right now (all solved or cooling down) - retried by the timer
     this.reserved.add(q.id);
     let p = randomFreeSpot(this.obstacles, { radius: 1.2, avoid: player, minDist, range: 60 });

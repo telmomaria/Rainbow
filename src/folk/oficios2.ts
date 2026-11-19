@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { tone } from '../audio';
 import { feel } from '../bus';
+import { ENGLISH_QUESTIONS } from '../questions';
 import { giftable, greetSpot, personClick } from './common';
 import { registerFolk } from './folk';
 import { Puppet, Sparkles, box, clickSpot, cyl, helmet, mat } from './kit';
@@ -28,7 +29,8 @@ registerFolk({
       ctx.say([ctx.greeting(), 'Parei os carros — podes atravessar!']);
       if (ctx.city === 'Londres' && ctx.ready('enAsk', 120)) {
         asking = true;
-        const ok = await ctx.game.ask({ text: 'What colour is a London bus?', answers: ['Red', 'Blue', 'Green'] }, 10, 'en');
+        const q = ENGLISH_QUESTIONS[Math.floor(Math.random() * ENGLISH_QUESTIONS.length)];
+        const ok = await ctx.game.ask(q, 10, 'en');
         asking = false;
         if (ok) {
           cop.hop(1.4);

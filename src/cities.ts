@@ -22,11 +22,11 @@ export interface City {
 
 export const COINS_PER_LEVEL = 100;
 /**
- * Fewest diamonds/jewels she must place on the Moon's stone circle to finish the game. 1 = no real minimum: she
- * hands over whatever she has, so the game can never get stuck (there are always some lying on the Moon).
- * Raise it to demand more.
+ * Jewels she must gather ON the Moon before the stone circle accepts them: the target is fixed on her first arrival
+ * as (jewels + diamonds she brought) + this number (Telmo, 2026-11-19: "+10 das que já tem"). Jewels respawn on the
+ * Moon, so the game can never get stuck.
  */
-export const DIAMONDS_TO_FINISH = 1;
+export const MOON_EXTRA_JEWELS = 10;
 
 export const CITIES: City[] = [
   { name: 'Porto', arrival: 'Vamos explorar o Porto!', seed: 7, sky: 0x8fd3ff, ground: 0x7ccf5b, road: 0xb8b2c4, buildings: [0xff8fab, 0xffc56e, 0x9be37a, 0x7ec8ff, 0xc9a4ff, 0xfff07a] },

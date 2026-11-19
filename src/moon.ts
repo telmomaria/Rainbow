@@ -1,10 +1,6 @@
 import * as THREE from 'three';
-import { tone } from './audio';
-import { DIAMONDS_TO_FINISH } from './cities';
-import { Fireworks, FIREWORK_COLORS } from './fireworks';
-import type { GameCtx } from './gamectx';
-import { gemMesh, mat } from './places';
-import type { Interactable, Obstacle, World } from './world';
+import { mat } from './places';
+import type { Obstacle, World } from './world';
 
 /** Half-extent of the walkable Moon (m). */
 export const MOON_HALF = 90;
@@ -187,173 +183,6 @@ export function buildMoonGround(scene: THREE.Scene): THREE.Mesh {
   mesh.receiveShadow = true;
   scene.add(mesh);
   return mesh;
-}
-
-export class MoonAltar {
-  readonly things: Interactable[] = [];
-  private readonly fireworks: Fireworks;
-  private readonly beam: THREE.Mesh;
-  private readonly glowRing: THREE.Mesh;
-  private readonly gems: THREE.Mesh[] = [];
-  private readonly orbitGems: THREE.Mesh[] = [];
-  private done = false;
-  private celebration = 0;
-  private time = 0;
-
-  constructor(
-    scene: THREE.Scene,
-    obstacles: Obstacle[],
-    private readonly ctx: GameCtx,
-    private readonly offer: () => number,
-    private readonly onFinish: (n: number) => void,
-  ) {
-    this.fireworks = new Fireworks(scene);
-    const at = new THREE.Vector3(ALTAR.x, moonHeight(ALTAR.x, ALTAR.z), ALTAR.z);
-    const g = new THREE.Group();
-    g.position.copy(at);
-    scene.add(g);
-
-    // plaza disc — pale stone, easy to spot from afar
-    const plaza = new THREE.Mesh(
-      new THREE.CylinderGeometry(7.2, 7.5, 0.22, 48),
-      new THREE.MeshStandardMaterial({ color: 0xc5c0b4, roughness: 0.85, emissive: 0x3d4450, emissiveIntensity: 0.08 }),
-    );
-    plaza.position.y = 0.08;
-    plaza.receiveShadow = true;
-    g.add(plaza);
-
-    // standing stones — uneven megaliths, not identical boxes
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2 + 0.12;
-      const tall = 2.2 + (i % 3) * 0.55 + (i % 2) * 0.35;
-      const stone = new THREE.Mesh(
-        new THREE.BoxGeometry(0.7 + (i % 3) * 0.15, tall, 0.45 + (i % 2) * 0.2),
-        mat(i % 2 === 0 ? 0x6c7078 : 0x868e96),
-      );
-      stone.position.set(Math.cos(a) * 5.1, tall * 0.5, Math.sin(a) * 5.1);
-      stone.rotation.y = a + Math.PI / 2;
-      stone.rotation.z = ((i % 3) - 1) * 0.06;
-      stone.castShadow = true;
-      g.add(stone);
-      // small crystal tip on every other stone — catches the eye
-      if (i % 2 === 0) {
-        const tip = gemMesh(FIREWORK_COLORS[i % FIREWORK_COLORS.length], 0.55);
-        tip.position.set(Math.cos(a) * 5.1, tall + 0.25, Math.sin(a) * 5.1);
-        g.add(tip);
-        this.orbitGems.push(tip);
-      }
-    }
-
-    // stepped dais + socket for the jewels
-    const dais = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.8, 0.4, 28), mat(0x9aa0a8, 0.4));
-    dais.position.y = 0.32;
-    dais.castShadow = true;
-    g.add(dais);
-    const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.35, 0.55, 20), mat(0xb0b6c0, 0.35));
-    ped.position.y = 0.72;
-    ped.castShadow = true;
-    g.add(ped);
-    const socket = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.55, 0.65, 0.18, 16),
-      new THREE.MeshStandardMaterial({ color: 0x1c2330, emissive: 0x4dabf7, emissiveIntensity: 0.55, roughness: 0.4 }),
-    );
-    socket.position.y = 1.05;
-    g.add(socket);
-
-    this.glowRing = new THREE.Mesh(
-      new THREE.RingGeometry(3.2, 3.55, 48),
-      new THREE.MeshBasicMaterial({ color: 0x74c0fc, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
-    );
-    this.glowRing.rotation.x = -Math.PI / 2;
-    this.glowRing.position.y = 0.22;
-    g.add(this.glowRing);
-
-    this.beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.35, 0.95, 18, 16),
-      new THREE.MeshBasicMaterial({ color: 0xbfe9ff, transparent: true, opacity: 0.0 }),
-    );
-    this.beam.position.y = 10;
-    g.add(this.beam);
-
-    // floating guide gems (orbit while waiting)
-    for (let i = 0; i < 3; i++) {
-      const gem = gemMesh(FIREWORK_COLORS[i % FIREWORK_COLORS.length], 0.85);
-      gem.position.set(Math.cos((i / 3) * Math.PI * 2) * 2.2, 1.8, Math.sin((i / 3) * Math.PI * 2) * 2.2);
-      g.add(gem);
-      this.orbitGems.push(gem);
-    }
-
-    obstacles.push({ minX: at.x - 5.5, maxX: at.x + 5.5, minZ: at.z - 5.5, maxZ: at.z + 5.5, height: 0.5 });
-    this.things.push({
-      object: g,
-      position: new THREE.Vector3(ALTAR.x, 0, ALTAR.z),
-      radius: 5,
-      interact: () => this.place(),
-    });
-    if (ctx.flag('moon:done') > 0) {
-      this.done = true;
-      (this.beam.material as THREE.MeshBasicMaterial).opacity = 0.35;
-      (this.glowRing.material as THREE.MeshBasicMaterial).opacity = 0.55;
-    }
-  }
-
-  private place(): void {
-    if (this.done) return;
-    const total = this.offer();
-    if (total < DIAMONDS_TO_FINISH) {
-      this.ctx.say(['Traz as joias especiais para este círculo de pedras!']);
-      tone(220, 0, 0.2, 'sine', 0.05);
-      return;
-    }
-    this.done = true;
-    this.ctx.setFlag('moon:done', 1);
-    this.celebration = 8;
-    (this.beam.material as THREE.MeshBasicMaterial).opacity = 0.45;
-    (this.glowRing.material as THREE.MeshBasicMaterial).opacity = 0.7;
-    [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, i * 0.1, 0.3, 'triangle', 0.07));
-    this.ctx.say(['As joias brilham na Lua! Completaste a viagem!']);
-    for (let i = 0; i < Math.min(total, 6); i++) {
-      const gem = gemMesh(FIREWORK_COLORS[i % FIREWORK_COLORS.length], 1.2);
-      gem.position.set((i - 2.5) * 0.5, 1.35, 0);
-      this.beam.parent?.add(gem);
-      this.gems.push(gem);
-    }
-    this.onFinish(total);
-  }
-
-  update(dt: number): void {
-    this.time += dt;
-    this.fireworks.update(dt);
-    const pulse = 0.28 + Math.sin(this.time * 2.2) * 0.12;
-    (this.glowRing.material as THREE.MeshBasicMaterial).opacity = this.done ? 0.55 + pulse * 0.3 : pulse;
-    this.glowRing.rotation.z = this.time * 0.25;
-    for (let i = 0; i < this.orbitGems.length; i++) {
-      const gem = this.orbitGems[i];
-      if (i >= this.orbitGems.length - 3) {
-        const k = i - (this.orbitGems.length - 3);
-        const a = this.time * 0.9 + (k / 3) * Math.PI * 2;
-        gem.position.set(Math.cos(a) * 2.3, 1.7 + Math.sin(this.time * 2 + k) * 0.25, Math.sin(a) * 2.3);
-      }
-      gem.rotation.y = this.time * 1.4;
-    }
-    if (this.celebration > 0) {
-      this.celebration -= dt;
-      if (Math.random() < dt * 2) {
-        const p = new THREE.Vector3(
-          ALTAR.x + (Math.random() - 0.5) * 10,
-          6 + Math.random() * 8,
-          ALTAR.z + (Math.random() - 0.5) * 10,
-        );
-        this.fireworks.burst(p, FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)], 1.1);
-      }
-    }
-    const m = this.beam.material as THREE.MeshBasicMaterial;
-    if (this.done) m.opacity = 0.3 + Math.sin(performance.now() * 0.003) * 0.1;
-  }
-
-  dispose(): void {
-    this.fireworks.clear();
-  }
 }
 
 /** Lander near spawn — visual landmark so "Casa" has somewhere to point at. */
@@ -540,30 +369,6 @@ function scatterRocks(scene: THREE.Scene, obstacles: Obstacle[]): void {
   }
 }
 
-/** Soft guide stones glowing toward the altar so the goal is findable. */
-function buildWaymarkers(scene: THREE.Scene): void {
-  const spots = [
-    [2, -3],
-    [10, 0],
-    [18, 2],
-    [26, 4],
-  ] as const;
-  for (let i = 0; i < spots.length; i++) {
-    const [x, z] = spots[i];
-    const hy = moonHeight(x, z);
-    const stone = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.28, 0.38, 0.9 + i * 0.08, 8),
-      new THREE.MeshStandardMaterial({ color: 0xadb5bd, emissive: 0x74c0fc, emissiveIntensity: 0.35 + i * 0.08, roughness: 0.7 }),
-    );
-    stone.position.set(x, hy + 0.45, z);
-    stone.castShadow = true;
-    scene.add(stone);
-    const gem = gemMesh(0x74c0fc, 0.45);
-    gem.position.set(x, hy + 1.05, z);
-    scene.add(gem);
-  }
-}
-
 function buildEarth(scene: THREE.Scene): void {
   const earth = new THREE.Group();
   // soft atmospheric halo (fog:false so it stays bright in the black sky)
@@ -632,20 +437,35 @@ function buildStars(scene: THREE.Scene): void {
   );
 }
 
-/** Distant ridge silhouettes so the horizon isn't a hard cut. */
+/**
+ * Distant mountains so the horizon isn't a hard cut. Always OUTSIDE the walkable square (±MOON_HALF): before
+ * 2026-11-19 their bases reached ~84 m from the centre and she could walk inside the dark cones ("black pyramids").
+ * Grey like the Moon rocks, rounder (9 sides) so they read as mountains, not pyramids.
+ */
 function buildHorizonRidges(scene: THREE.Scene): void {
-  const matDark = new THREE.MeshStandardMaterial({ color: 0x2c2e34, roughness: 1, flatShading: true });
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2;
-    const dist = MOON_HALF * 1.15 + (i % 3) * 6;
-    const x = Math.cos(a) * dist;
-    const z = Math.sin(a) * dist;
-    const w = 18 + (i % 4) * 6;
-    const h = 6 + (i % 5) * 2.5;
-    const ridge = new THREE.Mesh(new THREE.ConeGeometry(w * 0.55, h, 5), matDark);
-    ridge.position.set(x, h * 0.35, z);
-    ridge.rotation.y = a;
-    scene.add(ridge);
+  const matRidge = new THREE.MeshStandardMaterial({ color: 0x6a6d74, roughness: 1, flatShading: true });
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2;
+    const r = 8 + (i % 4) * 2.2;
+    const h = 7 + (i % 5) * 2.5;
+    // distance from the centre to the square's wall in this direction, then clear of it by the mountain's radius
+    const wall = MOON_HALF / Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a)));
+    const dist = wall + r + 3 + (i % 3) * 4;
+    // a small range: one main peak and two lower ones beside it (along the wall), so it reads as mountains
+    const cx = Math.cos(a) * dist;
+    const cz = Math.sin(a) * dist;
+    const sx = -Math.sin(a);
+    const sz = Math.cos(a);
+    for (const [off, k] of [
+      [0, 1],
+      [r * 0.9, 0.62],
+      [-r * 0.8, 0.5],
+    ] as const) {
+      const peak = new THREE.Mesh(new THREE.ConeGeometry(r * (0.6 + k * 0.4), h * k, 9), matRidge);
+      peak.position.set(cx + sx * off, (h * k) / 2 - 0.6, cz + sz * off);
+      peak.rotation.y = a + off;
+      scene.add(peak);
+    }
   }
 }
 
@@ -684,7 +504,6 @@ export function createMoonWorld(scene: THREE.Scene, city: import('./cities').Cit
   const obstacles: Obstacle[] = [];
   buildLander(scene, obstacles);
   scatterRocks(scene, obstacles);
-  buildWaymarkers(scene);
 
   const e = MOON_HALF;
   obstacles.push({ minX: -e - 20, maxX: -e, minZ: -e - 20, maxZ: e + 20 });

@@ -33,7 +33,7 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
 - **Interatividade sem UI:** objetos interativos (botão→luz, carro→conduzir, moeda→pobre…) NÃO têm ícones,
   setas, contornos nem "prima E". Descobre-se por movimento/contacto (aproximar, tocar, entrar). Feedback só
   no mundo (som, animação, luz).
-- **Perguntas:** matemática · estudo do meio · português, nível 2.º ano (programa PT). Sempre 3 opções.
+- **Perguntas:** matemática · estudo do meio · português, nível 2.º ano (programa PT). Sempre 3 opções. Banco em src/questions.ts (227 desde 2026-11-19): ~65 por disciplina + 2–3 por cidade (`city`, só lá e com prioridade ~40%: país, língua, ex-líbris); o polícia de Londres sorteia de `ENGLISH_QUESTIONS`. Nada de ortografia/acentos (tudo é falado).
   Errou → **não se revela a resposta certa**; a pergunta volta mais tarde (~3 min) para nova tentativa.
   Acertou → moedas e a pergunta fica resolvida para sempre. (Regra revista pelo Telmo a 2026-11-11.)
 - **Valores:** moeda = 1 · joia = 5 (e conta no contador de joias) · resposta certa = 10 (e conta no contador ?). Moedas em rastos de 3, espalhadas (~36 no mundo) para não se chegar aos 100 depressa demais. Ao mostrar a pergunta já fica em espera de 3 min (recarregar a página não dá tentativa imediata).
@@ -114,9 +114,16 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   atrações de várias cidades (Estátua da Liberdade, ponte de São Francisco, parque de diversões, **Hotel das Fontes**)
   e **sem aeroporto**: de **Cabo Canaveral** lança-se um foguetão para a **Lua**, o último nível. Na Lua há pouca coisa:
   crateras, moedas espalhadas, subidas e descidas, areia, terra, rochas, pedras e **marcianos que tiram moedas**.
-  **O objetivo do jogo é colocar os diamantes (as joias) num local específico; aí o jogo termina.** Por decidir pelo
-  Telmo: se Nuuk fica antes dos EUA, quantos diamantes são precisos. O hotel-casino de Las Vegas no nível EUA é o
+  **O objetivo do jogo é colocar os diamantes (as joias) num local específico; aí o jogo termina.** Joias precisas
+  (Telmo, 2026-11-19): **as que tem ao chegar à Lua + 10** (`MOON_EXTRA_JEWELS`, alvo fixado na 1.ª chegada, flag
+  `moon:need`); a máquina do tempo diz quantas faltam. O hotel-casino de Las Vegas no nível EUA é o
   **Hotel das Fontes** (lago + fontes dançantes; inspirado nas fontes do Bellagio, IP original — nunca nomes de marca).
+- **Lua (src/moonplay.ts, Telmo 2026-11-19):** o fim é uma **máquina do tempo** enterrada na areia (só se vê a antena a
+  piscar); a < 14 m o vento levanta a areia e ela aparece. Com as joias todas: as joias voam para ela, a personagem entra,
+  gira e desaparece → ecrã ⏳ "A máquina do tempo leva-te para o Rainbow 2". Energia na Lua = tocar na nave (cápsula de
+  comida espacial, energia cheia). **Cometa a cada 5 min** de jogo, apontado perto dela, com círculo vermelho de aviso
+  (4 s); se acertar fica deitada e tonta 1 min sem se mexer (persiste no reload; monstros parados). Montanhas do horizonte
+  sempre fora da zona onde se anda. QA: `?debug` + evento `rainbow-comet`.
 - **Personagens: só originais.** Arquétipos pedidos (princesa, unicórnio, 3 caçadoras-cantoras K-pop,
   extraterrestre fofo, guerreira de ~1500 d.C., jogadora de vólei, bailarina, karateca) com nomes, visual e
   música próprios — **nunca** personagens, nomes ou arte da Disney, de "KPop Demon Hunters" ou outra IP existente.

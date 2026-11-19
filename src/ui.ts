@@ -356,12 +356,17 @@ export function showArrival(text: string): void {
  * Full-screen "100 coins — let's travel!" moment. `next` null = the whole journey is done.
  * Resolves when the child presses the button (click/tap, Enter, Space or any arrow).
  */
-export function showTravel(next: string | null): Promise<void> {
+/** `ending` = 'timemachine': the Moon ending (the time machine takes her to "Rainbow 2"). */
+export function showTravel(next: string | null, ending?: 'timemachine'): Promise<void> {
   const box = document.createElement('div');
   box.className = 'travel';
   const title = next ? 'Juntaste 100 moedas!' : 'Fizeste a viagem toda!';
-  const line = next ? `Próxima paragem: ${next}` : 'Visitaste todas as cidades. És incrível!';
-  box.innerHTML = `<div><div class="plane">✈️</div><h1></h1><p></p><button></button></div>`;
+  const line = next
+    ? `Próxima paragem: ${next}`
+    : ending === 'timemachine'
+      ? 'A máquina do tempo leva-te para o Rainbow 2. Até breve!'
+      : 'Visitaste todas as cidades. És incrível!';
+  box.innerHTML = `<div><div class="plane">${ending === 'timemachine' ? '⏳' : '✈️'}</div><h1></h1><p></p><button></button></div>`;
   box.querySelector('h1')!.textContent = title;
   box.querySelector('p')!.textContent = line;
   const btn = box.querySelector('button')!;

@@ -12,9 +12,9 @@ Aplicar no Session End Protocol.
 
 | # | Action | Owner | Blocker |
 |---|---|---|---|
-| 1 | Commit do polish 2026-11-17 (`landmarks.ts` · `usa.ts` · docs) — Torre/Trevi/muralha/Londres/Cultura/Rio/Estátua + remoção de obeliscos | Telmo | none |
+| 1 | ✅ Commit do polish 2026-11-17 (`ca1913c`) | — | — |
 | 2 | Decidir ex-líbris (ou deixar vazio) para Madrid · Vilnius · Moscovo · Cidade do México · Reiquiavique · Nuuk | Telmo | none |
-| 3 | Fecho de produto na Lua: mínimo de diamantes + ecrã final (hoje `DIAMONDS_TO_FINISH = 1`) | Telmo + agent | #2 opcional |
+| 3 | ✅ Lua: máquina do tempo (fim → Rainbow 2), cápsula de comida na nave, cometas a cada 5 min (2026-11-19). Falta: o Telmo jogar e validar | Telmo | none |
 | 4 | Alinhar ROADMAP/CLAUDE com o código (EUA→Lua, serviços, energia/… já feitos vs ⬜ stale) | agent | none |
 | 5 | Telmo joga com som; medir fps em tablet; afinar chapéus/capa/arco | Telmo + agent | none |
 
@@ -34,10 +34,10 @@ Aplicar no Session End Protocol.
   - ⬜ Serviços pagos: cabeleireiro (escolher penteado), sapatos, roupa, acessórios, massagem, SPA
   - ⬜ Escadas em edifícios onde os monstros não sobem · gatinho na árvore com escada (o unicórnio voa) · palco para cantar e ganhar moedas
   - 🔄 Cidades com ex-líbris (2026-11-17): Porto Clérigos · Roma Trevi · Londres relógio+roda · Paris torre · Varsóvia×6 · Pequim muralha · Tóquio templo · Rio teleférico · EUA×4. **Sem ex-líbris:** Madrid · Vilnius · Moscovo · Cidade do México · Reiquiavique · Nuuk. Área a dobrar: por confirmar (Lua / Nuuk / não). Traçados de rua ainda partilhados
-  - 🔄 **Final do jogo (código existe):** Nuuk → EUA (Estátua, Ponte, Parque Arco-Íris, Hotel das Fontes; foguetão Cabo Canaveral) → Lua (altar + joias). Por decidir: quantos diamantes (código = 1). Morada/arranque: cancelada
+  - 🔄 **Final do jogo (código existe):** Nuuk → EUA (Estátua, Ponte, Parque Arco-Íris, Hotel das Fontes; foguetão Cabo Canaveral) → Lua (altar + joias). Joias: as que tem + 10 (2026-11-19). Área a dobrar: ignorada. Morada/arranque: cancelada
   - ⬜ Casa mais alta e maior, vista também com a câmara normal (não só de cima)
 - ✅ Seleção de personagem: 12 originais (Lia · Estrela · Bia, Nina, Inês · Zuca · Leonor · Rita · Clara · Tomás · Vega · Alice)
-- 🔄 Personagens-NPC com perguntas — base feita (36 perguntas, voz, 3 opções, sem repetição); errar → volta em ~3 min sem revelar; falta banco maior e voz pt-PT garantida
+- 🔄 Personagens-NPC com perguntas — 227 perguntas (2026-11-19: ~65 por disciplina + 2–3 por cidade; polícia de Londres com 8 em inglês), voz, 3 opções; errar → volta em ~3 min sem revelar; falta voz pt-PT garantida
 - ✅ Bichos maus: spawn em função das moedas, falam, atrapalham, batem (perde moedas)
 - 🔄 Subida de nível aos 100 moedas → próxima cidade — viagem feita; 16 níveis até à Lua; cidades ainda partilham grelha (faltam traçados próprios). Ordem: Porto → … → Nuuk → Estados Unidos → Lua
 - ⛔ Atribuição "© OpenStreetMap contributors" — sem dados OSM, não se aplica
