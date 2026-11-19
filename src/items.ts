@@ -47,6 +47,9 @@ export interface WearableDef {
   /** Salon cut/dye: hide meshes tagged `userData.isHair` so the new style replaces the stock hair. */
   replacesHair?: boolean;
 }
+/** Sunglasses from the accessory shop. Owned in the bag; tap there puts them on or takes them off. */
+export const SUNGLASSES_KIND = 'srv-oculos';
+
 const wearables = new Map<string, WearableDef>();
 export function registerWearable(kind: string, def: WearableDef): void {
   wearables.set(kind, def);

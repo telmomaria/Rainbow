@@ -39,7 +39,7 @@ import { createPostman, noPostman, type Postman } from './postman';
 import { createLivingStatue, noLivingStatue, type LivingStatue } from './livingstatue';
 import { isFree, setNoSpawnZones } from './spawn';
 import { Concert } from './concert';
-import { itemDef } from './items';
+import { SUNGLASSES_KIND, itemDef } from './items';
 import { Pool } from './pool';
 import { House, houseColors } from './house';
 import { Fair } from './fair';
@@ -82,8 +82,10 @@ if (DEBUG) {
     if (!d.slot) return;
     if (d.kind) save.wear[d.slot] = d.kind;
     else delete save.wear[d.slot];
+    if (save.wear.face === SUNGLASSES_KIND) save.bag[SUNGLASSES_KIND] = 1;
     player.setWear(save.wear);
     writeSave(save);
+    refreshBag?.();
   });
   window.addEventListener('rainbow-coins', (e) => {
     save.coins = (e as CustomEvent<number>).detail;
@@ -148,6 +150,7 @@ if (save.wear.neck === 'srv-colar-sapato') {
   delete save.wear.neck; // old fake "shoe charm" — sapataria now puts real shoes on feet
   writeSave(save);
 }
+if (save.wear.face === SUNGLASSES_KIND) save.bag[SUNGLASSES_KIND] = 1;
 player.setWear(save.wear);
 scene.add(player.root);
 const input = new Input(canvas);
@@ -241,10 +244,13 @@ const gameCtx: GameCtx = {
   wear(slot, kind) {
     if (kind) save.wear[slot] = kind;
     else delete save.wear[slot];
+    if (kind === SUNGLASSES_KIND) save.bag[SUNGLASSES_KIND] = 1;
     player.setWear(save.wear);
     writeSave(save);
+    refreshBag?.();
   },
   worn: () => ({ ...save.wear }),
+  owns: (kind) => (save.bag[kind] ?? 0) > 0 || Object.values(save.wear).includes(kind),
   // --- brief didático (2026-11-15): jewels as a second currency, module flags, small helpers ---
   jewels: () => save.jewels,
   spendJewels(n) {
@@ -381,6 +387,14 @@ function holdItem(kind: string | null, mesh?: THREE.Object3D): void {
 /** Eating a sweet from the bag: four bites, then it's gone. */
 let eating: { kind: string; t: number; bites: number } | null = null;
 function useBagItem(kind: string): void {
+  if (kind === SUNGLASSES_KIND) {
+    if (paused || driving || flight || onBus()) return;
+    save.bag[SUNGLASSES_KIND] = 1;
+    const on = save.wear.face === SUNGLASSES_KIND;
+    gameCtx.wear('face', on ? null : SUNGLASSES_KIND);
+    void speak(on ? ['Tirei os óculos.'] : ['Pus os óculos.']);
+    return;
+  }
   if (extras.useBagItem(kind)) return; // her jewels: holding one up = shield
   if (paused || driving || flight || (save.bag[kind] ?? 0) <= 0) return;
   holdItem(kind);
@@ -914,7 +928,11 @@ window.addEventListener('keydown', (e) => {
 });
 const refreshBag = (() => {
   const draw = createBag((kind) => useBagItem(kind));
-  return () => draw(extras.bagView(save.bag), carriedKind);
+  return () => {
+    const view = extras.bagView(save.bag);
+    if ((save.bag[SUNGLASSES_KIND] ?? 0) > 0 || save.wear.face === SUNGLASSES_KIND) view[SUNGLASSES_KIND] = 1;
+    draw(view, carriedKind, save.wear.face === SUNGLASSES_KIND ? SUNGLASSES_KIND : null);
+  };
 })();
 refreshBag();
 

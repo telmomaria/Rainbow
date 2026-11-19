@@ -30,6 +30,8 @@ export interface GameCtx {
   wear(slot: import('./items').WearSlot, kind: string | null): void;
   /** What she wears now (slot → kind). */
   worn(): Record<string, string>;
+  /** True if this kind is in her bag or already worn (she keeps it). */
+  owns(kind: string): boolean;
 
   /* ---- added 2026-11-15 (brief didático): jewels as a second currency, module flags, small helpers ---- */
 

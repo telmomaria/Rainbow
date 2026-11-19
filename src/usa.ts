@@ -6,11 +6,12 @@ import { gemMesh, mat } from './places';
 import type { Interactable, Obstacle, World } from './world';
 
 /**
- * Estados Unidos landmarks (original names — no Disney / Caesars brands):
+ * Estados Unidos landmarks (original names — never ship real brand names):
  *  - Estátua da Liberdade — pedestal + figura verde com coroa e tocha (US1)
  *  - Ponte do Pacífico — ponte suspensa laranja atravessável (US2)
  *  - Parque Arco-Íris — castelo de contos + fogo de artifício à noite (US3)
- *  - Palácio das Luzes — palácio romano com fontes que dançam (US4)
+ *  - Hotel das Fontes — lago + fontes dançantes + fachada de hotel (US4)
+ *    Inspired by Bellagio fountains (Las Vegas) but original IP — not Caesars / Bellagio brands.
  *
  * Fixed spots so a child (and QA) can find them; clearArea removes placeholder buildings.
  */
@@ -118,7 +119,7 @@ export class UsaLandmarks {
     this.buildPalace(scene, world);
   }
 
-  /** Estátua da Liberdade: pedestal em degraus, figura verde com coroa de 7 raios e tocha. */
+  /** Estátua da Liberdade: pedestal em degraus + figura verde coerente (coroa, tocha e tábua ligadas). */
   private buildStatue(scene: THREE.Scene, world: World): void {
     const at = USA_SPOTS.statue;
     claim(world, at, 10, 12, 5);
@@ -148,32 +149,86 @@ export class UsaLandmarks {
     for (const dx of [-2.3, 2.3]) addBox(g, stoneDark, 0.18, 0.75, 4.4, dx, 5.7, 0);
     for (const dz of [-2.3, 2.3]) addBox(g, stoneDark, 4.4, 0.75, 0.18, 0, 5.7, dz);
 
-    // brighter / taller copper figure — readable from aerial
+    // —— figura verde (hierarquia: corpo → braços → tocha/tábua → cabeça → coroa) ——
     const copper = mat(0x40c057);
     const copperDark = mat(0x2f9e44);
-    addCyl(g, copper, 1.45, 2.1, 7.0, 0, 9.2, 0, 14);
-    addBox(g, copperDark, 0.5, 4.2, 1.2, -1.15, 8.6, 0.3);
-    addBox(g, copperDark, 0.5, 3.6, 1.0, 1.1, 8.4, -0.15);
-    const tablet = addBox(g, mat(0xe9fac8), 0.2, 2.1, 1.35, -2.0, 9.6, 0.45);
-    tablet.rotation.z = 0.18;
-    const arm = addCyl(g, copper, 0.3, 0.36, 4.2, 2.0, 11.8, 0, 8);
-    arm.rotation.z = -1.05;
-    addCyl(g, copper, 0.45, 0.5, 0.7, 3.6, 14.0, 0, 8);
+    const copperLight = mat(0x51cf66);
+    const gold = mat(0xffe066);
+    const figure = new THREE.Group();
+    figure.position.set(0, 5.25, 0); // feet on terrace
+    g.add(figure);
+
+    // robe hem + draped body (reads as a person, not a lone cylinder)
+    addCyl(figure, copperDark, 1.55, 1.85, 0.55, 0, 0.28, 0.08, 14);
+    addCyl(figure, copper, 1.05, 1.65, 4.8, 0, 2.85, 0.05, 14);
+    for (const [fx, fz] of [
+      [-0.55, 0.55],
+      [0.55, 0.5],
+      [-0.35, -0.55],
+      [0.4, -0.5],
+    ] as const) {
+      addBox(figure, copperDark, 0.35, 3.6, 0.22, fx, 2.6, fz);
+    }
+    // torso / shoulders
+    addCyl(figure, copperLight, 0.9, 1.1, 1.7, 0, 5.85, 0, 12);
+    addBox(figure, copper, 2.35, 0.55, 1.05, 0, 6.65, 0);
+
+    // left arm cradles tablet against the front of the torso
+    const leftArm = new THREE.Group();
+    leftArm.position.set(-1.15, 6.45, 0.35);
+    figure.add(leftArm);
+    addCyl(leftArm, copper, 0.3, 0.36, 1.5, 0, -0.55, 0.1, 8); // upper arm down
+    const leftFore = addCyl(leftArm, copper, 0.26, 0.3, 1.4, 0.15, -1.5, 0.55, 8);
+    leftFore.rotation.x = 1.05;
+    addCyl(leftArm, copper, 0.34, 0.36, 0.42, 0.2, -1.85, 1.15, 8); // hand
+    const tablet = addBox(leftArm, mat(0xe9fac8), 0.2, 1.95, 1.3, 0.45, -1.55, 1.25);
+    tablet.rotation.y = 0.25;
+    for (const ly of [-0.5, -0.15, 0.2, 0.5] as const) {
+      addBox(tablet, mat(0x82c91e), 0.05, 0.08, 0.95, 0.11, ly, 0);
+    }
+
+    // right arm raised — torch is a continuous child of the arm
+    const rightArm = new THREE.Group();
+    rightArm.position.set(1.1, 6.6, 0.1);
+    rightArm.rotation.z = -1.1;
+    figure.add(rightArm);
+    addCyl(rightArm, copper, 0.28, 0.34, 3.8, 0, 1.9, 0, 8);
+    addCyl(rightArm, copper, 0.4, 0.42, 0.55, 0, 3.9, 0, 8); // fist
+    // torch: handle → cup → flame (no gaps)
+    addCyl(rightArm, copperDark, 0.14, 0.14, 0.5, 0, 4.3, 0, 6);
+    addCyl(rightArm, copper, 0.58, 0.42, 0.6, 0, 4.8, 0, 8);
     const flame = new THREE.Mesh(
-      new THREE.ConeGeometry(0.7, 1.6, 8),
+      new THREE.ConeGeometry(0.62, 1.4, 8),
       new THREE.MeshStandardMaterial({ color: 0xffe066, emissive: 0xff922b, emissiveIntensity: 1.7 }),
     );
-    flame.position.set(3.6, 15.1, 0);
-    g.add(flame);
-    addCyl(g, copper, 0.85, 1.05, 1.4, 0, 13.2, 0, 12);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.95, 14, 12), copper);
-    head.position.y = 14.15;
-    g.add(head);
+    flame.position.set(0, 5.55, 0);
+    flame.castShadow = true;
+    rightArm.add(flame);
+
+    // neck + head + 7-ray crown seated on the head (band overlaps the skull)
+    addCyl(figure, copper, 0.42, 0.52, 0.65, 0, 7.2, 0, 10);
+    const head = new THREE.Group();
+    head.position.set(0, 8.05, 0);
+    figure.add(head);
+    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.8, 14, 12), copper);
+    headMesh.castShadow = true;
+    head.add(headMesh);
+    addCyl(head, copperDark, 0.65, 0.7, 0.4, 0, 0.1, -0.3, 10); // hair bun
+    addCone(head, copperDark, 0.12, 0.28, 0, 0.05, 0.72, 6).rotation.x = Math.PI / 2;
+    for (const ex of [-0.22, 0.22] as const) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat(0x212529));
+      eye.position.set(ex, 0.12, 0.68);
+      head.add(eye);
+    }
+    const crown = new THREE.Group();
+    crown.position.set(0, 0.38, 0); // band sits into the top of the head
+    head.add(crown);
+    addCyl(crown, gold, 0.78, 0.85, 0.28, 0, 0, 0, 14);
     for (let i = 0; i < 7; i++) {
       const a = (i / 7) * Math.PI * 2 - Math.PI / 2;
-      const spike = addCone(g, mat(0xffe066), 0.16, 1.4, Math.cos(a) * 0.7, 15.2, Math.sin(a) * 0.7, 6);
-      spike.rotation.x = Math.sin(a) * 0.45;
-      spike.rotation.z = -Math.cos(a) * 0.45;
+      const spike = addCone(crown, gold, 0.14, 1.35, Math.cos(a) * 0.78, 0.75, Math.sin(a) * 0.78, 6);
+      spike.rotation.x = Math.sin(a) * 0.35;
+      spike.rotation.z = -Math.cos(a) * 0.35;
     }
 
     // diamond on the terrace
@@ -184,17 +239,13 @@ export class UsaLandmarks {
 
     // climb the pedestal stairs to the crown platform (walk cycle — not a Y teleport)
     const ctx = this.ctx;
+    const crownY = 5.25 + 8.05 + 0.55; // terrace + head + crown band ≈ 13.85
     const foot = new THREE.Vector3(at.x, 0, at.z + 6);
-    const top = new THREE.Vector3(at.x, 14.2, at.z);
+    const top = new THREE.Vector3(at.x, crownY, at.z);
     const path: THREE.Vector3[] = [foot.clone()];
-    for (let i = 1; i <= 8; i++) path.push(new THREE.Vector3(at.x, (i / 8) * 14.2, at.z + 6 - i * 0.7));
+    for (let i = 1; i <= 8; i++) path.push(new THREE.Vector3(at.x, (i / 8) * crownY, at.z + 6 - i * 0.7));
     path.push(top.clone());
-    // visible steps up the pedestal face
-    for (let i = 0; i < 8; i++) {
-      const y = ((i + 1) / 8) * 14.2;
-      const z = 5.5 - i * 0.55;
-      addBox(g, mat(0xced4da), 2.2, 0.35, 0.55, 0, y - 0.2, z);
-    }
+    // (climb is animated on click — no floating step planks on the figure)
     type Phase = 'idle' | 'up' | 'top' | 'down';
     let phase: Phase = 'idle';
     let t = 0;
@@ -473,75 +524,187 @@ export class UsaLandmarks {
     });
   }
 
-  /** Palácio das Luzes: colunas, frontão triangular, fontes que sobem e descem. */
+  /**
+   * Hotel das Fontes: torre larga em curva + lago grande + fontes em arcos/filas.
+   * Inspired by Bellagio fountains (Las Vegas) but original IP — not a real brand.
+   * Kids only look / walk / splash-feel — no casino gambling.
+   * Deliberately NOT a Roman temple (no colonnade / pediment / dome).
+   */
   private buildPalace(scene: THREE.Scene, world: World): void {
     const at = USA_SPOTS.palace;
-    claim(world, at, 14, 12);
+    claim(world, at, 30, 28);
     const g = new THREE.Group();
     g.position.set(at.x, 0, at.z);
-    g.userData.landmark = 'palace';
+    g.userData.landmark = 'hotel-das-fontes';
     scene.add(g);
 
-    const cream = mat(0xfff4e6);
-    const marble = mat(0xffffff);
+    const cream = mat(0xf3e8d8);
+    const creamDeep = mat(0xe8d5b8);
+    const trim = mat(0xc9a227);
+    const glass = new THREE.MeshStandardMaterial({
+      color: 0x7ec8ff,
+      metalness: 0.45,
+      roughness: 0.25,
+      emissive: 0x3b82c4,
+      emissiveIntensity: 0.22,
+    });
+    const glassBright = new THREE.MeshStandardMaterial({
+      color: 0xbde0fe,
+      metalness: 0.35,
+      roughness: 0.2,
+      emissive: 0x74c0fc,
+      emissiveIntensity: 0.35,
+    });
     const gold = mat(0xffd43b);
-    const water = mat(0x74c0fc);
+    const stone = mat(0xe9ecef);
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x339af0,
+      metalness: 0.4,
+      roughness: 0.12,
+      transparent: true,
+      opacity: 0.88,
+    });
+    const jetMat = mat(0xf8f9fa);
+    const jetSoft = mat(0xa5d8ff);
 
-    // podium
-    addBox(g, cream, 18, 0.6, 12, 0, 0.3, 0);
-    // main hall
-    addBox(g, cream, 14, 6, 8, 0, 3.5, -1);
-    // side wings
-    addBox(g, cream, 4, 4.5, 6, -9, 2.5, -1);
-    addBox(g, cream, 4, 4.5, 6, 9, 2.5, -1);
-    // entablature + triangular pediment (reads as a classical temple front)
-    addBox(g, cream, 15, 0.5, 2.5, 0, 6.8, 3.5);
-    const pedShape = new THREE.Shape();
-    pedShape.moveTo(-7.4, 0);
-    pedShape.lineTo(7.4, 0);
-    pedShape.lineTo(0, 2.6);
-    pedShape.closePath();
-    const pedGeo = new THREE.ExtrudeGeometry(pedShape, { depth: 0.5, bevelEnabled: false });
-    const pediment = new THREE.Mesh(pedGeo, cream);
-    pediment.position.set(0, 7.05, 3.25);
-    pediment.castShadow = true;
-    g.add(pediment);
-    // columns with bases + capitals
-    for (let i = 0; i < 8; i++) {
-      const x = -7 + i * 2;
-      addCyl(g, marble, 0.45, 0.5, 0.35, x, 0.75, 4.0, 10);
-      addCyl(g, marble, 0.32, 0.38, 5.0, x, 3.3, 4.0, 10);
-      addCyl(g, gold, 0.48, 0.42, 0.35, x, 5.9, 4.0, 10);
+    // plaza (walkway between lobby and lake)
+    addBox(g, stone, 36, 0.22, 8, 0, 0.1, 1.5);
+
+    // ——— Wide curved hotel tower (low-poly arc of facade segments) ———
+    // Bellagio silhouette: long horizontal curve facing the lake, dense window grid.
+    const SEG = 7;
+    const ARC = 0.72; // radians — readable low-poly curve wrapping the lake
+    const RADIUS = 24;
+    const HEIGHT = 16;
+    const SEG_W = 5.4;
+    const SEG_D = 7.5;
+    for (let i = 0; i < SEG; i++) {
+      const t = (i / (SEG - 1)) * 2 - 1; // -1 … +1
+      const ang = t * (ARC / 2);
+      const x = Math.sin(ang) * RADIUS;
+      // centre farthest back; wings step forward around the lake (Bellagio wrap)
+      const z = -Math.cos(ang) * RADIUS + RADIUS - 11;
+      const h = HEIGHT - Math.abs(t) * 1.8; // slight step-down at wings
+      const body = addBox(g, i % 2 === 0 ? cream : creamDeep, SEG_W, h, SEG_D, x, h / 2 + 0.2, z);
+      body.rotation.y = -ang;
+      // cornice
+      const corn = addBox(g, trim, SEG_W + 0.3, 0.4, SEG_D + 0.35, x, h + 0.35, z);
+      corn.rotation.y = -ang;
+      // dense window grid on the lake-facing side of each segment
+      const rows = Math.floor((h - 2.5) / 1.55);
+      const cols = 3;
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const lx = (col - 1) * 1.5;
+          const ly = 2.0 + row * 1.55;
+          const lz = SEG_D / 2 + 0.08;
+          // local (lx,lz) with rot.y = -ang → world offset
+          const wx = x + Math.cos(ang) * lx - Math.sin(ang) * lz;
+          const wz = z - Math.sin(ang) * lx + Math.cos(ang) * lz;
+          const win = addBox(g, row % 2 === 0 ? glass : glassBright, 1.2, 1.2, 0.1, wx, ly, wz);
+          win.rotation.y = -ang;
+          win.castShadow = false;
+        }
+      }
     }
-    // dome on the centre
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(3.2, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), gold);
-    dome.position.set(0, 6.6, -1);
-    g.add(dome);
-    addCyl(g, gold, 0.15, 0.15, 1.2, 0, 10.3, -1, 6);
+    // soft roof lanterns along the curve (Italianate, not a dome)
+    for (const t of [-0.7, -0.35, 0, 0.35, 0.7]) {
+      const ang = t * (ARC / 2);
+      const x = Math.sin(ang) * RADIUS;
+      const z = -Math.cos(ang) * RADIUS + RADIUS - 10;
+      const y = HEIGHT - Math.abs(t) * 1.8 + 0.6;
+      addBox(g, trim, 1.4, 0.9, 1.4, x, y, z);
+      addCyl(g, gold, 0.1, 0.1, 0.9, x, y + 0.7, z, 6);
+    }
 
-    // dancing fountain pools in front
-    addCyl(g, water, 3.2, 3.2, 0.35, 0, 0.55, 7.5, 20);
-    addCyl(g, marble, 3.5, 3.5, 0.4, 0, 0.25, 7.5, 20);
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * Math.PI * 2;
-      const jet = addCyl(g, mat(0xa5d8ff), 0.12, 0.18, 1.2, Math.cos(a) * 1.6, 1.2, 7.5 + Math.sin(a) * 1.6, 8);
+    // glass lobby / porte-cochère (NO classical columns — canopy + glass doors)
+    addBox(g, cream, 9, 4.0, 4.5, 0, 2.1, -1.2);
+    addBox(g, glassBright, 8.2, 2.6, 0.12, 0, 2.0, 1.05);
+    addBox(g, trim, 9.4, 0.28, 5.0, 0, 4.2, -0.9); // canopy slab
+    addBox(g, trim, 0.25, 1.6, 0.25, -4.2, 3.3, 1.4);
+    addBox(g, trim, 0.25, 1.6, 0.25, 4.2, 3.3, 1.4);
+    addBox(g, glass, 2.0, 2.6, 0.12, -1.2, 1.5, 1.1);
+    addBox(g, glass, 2.0, 2.6, 0.12, 1.2, 1.5, 1.1);
+    addBox(g, trim, 0.18, 2.6, 0.15, 0, 1.5, 1.12);
+
+    // ——— Large lake in front of the curved facade ———
+    const lakeZ = 12;
+    const lakeW = 32;
+    const lakeD = 14;
+    const lakeRim = addBox(g, stone, lakeW + 1.6, 0.32, lakeD + 1.4, 0, 0.22, lakeZ);
+    lakeRim.receiveShadow = true;
+    const lake = new THREE.Mesh(new THREE.BoxGeometry(lakeW, 0.2, lakeD), waterMat);
+    lake.position.set(0, 0.38, lakeZ);
+    lake.receiveShadow = true;
+    g.add(lake);
+    // rim walks
+    addBox(g, stone, lakeW + 1.6, 0.4, 0.7, 0, 0.35, lakeZ - lakeD / 2 - 0.2);
+    addBox(g, stone, lakeW + 1.6, 0.4, 0.7, 0, 0.35, lakeZ + lakeD / 2 + 0.2);
+
+    // dancing fountain jets — rows + outward arcs (choreographed in update)
+    type JetSpec = { x: number; z: number; h: number; tiltX?: number; tiltZ?: number; soft?: boolean };
+    const jets: JetSpec[] = [];
+    // 4 long rows across the lake
+    for (let row = 0; row < 4; row++) {
+      const z = lakeZ - 5.2 + row * 2.6;
+      const count = row === 1 || row === 2 ? 11 : 9;
+      for (let i = 0; i < count; i++) {
+        const x = -((count - 1) * 2.2) / 2 + i * 2.2;
+        const tall = row === 1 && i === Math.floor(count / 2);
+        jets.push({ x, z, h: tall ? 4.2 : 1.8 + (row % 2) * 0.4, soft: !tall });
+      }
+    }
+    // side arcs — tilted jets that read as water fans
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 5; k++) {
+        const x = side * (8 + k * 1.6);
+        const z = lakeZ - 1.5 + k * 0.35;
+        jets.push({
+          x,
+          z,
+          h: 2.4 + k * 0.35,
+          tiltZ: side * (0.55 + k * 0.08),
+          soft: true,
+        });
+      }
+    }
+    // centre fan arcs (lean left/right)
+    for (let k = 0; k < 4; k++) {
+      const spread = 0.35 + k * 0.12;
+      jets.push({ x: -1.2 - k * 0.4, z: lakeZ + 0.5, h: 3.2, tiltZ: -spread });
+      jets.push({ x: 1.2 + k * 0.4, z: lakeZ + 0.5, h: 3.2, tiltZ: spread });
+    }
+    for (const j of jets) {
+      const jet = addCyl(
+        g,
+        j.soft ? jetSoft : jetMat,
+        j.soft ? 0.09 : 0.14,
+        j.soft ? 0.13 : 0.2,
+        j.h,
+        j.x,
+        0.5 + j.h / 2,
+        j.z,
+        7,
+      );
+      if (j.tiltX) jet.rotation.x = j.tiltX;
+      if (j.tiltZ) jet.rotation.z = j.tiltZ;
+      jet.castShadow = false;
       this.fountainJets.push(jet);
     }
-    const centreJet = addCyl(g, mat(0xe7f5ff), 0.2, 0.28, 2.2, 0, 1.8, 7.5, 8);
-    this.fountainJets.push(centreJet);
 
+    // diamond on the plaza between lobby and lake
     const gem = gemMesh(0xffd43b, 1.5);
-    gem.position.set(0, 1.4, 5.5);
+    gem.position.set(0, 1.2, 4.5);
     g.add(gem);
-    this.things.push(diamondPickup(this.ctx, 'gem:usa:palace', new THREE.Vector3(at.x, 0, at.z + 5.5), gem));
+    this.things.push(diamondPickup(this.ctx, 'gem:usa:palace', new THREE.Vector3(at.x, 0, at.z + 4.5), gem));
 
     this.things.push({
       object: g,
-      position: new THREE.Vector3(at.x, 0, at.z + 8),
-      radius: 5,
+      position: new THREE.Vector3(at.x, 0, at.z + lakeZ),
+      radius: 12,
       interact: () => {
-        [523, 659, 784, 880].forEach((f, i) => tone(f, i * 0.18, 0.25, 'sine', 0.05));
-        this.ctx.say(['As fontes dançam!']);
+        [523, 659, 784, 880, 988].forEach((f, i) => tone(f, i * 0.16, 0.25, 'sine', 0.05));
+        this.ctx.say(['Hotel das Fontes! As fontes dançam no lago!']);
       },
     });
   }
@@ -558,12 +721,14 @@ export class UsaLandmarks {
       p.y = 14 + Math.random() * 8;
       this.fireworks.burst(p, c, 0.9 + Math.random() * 0.4);
     }
-    // fountain dance
+    // fountain dance — wave across the lake (Hotel das Fontes)
     for (let i = 0; i < this.fountainJets.length; i++) {
       const jet = this.fountainJets[i];
-      const wave = 0.7 + Math.sin(this.time * 2.4 + i * 0.7) * 0.55;
+      const phase = this.time * 2.2 + i * 0.55;
+      const wave = 0.55 + Math.sin(phase) * 0.5 + Math.sin(phase * 0.5 + 1.1) * 0.2;
       jet.scale.y = wave;
-      jet.position.y = 0.6 + wave * (i === this.fountainJets.length - 1 ? 1.1 : 0.7);
+      // keep base near the water surface while the jet stretches up
+      jet.position.y = 0.55 + wave * (jet.geometry as THREE.CylinderGeometry).parameters.height * 0.5;
     }
     // fog thins when she is near the bridge
     if (this.bridgeGroup && this.fogSheets.length) {

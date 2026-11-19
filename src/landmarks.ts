@@ -9,7 +9,9 @@ import { onRoad, ROADS, type Interactable, type Obstacle, type World } from './w
 
 /**
  * Fase 5 — ex-líbris por cidade (I81–I90 style): landmark diamonds (never spent — for the Moon).
- * Most cities have one; Varsóvia has six. Original stylised takes, not trademarked names where avoidable.
+ * Cities with builders: Porto, Roma, Londres, Paris, Varsóvia (six), Pequim, Tóquio, Rio de Janeiro.
+ * No landmark (empty builders — no fake obelisk): Madrid, Vilnius, Moscovo, Cidade do México, Reiquiavique, Nuuk.
+ * EUA / Lua: handled elsewhere (usa.ts / none). Missing BY_CITY keys return [] (no default monument).
  *
  * Placement runs AFTER venues (pool, concert, fair, house…) with setNoSpawnZones already set — never on top of
  * those, nor hospital / airport. Fixed Warsaw preferences are soft: rejected if they intersect anything.
@@ -22,6 +24,13 @@ import { onRoad, ROADS, type Interactable, type Obstacle, type World } from './w
 let landmarkDebug: Record<string, unknown> | null = null;
 export function landmarksDebug(): Record<string, unknown> | null {
   return landmarkDebug;
+}
+
+/** Mid-ride cleanup (e.g. Rio teleférico hold) — cleared when landmarks rebuild / city changes. */
+let landmarkRideDispose: (() => void) | null = null;
+function clearLandmarkRide(): void {
+  landmarkRideDispose?.();
+  landmarkRideDispose = null;
 }
 
 function diamondAt(ctx: GameCtx, key: string, at: THREE.Vector3, mesh: THREE.Object3D): Interactable {
@@ -108,8 +117,15 @@ function resolveSpot(
   return want ? { x: want.x, z: want.z } : { x: 110, z: -110 };
 }
 
+/** Last `place()` centre — used so ?debug can find single-attraction cities (Roma, Paris…). */
+let lastPlaceSpot: { x: number; z: number } | null = null;
+function readLastPlaceSpot(): { x: number; z: number } | null {
+  return lastPlaceSpot;
+}
+
 function place(obstacles: Obstacle[], rng: () => number, r: number): THREE.Vector3 {
   const at = resolveSpot(obstacles, rng, r, r);
+  lastPlaceSpot = { x: at.x, z: at.z };
   return new THREE.Vector3(at.x, 0, at.z);
 }
 
@@ -538,168 +554,929 @@ const BY_CITY: Record<string, Builder> = {
     ];
   },
 
+  /**
+   * Roma — Fonte de Trevi (estilizada, original / low-poly):
+   * fachada de palácio com colunas e frontão, rochas + estátua central + cavalos,
+   * cascata em degraus e bacia semicircular à frente. Praça aberta: só a fachada/rochas
+   * bloqueiam; dá para chegar à beira da água. Moeda = desejo; joia no rebordo.
+   */
   Roma(scene, obstacles, rng, ctx) {
-    const at = place(obstacles, rng, 6);
+    const at = place(obstacles, rng, 9);
     const g = new THREE.Group();
     g.position.copy(at);
+    g.userData.landmark = 'trevi';
     scene.add(g);
-    // Fontana-inspired basin
-    const water = mat(0x74c0fc);
-    const basin = new THREE.Mesh(new THREE.CylinderGeometry(4, 4.5, 0.6, 24), mat(0xc5c8ce));
-    basin.position.y = 0.3;
-    g.add(basin);
-    const pool = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.5, 0.2, 24), water);
-    pool.position.y = 0.55;
+
+    const stone = mat(0xe9e4da);
+    const stoneDeep = mat(0xc8bfb0);
+    const stoneWarm = mat(0xd8d0c4);
+    const marble = mat(0xf8f5ef);
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x339af0,
+      metalness: 0.45,
+      roughness: 0.2,
+      transparent: true,
+      opacity: 0.92,
+    });
+    const cascadeMat = new THREE.MeshStandardMaterial({
+      color: 0x74c0fc,
+      metalness: 0.35,
+      roughness: 0.25,
+      emissive: 0x1c7ed6,
+      emissiveIntensity: 0.18,
+    });
+    const foam = mat(0xe7f5ff);
+
+    const add = (mesh: THREE.Mesh, x: number, y: number, z: number, cast = true) => {
+      mesh.position.set(x, y, z);
+      if (cast) mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      g.add(mesh);
+      return mesh;
+    };
+
+    // —— Palace facade (behind, faces +Z) ——
+    const facadeZ = -5.4;
+    add(new THREE.Mesh(new THREE.BoxGeometry(16.5, 9.0, 1.8), stone), 0, 4.5, facadeZ);
+    // attic / cornice bands
+    add(new THREE.Mesh(new THREE.BoxGeometry(17.2, 0.45, 2.2), stoneDeep), 0, 8.9, facadeZ);
+    add(new THREE.Mesh(new THREE.BoxGeometry(16.8, 0.35, 2.0), stoneWarm), 0, 9.3, facadeZ);
+    // triangular pediment (stacked slabs → kid-readable triangle)
+    add(new THREE.Mesh(new THREE.BoxGeometry(9.2, 0.5, 1.6), stoneWarm), 0, 9.75, facadeZ - 0.05);
+    add(new THREE.Mesh(new THREE.BoxGeometry(6.2, 0.5, 1.5), stoneWarm), 0, 10.25, facadeZ - 0.05);
+    add(new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.5, 1.4), stoneWarm), 0, 10.75, facadeZ - 0.05);
+    // side wings forward
+    for (const sx of [-7.0, 7.0]) {
+      add(new THREE.Mesh(new THREE.BoxGeometry(2.6, 7.2, 1.4), stoneDeep), sx, 3.6, facadeZ + 0.7);
+      // tiny balcony ledge
+      add(new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.2, 0.7), stoneWarm), sx, 5.2, facadeZ + 1.35, false);
+    }
+    // columns + capitals (skip centre for niche)
+    for (let i = -3; i <= 3; i++) {
+      if (i === 0) continue;
+      const x = i * 1.95;
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 6.2, 8), marble), x, 3.7, facadeZ + 1.05);
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.3, 0.78), stoneDeep), x, 6.9, facadeZ + 1.05, false);
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.24, 0.82), stoneDeep), x, 0.55, facadeZ + 1.05, false);
+    }
+    // central niche recess + arched top (half-cylinder along X)
+    add(new THREE.Mesh(new THREE.BoxGeometry(3.8, 5.8, 1.0), stoneDeep), 0, 3.7, facadeZ + 0.4, false);
+    const arch = add(
+      new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 1.0, 14, 1, false, 0, Math.PI), stoneDeep),
+      0,
+      6.6,
+      facadeZ + 0.4,
+      false,
+    );
+    arch.rotation.z = Math.PI / 2;
+    // side niches with small statues
+    for (const sx of [-5.0, 5.0]) {
+      add(new THREE.Mesh(new THREE.BoxGeometry(2.2, 3.6, 0.55), stoneWarm), sx, 3.5, facadeZ + 0.85, false);
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 2.6, 7), marble), sx, 2.9, facadeZ + 1.1);
+      add(new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), marble), sx, 4.35, facadeZ + 1.1, false);
+    }
+    // window panels between columns (palace read)
+    for (const x of [-2.9, 2.9, -4.9, 4.9]) {
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 0.12), mat(0xadb5bd)), x, 5.4, facadeZ + 0.95, false);
+    }
+
+    // —— Rocky cliff shelf in front of facade ——
+    for (const [rx, ry, rz, sx, sy, sz] of [
+      [0, 1.35, -3.3, 11.5, 2.7, 3.6],
+      [-3.8, 2.0, -2.3, 3.8, 2.2, 2.8],
+      [3.8, 1.9, -2.4, 3.6, 2.0, 2.6],
+      [-1.4, 2.7, -3.7, 2.8, 1.7, 2.0],
+      [1.5, 2.55, -3.6, 2.6, 1.5, 1.9],
+      [0, 0.7, -1.2, 9.5, 1.4, 2.4],
+      [-5.5, 1.3, -2.8, 2.2, 1.5, 2.0],
+      [5.5, 1.25, -2.8, 2.2, 1.4, 2.0],
+    ] as const) {
+      add(new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), stoneDeep), rx, ry, rz);
+    }
+
+    // —— Cascading water steps (bright blue sheets + thin foam lips) ——
+    for (let i = 0; i < 5; i++) {
+      const z = -1.8 + i * 0.75;
+      const y = 1.7 - i * 0.32;
+      const w = 8.2 - i * 0.55;
+      add(new THREE.Mesh(new THREE.BoxGeometry(w, 0.35, 0.85), cascadeMat), 0, y, z, false);
+      add(new THREE.Mesh(new THREE.BoxGeometry(w + 0.15, 0.1, 0.22), foam), 0, y + 0.2, z + 0.35, false);
+    }
+    // vertical falls from rock face
+    for (const fx of [-1.6, 0, 1.6]) {
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.6, 0.2), cascadeMat), fx, 2.4, -2.55, false);
+    }
+
+    // —— Central figure (statue-ish) ——
+    const figure = new THREE.Group();
+    figure.position.set(0, 3.05, -2.65);
+    g.add(figure);
+    const figBody = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.68, 2.6, 10), marble);
+    figBody.position.y = 1.4;
+    figBody.castShadow = true;
+    figure.add(figBody);
+    const figShoulder = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.5, 0.55), marble);
+    figShoulder.position.y = 2.55;
+    figure.add(figShoulder);
+    const figHead = new THREE.Mesh(new THREE.SphereGeometry(0.48, 10, 8), marble);
+    figHead.position.y = 3.2;
+    figHead.castShadow = true;
+    figure.add(figHead);
+    const cloak = new THREE.Mesh(new THREE.BoxGeometry(1.9, 2.4, 0.22), stoneWarm);
+    cloak.position.set(0, 1.6, -0.4);
+    figure.add(cloak);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 1.55, 6), marble);
+    arm.position.set(0.9, 2.4, 0.2);
+    arm.rotation.z = -0.75;
+    figure.add(arm);
+    // staff / trident feel
+    const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 5), marble);
+    staff.position.set(1.35, 3.0, 0.35);
+    staff.rotation.z = -0.25;
+    figure.add(staff);
+
+    // —— Flanking horses (larger, clearer silhouettes) ——
+    const horse = (x: number, z: number, face: 1 | -1) => {
+      const h = new THREE.Group();
+      h.position.set(x, 2.55, z);
+      h.scale.set(face * 1.35, 1.35, 1.35);
+      g.add(h);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.85, 0.55), marble);
+      body.position.set(0, 0.65, 0);
+      body.castShadow = true;
+      h.add(body);
+      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.95, 0.38), marble);
+      neck.position.set(0.65, 1.3, 0);
+      neck.rotation.z = -0.5;
+      h.add(neck);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.36, 0.32), marble);
+      head.position.set(1.15, 1.65, 0);
+      h.add(head);
+      const snout = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.22, 0.24), marble);
+      snout.position.set(1.55, 1.55, 0);
+      h.add(snout);
+      for (const [lx, lz] of [
+        [-0.5, 0.2],
+        [-0.5, -0.2],
+        [0.45, 0.2],
+        [0.45, -0.2],
+      ] as const) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.85, 5), marble);
+        leg.position.set(lx, 0.05, lz);
+        h.add(leg);
+      }
+      const mane = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.85, 0.28), stoneWarm);
+      mane.position.set(0.5, 1.4, -0.22);
+      h.add(mane);
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.2, 0.18), stoneWarm);
+      tail.position.set(-0.95, 0.75, -0.05);
+      tail.rotation.z = 0.4;
+      h.add(tail);
+    };
+    horse(-3.6, -2.0, 1);
+    horse(3.6, -2.0, -1);
+
+    // —— Wide semicircular basin in front (plaza stays open) ——
+    const basinZ = 2.8;
+    add(new THREE.Mesh(new THREE.BoxGeometry(14.2, 0.4, 6.6), stoneDeep), 0, 0.2, basinZ, false);
+    const pool = new THREE.Mesh(new THREE.CylinderGeometry(6.6, 6.6, 0.28, 28, 1, false, -Math.PI / 2, Math.PI), waterMat);
+    pool.position.set(0, 0.48, basinZ - 0.35);
+    pool.receiveShadow = true;
     g.add(pool);
-    const statue = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 2.5, 10), mat(0xe9ecef));
-    statue.position.y = 2.0;
-    g.add(statue);
-    obstacles.push({ minX: at.x - 5, maxX: at.x + 5, minZ: at.z - 5, maxZ: at.z + 5, height: 0.8 });
-    const gem = gemMesh(0xffe14d, 1.2);
-    gem.position.set(1.5, 1.0, 2.5);
+    add(new THREE.Mesh(new THREE.BoxGeometry(12.2, 0.26, 3.5), waterMat), 0, 0.48, 0.7, false);
+    for (let i = 0; i <= 12; i++) {
+      const a = -Math.PI / 2 + (i / 12) * Math.PI;
+      const rx = Math.sin(a) * 6.9;
+      const rz = basinZ - 0.35 + Math.cos(a) * 6.9;
+      const rim = add(new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.6, 0.5), stone), rx, 0.5, rz, false);
+      rim.rotation.y = -a;
+    }
+    for (const sx of [-6.8, 6.8]) {
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.6, 5.8), stone), sx, 0.5, 1.5, false);
+    }
+
+    // —— Fountain jets (pulse in update) ——
+    const jets: THREE.Mesh[] = [];
+    const jetMat = new THREE.MeshStandardMaterial({
+      color: 0xe7f5ff,
+      emissive: 0x4dabf7,
+      emissiveIntensity: 0.55,
+      transparent: true,
+      opacity: 0.9,
+    });
+    for (const [jx, jz, h, phase] of [
+      [0, -1.1, 2.2, 0],
+      [-2.4, -0.3, 1.5, 1.1],
+      [2.4, -0.3, 1.5, 2.2],
+      [-1.2, 1.9, 1.15, 0.5],
+      [1.2, 1.9, 1.15, 1.7],
+      [0, 3.8, 1.4, 0.9],
+      [-3.5, 1.0, 0.95, 2.8],
+      [3.5, 1.0, 0.95, 3.4],
+    ] as const) {
+      const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.16, 1, 6), jetMat);
+      jet.position.set(jx, 0.6 + h / 2, jz);
+      jet.scale.y = h;
+      jet.userData.baseH = h;
+      jet.userData.phase = phase;
+      g.add(jet);
+      jets.push(jet);
+      const splash = new THREE.Mesh(new THREE.SphereGeometry(0.22, 7, 5), foam);
+      splash.position.set(jx, 0.6 + h + 0.08, jz);
+      g.add(splash);
+      jet.userData.splash = splash;
+    }
+
+    // Collide only with facade + rock shelf — plaza / basin edge stay walkable
+    obstacles.push({
+      minX: at.x - 8.4,
+      maxX: at.x + 8.4,
+      minZ: at.z - 6.6,
+      maxZ: at.z - 0.2,
+      height: 11,
+    });
+
+    const gem = gemMesh(0xffe14d, 1.3);
+    gem.position.set(5.0, 1.05, 5.4);
     g.add(gem);
-    const things = [diamondAt(ctx, `gem:${ctx.city()}:trevi`, new THREE.Vector3(at.x + 1.5, 0, at.z + 2.5), gem)];
+
+    let jetT = 0;
+    const things: Interactable[] = [
+      diamondAt(ctx, `gem:${ctx.city()}:trevi`, new THREE.Vector3(at.x + 5.0, 0, at.z + 5.4), gem),
+      {
+        object: g,
+        position: new THREE.Vector3(at.x, 0, at.z + 5.6),
+        radius: 5.8,
+        interact() {
+          if (ctx.coins() < 1) {
+            ctx.say(['A fonte!', 'Precisas de uma moeda para o desejo!']);
+            return;
+          }
+          ctx.addCoins(-1);
+          tone(1200, 0, 0.15, 'sine', 0.05);
+          ctx.say(['Fonte de Trevi!', 'Faz um desejo!']);
+        },
+        update(dt) {
+          jetT += dt;
+          for (const jet of jets) {
+            const base = jet.userData.baseH as number;
+            const pulse = 0.88 + Math.sin(jetT * 5 + (jet.userData.phase as number)) * 0.14;
+            jet.scale.y = base * pulse;
+            jet.position.y = 0.55 + (base * pulse) / 2;
+            const splash = jet.userData.splash as THREE.Mesh | undefined;
+            if (splash) splash.position.y = 0.55 + base * pulse + 0.08;
+          }
+        },
+      },
+    ];
+    landmarkDebug = { spots: { trevi: { x: at.x, z: at.z }, main: { x: at.x, z: at.z } }, count: 1 };
+    return things;
+  },
+
+  /**
+   * Paris — torre de ferro (estilo Eiffel, original / sem marca):
+   * base bem larga + 4 arcos abertos, 1.º e 2.º andar, treliça em X, agulha com farol.
+   * Obstáculos só nas pernas → dá para passar por baixo / à volta.
+   */
+  Paris(scene, obstacles, rng, ctx) {
+    const at = place(obstacles, rng, 11);
+    const g = new THREE.Group();
+    g.position.copy(at);
+    g.userData.landmark = 'torre';
+    scene.add(g);
+
+    const iron = mat(0x495057);
+    const ironLite = mat(0x868e96);
+    const ironDark = mat(0x343a40);
+
+    /** Barra entre dois pontos (caixa orientada ao longo de Z local). */
+    const zAxis = new THREE.Vector3(0, 0, 1);
+    const barDir = new THREE.Vector3();
+    const bar = (
+      x0: number,
+      y0: number,
+      z0: number,
+      x1: number,
+      y1: number,
+      z1: number,
+      thick: number,
+      m: THREE.Material = iron,
+    ) => {
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const dz = z1 - z0;
+      const len = Math.hypot(dx, dy, dz) || 0.01;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(thick, thick, len), m);
+      mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+      barDir.set(dx, dy, dz).normalize();
+      mesh.quaternion.setFromUnitVectors(zAxis, barDir);
+      mesh.castShadow = true;
+      g.add(mesh);
+    };
+
+    const xBrace = (
+      ax: number,
+      ay: number,
+      az: number,
+      bx: number,
+      by: number,
+      bz: number,
+      cx: number,
+      cy: number,
+      cz: number,
+      dx: number,
+      dy: number,
+      dz: number,
+      thick = 0.12,
+    ) => {
+      bar(ax, ay, az, cx, cy, cz, thick, ironLite);
+      bar(bx, by, bz, dx, dy, dz, thick, ironLite);
+    };
+
+    // Kid-readable A-frame: wide feet → open arch voids → platforms → needle (~26 m)
+    const y1 = 8.2;
+    const y2 = 14.0;
+    const yNeedle = 22.5;
+    const yTip = 26.8;
+    const baseOut = 8.6; // half-span at ground — wide A silhouette
+    const mid1 = 3.1;
+    const mid2 = 1.35;
+    const tipIn = 0.25;
+
+    const corners: [number, number][] = [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ];
+
+    /** Radius along lower leg: stays wide longer, then tapers (concave Eiffel curve). */
+    const legR = (t: number) => baseOut + (mid1 - baseOut) * Math.pow(Math.min(1, Math.max(0, t)), 0.55);
+
+    // —— 4 curved spreading legs (segmented) + feet ——
+    const LEG_SEGS = 5;
+    for (const [sx, sz] of corners) {
+      for (let i = 0; i < LEG_SEGS; i++) {
+        const t0 = i / LEG_SEGS;
+        const t1 = (i + 1) / LEG_SEGS;
+        const thick = 0.78 - i * 0.05;
+        bar(sx * legR(t0), 0.2 + y1 * t0, sz * legR(t0), sx * legR(t1), 0.2 + y1 * t1, sz * legR(t1), thick, iron);
+      }
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.45, 1.7), ironDark);
+      foot.position.set(sx * baseOut, 0.22, sz * baseOut);
+      foot.castShadow = true;
+      g.add(foot);
+    }
+
+    // Face ties: lintel under 1.º + spring beam (open arch voids between legs)
+    for (let i = 0; i < 4; i++) {
+      const [sx0, sz0] = corners[i];
+      const [sx1, sz1] = corners[(i + 1) % 4];
+      bar(sx0 * mid1, y1, sz0 * mid1, sx1 * mid1, y1, sz1 * mid1, 0.26, ironDark);
+      const tSpring = 0.48;
+      const rSpring = legR(tSpring);
+      const hy = y1 * tSpring;
+      bar(sx0 * rSpring, hy, sz0 * rSpring, sx1 * rSpring, hy, sz1 * rSpring, 0.22, iron);
+    }
+
+    // Decorative arch accents (thin — the void under the spring beam is the main arch)
+    for (const [nx, nz, rotY] of [
+      [0, 1, 0],
+      [1, 0, Math.PI / 2],
+      [0, -1, Math.PI],
+      [-1, 0, -Math.PI / 2],
+    ] as const) {
+      const archR = y1 * 0.42;
+      const out = legR(0.35);
+      const arch = new THREE.Mesh(new THREE.TorusGeometry(archR, 0.18, 5, 20, Math.PI), ironLite);
+      arch.position.set(nx * out * 0.55, y1 * 0.48 - archR * 0.08, nz * out * 0.55);
+      arch.rotation.y = rotY;
+      g.add(arch);
+    }
+
+    // Lattice X on each lower face (readable silhouette)
+    for (let i = 0; i < 4; i++) {
+      const [sx0, sz0] = corners[i];
+      const [sx1, sz1] = corners[(i + 1) % 4];
+      for (const [tLo, tHi] of [
+        [0.1, 0.42],
+        [0.52, 0.92],
+      ] as const) {
+        const rLo = legR(tLo);
+        const rHi = legR(tHi);
+        const yLo = y1 * tLo;
+        const yHi = y1 * tHi;
+        xBrace(
+          sx0 * rLo,
+          yLo,
+          sz0 * rLo,
+          sx1 * rLo,
+          yLo,
+          sz1 * rLo,
+          sx1 * rHi,
+          yHi,
+          sz1 * rHi,
+          sx0 * rHi,
+          yHi,
+          sz0 * rHi,
+          0.16,
+        );
+      }
+    }
+
+    // 1.º andar (wide deck + corner posts)
+    const plat1 = new THREE.Mesh(new THREE.BoxGeometry(mid1 * 2 + 0.7, 0.38, mid1 * 2 + 0.7), ironLite);
+    plat1.position.y = y1;
+    plat1.castShadow = true;
+    g.add(plat1);
+    const skirt1 = new THREE.Mesh(new THREE.BoxGeometry(mid1 * 2 + 1.1, 0.18, mid1 * 2 + 1.1), ironDark);
+    skirt1.position.y = y1 - 0.22;
+    g.add(skirt1);
+    for (const [sx, sz] of corners) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.6, 0.14), ironDark);
+      post.position.set(sx * (mid1 + 0.15), y1 + 0.45, sz * (mid1 + 0.15));
+      g.add(post);
+    }
+
+    // —— Mid section: 1.º → 2.º ——
+    for (const [sx, sz] of corners) {
+      bar(sx * mid1, y1, sz * mid1, sx * mid2, y2, sz * mid2, 0.32, iron);
+    }
+    for (let i = 0; i < 4; i++) {
+      const [sx0, sz0] = corners[i];
+      const [sx1, sz1] = corners[(i + 1) % 4];
+      bar(sx0 * mid2, y2, sz0 * mid2, sx1 * mid2, y2, sz1 * mid2, 0.18, ironDark);
+      const tLo = 0.12;
+      const tHi = 0.88;
+      const rLo = mid1 * (1 - tLo) + mid2 * tLo;
+      const rHi = mid1 * (1 - tHi) + mid2 * tHi;
+      const yLo = y1 + (y2 - y1) * tLo;
+      const yHi = y1 + (y2 - y1) * tHi;
+      xBrace(
+        sx0 * rLo,
+        yLo,
+        sz0 * rLo,
+        sx1 * rLo,
+        yLo,
+        sz1 * rLo,
+        sx1 * rHi,
+        yHi,
+        sz1 * rHi,
+        sx0 * rHi,
+        yHi,
+        sz0 * rHi,
+        0.1,
+      );
+    }
+
+    // 2.º andar (clear step in the silhouette)
+    const plat2 = new THREE.Mesh(new THREE.BoxGeometry(mid2 * 2 + 0.75, 0.34, mid2 * 2 + 0.75), ironLite);
+    plat2.position.y = y2;
+    plat2.castShadow = true;
+    g.add(plat2);
+    const skirt2 = new THREE.Mesh(new THREE.BoxGeometry(mid2 * 2 + 1.05, 0.16, mid2 * 2 + 1.05), ironDark);
+    skirt2.position.y = y2 - 0.2;
+    g.add(skirt2);
+    for (const [sx, sz] of corners) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 0.12), ironDark);
+      post.position.set(sx * (mid2 + 0.12), y2 + 0.4, sz * (mid2 + 0.12));
+      g.add(post);
+    }
+
+    // —— Tall tapering needle ——
+    for (const [sx, sz] of corners) {
+      bar(sx * mid2, y2, sz * mid2, sx * tipIn, yNeedle, sz * tipIn, 0.18, iron);
+    }
+    for (let i = 0; i < 4; i++) {
+      const [sx0, sz0] = corners[i];
+      const [sx1, sz1] = corners[(i + 1) % 4];
+      for (const [tLo, tHi] of [
+        [0.05, 0.35],
+        [0.4, 0.7],
+      ] as const) {
+        const rLo = mid2 * (1 - tLo) + tipIn * tLo;
+        const rHi = mid2 * (1 - tHi) + tipIn * tHi;
+        const yLo = y2 + (yNeedle - y2) * tLo;
+        const yHi = y2 + (yNeedle - y2) * tHi;
+        xBrace(
+          sx0 * rLo,
+          yLo,
+          sz0 * rLo,
+          sx1 * rLo,
+          yLo,
+          sz1 * rLo,
+          sx1 * rHi,
+          yHi,
+          sz1 * rHi,
+          sx0 * rHi,
+          yHi,
+          sz0 * rHi,
+          0.08,
+        );
+      }
+    }
+    // solid tip + beacon
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.5, 3.2, 8), ironDark);
+    tip.position.y = yNeedle + 1.4;
+    tip.castShadow = true;
+    g.add(tip);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.5, 6), iron);
+    mast.position.y = yTip - 0.2;
+    g.add(mast);
+    const lamp = new THREE.Mesh(
+      new THREE.SphereGeometry(0.36, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0xffe066, emissive: 0xff922b, emissiveIntensity: 1.0 }),
+    );
+    lamp.position.y = yTip + 0.55;
+    g.add(lamp);
+
+    // Collide only with the four feet — walk under the arches
+    const footR = 0.95;
+    for (const [sx, sz] of corners) {
+      const fx = at.x + sx * baseOut;
+      const fz = at.z + sz * baseOut;
+      obstacles.push({
+        minX: fx - footR,
+        maxX: fx + footR,
+        minZ: fz - footR,
+        maxZ: fz + footR,
+        height: y1,
+      });
+    }
+
+    const gem = gemMesh(0xff3b7f, 1.3);
+    gem.position.set(0, y1 + 0.55, 0);
+    g.add(gem);
+
+    const things: Interactable[] = [
+      diamondAt(ctx, `gem:${ctx.city()}:torre`, new THREE.Vector3(at.x, 0, at.z + 4), gem),
+    ];
     things.push({
       object: g,
       position: at.clone(),
-      radius: 4,
+      radius: 6.5,
       interact() {
-        if (ctx.coins() < 1) {
-          ctx.say(['Precisas de uma moeda para o desejo!']);
-          return;
-        }
-        ctx.addCoins(-1);
-        tone(1200, 0, 0.15, 'sine', 0.05);
-        ctx.say(['Faz um desejo!']);
+        ctx.say(['A torre de ferro!']);
       },
     });
     return things;
   },
 
-  Paris(scene, obstacles, rng, ctx) {
-    const at = place(obstacles, rng, 6);
-    const g = new THREE.Group();
-    g.position.copy(at);
-    scene.add(g);
-    const iron = mat(0x495057);
-    const ironLite = mat(0x868e96);
-    // Eiffel-like: wide base tapering to a needle, with two platforms
-    for (const [x, z] of [[-2.4, -2.4], [2.4, -2.4], [-2.4, 2.4], [2.4, 2.4]] as const) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.55, 7, 0.55), iron);
-      leg.position.set(x, 3.5, z);
-      leg.rotation.x = z > 0 ? 0.18 : -0.18;
-      leg.rotation.z = x > 0 ? -0.18 : 0.18;
-      g.add(leg);
-    }
-    // first floor platform (wide)
-    const mid1 = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.35, 5.2), ironLite);
-    mid1.position.y = 6.2;
-    g.add(mid1);
-    // arched opening feel under first floor
-    for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
-      const arch = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.12, 6, 14, Math.PI), iron);
-      arch.position.set(Math.sin(a) * 0.2, 4.2, Math.cos(a) * 0.2);
-      arch.rotation.y = a;
-      arch.rotation.z = Math.PI;
-      g.add(arch);
-    }
-    // second floor
-    const mid2 = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.3, 2.6), ironLite);
-    mid2.position.y = 10.5;
-    g.add(mid2);
-    // upper taper
-    for (const [x, z] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]] as const) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.28, 5.5, 0.28), iron);
-      leg.position.set(x, 13.2, z);
-      leg.rotation.x = z > 0 ? 0.12 : -0.12;
-      leg.rotation.z = x > 0 ? -0.12 : 0.12;
-      g.add(leg);
-    }
-    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.35, 5, 8), iron);
-    tip.position.y = 18.5;
-    g.add(tip);
-    const lamp = new THREE.Mesh(
-      new THREE.SphereGeometry(0.35, 10, 8),
-      new THREE.MeshStandardMaterial({ color: 0xffe066, emissive: 0xff922b, emissiveIntensity: 0.9 }),
-    );
-    lamp.position.y = 21.2;
-    g.add(lamp);
-    obstacles.push({ minX: at.x - 3.2, maxX: at.x + 3.2, minZ: at.z - 3.2, maxZ: at.z + 3.2 });
-    const gem = gemMesh(0xff3b7f, 1.3);
-    gem.position.set(0, 6.8, 0);
-    g.add(gem);
-    return [diamondAt(ctx, `gem:${ctx.city()}:torre`, new THREE.Vector3(at.x, 0, at.z + 3), gem)];
-  },
+  /**
+   * Londres — two separate attractions (≥25–40 m apart):
+   *  1) Torre do Relógio (Elizabeth Tower style, original speech: «relógio»)
+   *  2) Roda gigante (spokes, A-frame, hanging cabins + ride)
+   */
+  Londres(scene, obstacles, rng, ctx, world) {
+    const things: Interactable[] = [];
+    const city = ctx.city();
+    const used: Record<string, { x: number; z: number }> = {};
 
-  Londres(scene, obstacles, rng, ctx) {
-    const at = place(obstacles, rng, 5);
-    const g = new THREE.Group();
-    g.position.copy(at);
-    scene.add(g);
-    // big clock tower (I85)
-    const stone = mat(0xb8b2c4);
-    const tower = new THREE.Mesh(new THREE.BoxGeometry(2.5, 12, 2.5), stone);
-    tower.position.y = 6;
-    g.add(tower);
-    const clock = new THREE.Mesh(new THREE.CircleGeometry(0.8, 20), mat(0xffe066));
-    clock.position.set(0, 9, 1.3);
-    g.add(clock);
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.05), mat(0x212529));
-    hand.position.set(0, 0.2, 0.05);
-    clock.add(hand);
-    // Ferris wheel beside it
-    const wheel = new THREE.Group();
-    wheel.position.set(6, 5, 0);
-    g.add(wheel);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(4, 0.12, 8, 32), mat(0x868e96));
-    rim.rotation.y = Math.PI / 2;
-    wheel.add(rim);
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), mat(0xff6b9d));
-      cabin.position.set(0, Math.cos(a) * 4, Math.sin(a) * 4);
-      wheel.add(cabin);
+    // Soft prefs far from SPAWN / airport; wheel ~34 m east of clock when free.
+    const CLOCK_PREF = { x: -95, z: -105 };
+    const clockAt = takeSpot(world, obstacles, rng, 3.2, 3.2, CLOCK_PREF, 28);
+    used.clock = clockAt;
+
+    // —— 1) Clock tower ——
+    {
+      const g = new THREE.Group();
+      g.position.set(clockAt.x, 0, clockAt.z);
+      g.userData.landmark = 'clock';
+      scene.add(g);
+
+      const stone = mat(0xc5bec9);
+      const stoneDeep = mat(0x9a93a3);
+      const cream = mat(0xfff4d6);
+      const gold = mat(0xffd43b);
+      const dark = mat(0x212529);
+      const roof = mat(0x5c5470);
+
+      // plinth + shaft (tall proportions)
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.1, 4.2), stoneDeep);
+      plinth.position.y = 0.55;
+      plinth.castShadow = true;
+      g.add(plinth);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.2, 3.4), stone);
+      base.position.y = 2.7;
+      base.castShadow = true;
+      g.add(base);
+      const shaft = new THREE.Mesh(new THREE.BoxGeometry(2.7, 10.5, 2.7), stone);
+      shaft.position.y = 9.5;
+      shaft.castShadow = true;
+      g.add(shaft);
+      // thin corner pilasters
+      for (const [sx, sz] of [
+        [-1.25, -1.25],
+        [1.25, -1.25],
+        [-1.25, 1.25],
+        [1.25, 1.25],
+      ] as const) {
+        const pil = new THREE.Mesh(new THREE.BoxGeometry(0.28, 10.5, 0.28), stoneDeep);
+        pil.position.set(sx, 9.5, sz);
+        g.add(pil);
+      }
+
+      // clock stage (slightly wider) + 4 faces
+      const stage = new THREE.Mesh(new THREE.BoxGeometry(3.2, 3.4, 3.2), stone);
+      stage.position.y = 16.4;
+      stage.castShadow = true;
+      g.add(stage);
+      const faceY = 16.5;
+      const faceR = 1.05;
+      const faceOut = 1.64;
+      for (const [fx, fz, ry] of [
+        [0, faceOut, 0],
+        [0, -faceOut, Math.PI],
+        [faceOut, 0, Math.PI / 2],
+        [-faceOut, 0, -Math.PI / 2],
+      ] as const) {
+        const dial = new THREE.Mesh(new THREE.CircleGeometry(faceR, 20), cream);
+        dial.position.set(fx, faceY, fz);
+        dial.rotation.y = ry;
+        g.add(dial);
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(faceR, 0.06, 6, 24), gold);
+        rim.position.copy(dial.position);
+        rim.rotation.y = ry;
+        g.add(rim);
+        const hub = new THREE.Mesh(new THREE.CircleGeometry(0.1, 10), dark);
+        hub.position.set(fx, faceY, fz);
+        hub.rotation.y = ry;
+        hub.position.x += Math.sin(ry) * 0.02;
+        hub.position.z += Math.cos(ry) * 0.02;
+        g.add(hub);
+        const hour = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.04), dark);
+        hour.position.set(fx, faceY + 0.18, fz);
+        hour.rotation.y = ry;
+        hour.position.x += Math.sin(ry) * 0.04;
+        hour.position.z += Math.cos(ry) * 0.04;
+        g.add(hour);
+        const minute = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.75, 0.035), dark);
+        minute.position.set(fx, faceY + 0.05, fz);
+        minute.rotation.y = ry;
+        minute.rotation.z = 0.9;
+        minute.position.x += Math.sin(ry) * 0.045;
+        minute.position.z += Math.cos(ry) * 0.045;
+        g.add(minute);
+      }
+
+      // gothic-ish belfry + pyramid roof / spire
+      const belfry = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.2, 2.4), stoneDeep);
+      belfry.position.y = 19.2;
+      g.add(belfry);
+      for (const [bx, bz] of [
+        [-0.85, -0.85],
+        [0.85, -0.85],
+        [-0.85, 0.85],
+        [0.85, 0.85],
+      ] as const) {
+        const pin = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.1, 0.35), stone);
+        pin.position.set(bx, 20.6, bz);
+        g.add(pin);
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.55, 4), roof);
+        tip.position.set(bx, 21.35, bz);
+        tip.rotation.y = Math.PI / 4;
+        g.add(tip);
+      }
+      const spire = new THREE.Mesh(new THREE.ConeGeometry(1.55, 4.2, 4), roof);
+      spire.position.y = 22.5;
+      spire.rotation.y = Math.PI / 4;
+      g.add(spire);
+      const finial = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), gold);
+      finial.position.y = 24.7;
+      g.add(finial);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.1, 6), gold);
+      pole.position.y = 25.3;
+      g.add(pole);
+
+      const gem = gemMesh(0xb06bff, 1.25);
+      gem.position.set(0, 14.2, 0);
+      g.add(gem);
+      things.push(diamondAt(ctx, `gem:${city}:relogio`, new THREE.Vector3(clockAt.x, 0, clockAt.z + 2.8), gem));
+      things.push({
+        object: g,
+        position: new THREE.Vector3(clockAt.x, 0, clockAt.z + 2.6),
+        radius: 3.2,
+        interact() {
+          const h = new Date().getHours() % 12 || 12;
+          for (let i = 0; i < Math.min(h, 8); i++) tone(200, i * 0.35, 0.3, 'sine', 0.08);
+          ctx.say(['O relógio dá as horas!']);
+        },
+      });
     }
-    obstacles.push({ minX: at.x - 2, maxX: at.x + 2, minZ: at.z - 2, maxZ: at.z + 2 });
-    obstacles.push({ minX: at.x + 3, maxX: at.x + 9, minZ: at.z - 2, maxZ: at.z + 2, height: 0.5 });
-    const gem = gemMesh(0xb06bff, 1.2);
-    gem.position.set(0, 12.5, 0);
-    g.add(gem);
-    const things = [diamondAt(ctx, `gem:${ctx.city()}:relogio`, new THREE.Vector3(at.x, 0, at.z + 2.5), gem)];
-    things.push({
-      object: g,
-      position: at.clone(),
-      radius: 3,
-      interact() {
-        const h = new Date().getHours() % 12 || 12;
-        for (let i = 0; i < Math.min(h, 8); i++) tone(200, i * 0.35, 0.3, 'sine', 0.08);
-        ctx.say(['O relógio dá as horas!']);
-      },
-    });
-    things.push({
-      object: wheel,
-      position: new THREE.Vector3(at.x + 6, 0, at.z),
-      radius: 4,
-      requiresClick: true,
-      interact() {
-        if (ctx.isPaused()) return false;
-        ctx.hold(true);
-        ctx.say(['Uma volta na roda!']);
-        let t = 0;
-        const spin = setInterval(() => {
-          t += 0.05;
-          wheel.rotation.x = t;
-          const a = t;
-          ctx.player.set(at.x + 6, 5 + Math.cos(a) * 3.5, at.z + Math.sin(a) * 3.5);
-          if (t > Math.PI * 2) {
-            clearInterval(spin);
-            ctx.player.set(at.x + 6, 0, at.z + 4);
-            ctx.hold(false);
-          }
-        }, 50);
+
+    // —— 2) Ferris wheel (own spot, ≥30 m from the clock — walkable gap) ——
+    {
+      const WHEEL_HW = 6;
+      const WHEEL_HD = 3.5;
+      /** Tall claim so resolveSpot / clearArea treat the wheel as a real attraction. */
+      const WHEEL_H = 20;
+      const MIN_SEP = 30;
+      /** Prefer 35–45 m; extras for crowded maps (Warsaw/Porto-style angle sweep). */
+      const TRY_DISTS = [38, 42, 35, 45, 40, 48, 50, 55];
+
+      const farEnough = (p: { x: number; z: number }) =>
+        Math.hypot(p.x - clockAt.x, p.z - clockAt.z) >= MIN_SEP;
+
+      /** Terrain OK (roads / airport / venues / map edge) even if buildings sit there. */
+      const terrainOk = (at: { x: number; z: number }): boolean => {
+        const me: Obstacle = {
+          minX: at.x - WHEEL_HW,
+          maxX: at.x + WHEEL_HW,
+          minZ: at.z - WHEEL_HD,
+          maxZ: at.z + WHEEL_HD,
+        };
+        if (Math.max(Math.abs(me.minX), Math.abs(me.maxX), Math.abs(me.minZ), Math.abs(me.maxZ)) > ROADS.extent - 10)
+          return false;
+        const samples: [number, number][] = [
+          [at.x, at.z],
+          [at.x - WHEEL_HW, at.z - WHEEL_HD],
+          [at.x + WHEEL_HW, at.z - WHEEL_HD],
+          [at.x - WHEEL_HW, at.z + WHEEL_HD],
+          [at.x + WHEEL_HW, at.z + WHEEL_HD],
+        ];
+        for (const [x, z] of samples) {
+          if (onRoad(x, z, 2.5)) return false;
+          if (inNoSpawn(x, z, 4)) return false;
+        }
+        if (overlaps(me, AIRPORT_ZONE, 4)) return false;
         return true;
-      },
-    });
+      };
+
+      let wheelWant: { x: number; z: number } | null = null;
+      for (const dist of TRY_DISTS) {
+        for (let i = 0; i < 16; i++) {
+          const a = ((i + rng()) / 16) * Math.PI * 2;
+          const cand = { x: clockAt.x + Math.cos(a) * dist, z: clockAt.z + Math.sin(a) * dist };
+          if (footprintFree(obstacles, cand, WHEEL_HW, WHEEL_HD) && farEnough(cand)) {
+            wheelWant = cand;
+            break;
+          }
+        }
+        if (wheelWant) break;
+      }
+
+      // Strong preferred centre (≥35 m when possible). Height 20 = solid claim (was 0.6 → weak footprint).
+      let wheelAt = takeSpot(
+        world,
+        obstacles,
+        rng,
+        WHEEL_HW,
+        WHEEL_HD,
+        wheelWant ?? { x: clockAt.x + 40, z: clockAt.z },
+        WHEEL_H,
+      );
+
+      // If resolveSpot still collapsed near the clock, retry other rings or clearArea-force a grass cell.
+      if (!farEnough(wheelAt)) {
+        const bad = obstacles.find(
+          (o) =>
+            Math.abs((o.minX + o.maxX) / 2 - wheelAt.x) < 0.2 &&
+            Math.abs((o.minZ + o.maxZ) / 2 - wheelAt.z) < 0.2,
+        );
+        if (bad) {
+          const i = obstacles.indexOf(bad);
+          if (i >= 0) obstacles.splice(i, 1);
+        }
+        let forced: { x: number; z: number } | null = null;
+        for (const dist of [42, 45, 50, 55, 38, 60]) {
+          for (let i = 0; i < 16; i++) {
+            const a = (i / 16) * Math.PI * 2;
+            const cand = { x: clockAt.x + Math.cos(a) * dist, z: clockAt.z + Math.sin(a) * dist };
+            if (!terrainOk(cand)) continue;
+            if (footprintFree(obstacles, cand, WHEEL_HW, WHEEL_HD)) {
+              forced = cand;
+              break;
+            }
+            // Buildings in the way — clear placeholders and claim the grass cell.
+            claimSpot(world, cand, WHEEL_HW, WHEEL_HD, WHEEL_H);
+            forced = cand;
+            break;
+          }
+          if (forced) break;
+        }
+        if (forced) {
+          if (!obstacles.some((o) => Math.abs((o.minX + o.maxX) / 2 - forced!.x) < 0.2)) {
+            claimSpot(world, forced, WHEEL_HW, WHEEL_HD, WHEEL_H);
+          }
+          wheelAt = forced;
+        } else {
+          // Absolute last resort: due east of the clock, clear whatever is there.
+          const last = { x: clockAt.x + 42, z: clockAt.z };
+          claimSpot(world, last, WHEEL_HW, WHEEL_HD, WHEEL_H);
+          wheelAt = last;
+        }
+      }
+      used.wheel = wheelAt;
+
+      const root = new THREE.Group();
+      root.position.set(wheelAt.x, 0, wheelAt.z);
+      root.userData.landmark = 'wheel';
+      scene.add(root);
+
+      const steel = mat(0x868e96);
+      const steelLite = mat(0xadb5bd);
+      const red = mat(0xe03131);
+      const cabinCols = [0xff6b9d, 0x4dabf7, 0xffd43b, 0x69db7c, 0xcc5de8, 0xff922b];
+
+      const hubY = 5.4;
+      const R = 4.6;
+
+      // ground pad + A-frame legs
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.25, 3.2), mat(0x495057));
+      pad.position.y = 0.12;
+      root.add(pad);
+      for (const side of [-1, 1] as const) {
+        for (const lean of [-1, 1] as const) {
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, hubY + 0.4, 0.22), steel);
+          leg.position.set(side * 0.55, hubY / 2, lean * 1.6);
+          leg.rotation.z = side * 0.18;
+          leg.rotation.x = -lean * 0.42;
+          root.add(leg);
+        }
+        const cross = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 3.4), steelLite);
+        cross.position.set(side * 0.9, 1.4, 0);
+        root.add(cross);
+      }
+      // axle + hub
+      const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1.6, 10), steelLite);
+      axle.rotation.z = Math.PI / 2;
+      axle.position.y = hubY;
+      root.add(axle);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.5, 14), red);
+      hub.rotation.z = Math.PI / 2;
+      hub.position.y = hubY;
+      root.add(hub);
+
+      // spinning rim + spokes; cabins hang and stay upright via counter-rotation
+      const spinner = new THREE.Group();
+      spinner.position.y = hubY;
+      root.add(spinner);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.11, 8, 40), steel);
+      rim.rotation.y = Math.PI / 2;
+      spinner.add(rim);
+      const rimIn = new THREE.Mesh(new THREE.TorusGeometry(R * 0.55, 0.07, 6, 32), steelLite);
+      rimIn.rotation.y = Math.PI / 2;
+      spinner.add(rimIn);
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.07, R * 2, 0.07), steelLite);
+        spoke.rotation.x = a;
+        spinner.add(spoke);
+      }
+
+      const cabinPivots: THREE.Group[] = [];
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        const pivot = new THREE.Group();
+        pivot.position.set(0, Math.cos(a) * R, Math.sin(a) * R);
+        spinner.add(pivot);
+        cabinPivots.push(pivot);
+        const col = mat(cabinCols[i % cabinCols.length]);
+        const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.55, 0.55), col);
+        cabin.position.y = -0.45;
+        cabin.castShadow = true;
+        pivot.add(cabin);
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.08, 0.62), steel);
+        roof.position.y = -0.14;
+        pivot.add(roof);
+        const hang = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.35, 6), steelLite);
+        hang.position.y = -0.05;
+        pivot.add(hang);
+      }
+
+      const gem = gemMesh(0x4dabf7, 1.2);
+      gem.position.set(0, 1.1, 2.2);
+      root.add(gem);
+      things.push(diamondAt(ctx, `gem:${city}:roda`, new THREE.Vector3(wheelAt.x, 0, wheelAt.z + 2.5), gem));
+      things.push({
+        object: root,
+        position: new THREE.Vector3(wheelAt.x, 0, wheelAt.z + 2.2),
+        radius: 4.5,
+        requiresClick: true,
+        interact() {
+          if (ctx.isPaused()) return false;
+          ctx.hold(true);
+          ctx.say(['Uma volta na roda!']);
+          let t = 0;
+          const rideR = R * 0.78;
+          const spin = setInterval(() => {
+            t += 0.05;
+            spinner.rotation.x = t;
+            for (const p of cabinPivots) p.rotation.x = -t;
+            ctx.player.set(wheelAt.x, hubY + Math.cos(t) * rideR, wheelAt.z + Math.sin(t) * rideR);
+            if (t > Math.PI * 2) {
+              clearInterval(spin);
+              ctx.player.set(wheelAt.x, 0, wheelAt.z + 3.5);
+              ctx.hold(false);
+            }
+          }, 50);
+          return true;
+        },
+      });
+    }
+
+    const dist = Math.hypot(used.wheel.x - used.clock.x, used.wheel.z - used.clock.z);
+    landmarkDebug = { spots: used, count: 2, distance: Math.round(dist * 10) / 10 };
     return things;
   },
 
@@ -754,69 +1531,197 @@ const BY_CITY: Record<string, Builder> = {
       });
     }
 
-    // 2) Palácio da Cultura — tall skyscraper with spire
+    // 2) Palácio da Cultura — Stalinist wedding-cake tower (kid-readable PKiN silhouette)
     {
-      const at = takeSpot(world, obstacles, rng, 6, 6, WARSAW_PREFS.cultura, 8);
+      // Soft prefer needs ≤~9.5 half-extent here; mesh wings may overhang slightly.
+      const at = takeSpot(world, obstacles, rng, 9.5, 9.5, WARSAW_PREFS.cultura, 10);
       used.cultura = at;
       const g = new THREE.Group();
       g.position.set(at.x, 0, at.z);
+      g.userData.landmark = 'cultura';
       scene.add(g);
-      const stone = mat(0xd0c8b8);
-      const base = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 10), stone);
-      base.position.y = 2;
-      base.castShadow = true;
-      g.add(base);
-      const mid = new THREE.Mesh(new THREE.BoxGeometry(6, 14, 6), stone);
-      mid.position.y = 11;
-      mid.castShadow = true;
-      g.add(mid);
-      const top = new THREE.Mesh(new THREE.BoxGeometry(3.5, 8, 3.5), stone);
-      top.position.y = 22;
-      g.add(top);
-      const spire = new THREE.Mesh(new THREE.ConeGeometry(0.6, 6, 8), mat(0xc5c8ce));
-      spire.position.y = 29;
-      g.add(spire);
-      const clock = new THREE.Mesh(new THREE.CircleGeometry(0.9, 16), mat(0xffe066));
-      clock.position.set(0, 18, 3.05);
-      g.add(clock);
-      // real terrace on the mid block + solid stair (landing = roof of the mid section)
-      const terraceY = 18.1;
-      const terrace = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.3, 6.4), mat(0xc5c8ce));
-      terrace.position.y = terraceY;
-      g.add(terrace);
-      for (const [rx, rz] of [
-        [-3.0, 0],
-        [3.0, 0],
-        [0, -3.0],
-        [0, 3.0],
+
+      const stone = mat(0xe8dfd0); // warm limestone
+      const stoneDeep = mat(0xcfc4b4);
+      const stoneLite = mat(0xf3ebe0);
+      const trim = mat(0xb8a990);
+      const win = mat(0x3a5078); // blue-dark window panes
+      const cream = mat(0xfff4d6);
+      const gold = mat(0xe0b040);
+      const metal = mat(0xa8b0ba);
+
+      const add = (mesh: THREE.Mesh, x: number, y: number, z: number, shadow = true) => {
+        mesh.position.set(x, y, z);
+        if (shadow) {
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+        }
+        g.add(mesh);
+        return mesh;
+      };
+
+      /** Simple window grid on the four faces of an axis-aligned mass. */
+      const glaze = (
+        halfW: number,
+        halfD: number,
+        yBot: number,
+        yTop: number,
+        cols: number,
+        rows: number,
+      ) => {
+        const spanY = yTop - yBot;
+        if (spanY < 1.2 || cols < 1 || rows < 1) return;
+        const ww = Math.min(0.55, (halfW * 1.5) / cols);
+        const wh = Math.min(0.7, (spanY * 0.7) / rows);
+        const gapX = (halfW * 1.7) / cols;
+        const gapZ = (halfD * 1.7) / cols;
+        const gapY = (spanY * 0.78) / rows;
+        const y0 = yBot + spanY * 0.14 + wh * 0.5;
+        for (let r = 0; r < rows; r++) {
+          const wy = y0 + r * gapY;
+          for (let c = 0; c < cols; c++) {
+            const ox = -((cols - 1) * gapX) / 2 + c * gapX;
+            const oz = -((cols - 1) * gapZ) / 2 + c * gapZ;
+            add(new THREE.Mesh(new THREE.BoxGeometry(ww, wh, 0.08), win), ox, wy, halfD + 0.04, false);
+            add(new THREE.Mesh(new THREE.BoxGeometry(ww, wh, 0.08), win), ox, wy, -(halfD + 0.04), false);
+            add(new THREE.Mesh(new THREE.BoxGeometry(0.08, wh, ww), win), halfW + 0.04, wy, oz, false);
+            add(new THREE.Mesh(new THREE.BoxGeometry(0.08, wh, ww), win), -(halfW + 0.04), wy, oz, false);
+          }
+        }
+      };
+
+      // —— podium + cross wings (wide lower massing) ——
+      add(new THREE.Mesh(new THREE.BoxGeometry(17.5, 1.5, 17.5), stoneDeep), 0, 0.75, 0);
+      add(new THREE.Mesh(new THREE.BoxGeometry(13.2, 5.0, 13.2), stone), 0, 4.0, 0);
+      // E–W arms longer / taller so the “cake” reads from afar
+      add(new THREE.Mesh(new THREE.BoxGeometry(20.5, 4.0, 8.0), stoneLite), 0, 3.5, 0);
+      add(new THREE.Mesh(new THREE.BoxGeometry(8.0, 4.0, 18.0), stoneLite), 0, 3.5, 0);
+      // second step on the arms (setback shelf)
+      add(new THREE.Mesh(new THREE.BoxGeometry(16.5, 1.6, 6.2), stone), 0, 6.3, 0);
+      add(new THREE.Mesh(new THREE.BoxGeometry(6.2, 1.6, 14.5), stone), 0, 6.3, 0);
+      // cornice belts
+      add(new THREE.Mesh(new THREE.BoxGeometry(20.9, 0.28, 8.4), trim), 0, 5.55, 0, false);
+      add(new THREE.Mesh(new THREE.BoxGeometry(8.4, 0.28, 18.4), trim), 0, 5.55, 0, false);
+      add(new THREE.Mesh(new THREE.BoxGeometry(13.6, 0.32, 13.6), trim), 0, 6.55, 0, false);
+      glaze(6.4, 6.4, 1.7, 6.3, 5, 3);
+      glaze(10.0, 3.8, 1.8, 5.3, 7, 2);
+      glaze(3.8, 8.8, 1.8, 5.3, 2, 2);
+
+      // corner pinnacles on the wing tips (wedding-cake read from afar)
+      for (const [px, pz] of [
+        [9.6, 0],
+        [-9.6, 0],
+        [0, 8.4],
+        [0, -8.4],
       ] as const) {
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(rx === 0 ? 6.4 : 0.18, 0.7, rz === 0 ? 6.4 : 0.18), mat(0xadb5bd));
-        rail.position.set(rx, terraceY + 0.5, rz);
-        g.add(rail);
+        add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 5.6, 1.5), stoneDeep), px, 4.2, pz);
+        add(new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.28, 1.7), trim), px, 7.1, pz, false);
+        add(new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.7, 4), metal), px, 8.15, pz, false).rotation.y =
+          Math.PI / 4;
       }
-      const stairN = 12;
+
+      // —— stepped mid + tall central shaft ——
+      add(new THREE.Mesh(new THREE.BoxGeometry(9.6, 3.0, 9.6), stone), 0, 8.6, 0);
+      add(new THREE.Mesh(new THREE.BoxGeometry(10.0, 0.28, 10.0), trim), 0, 10.15, 0, false);
+      glaze(4.6, 4.6, 7.2, 10.0, 4, 2);
+
+      const shaftH = 10.6;
+      const shaftHalf = 3.05;
+      const shaftBot = 10.2;
+      add(new THREE.Mesh(new THREE.BoxGeometry(shaftHalf * 2, shaftH, shaftHalf * 2), stone), 0, shaftBot + shaftH / 2, 0);
+      // vertical corner ribs
+      for (const [sx, sz] of [
+        [-shaftHalf + 0.12, -shaftHalf + 0.12],
+        [shaftHalf - 0.12, -shaftHalf + 0.12],
+        [-shaftHalf + 0.12, shaftHalf - 0.12],
+        [shaftHalf - 0.12, shaftHalf - 0.12],
+      ] as const) {
+        add(new THREE.Mesh(new THREE.BoxGeometry(0.28, shaftH, 0.28), stoneDeep), sx, shaftBot + shaftH / 2, sz, false);
+      }
+      glaze(shaftHalf, shaftHalf, shaftBot + 0.3, shaftBot + shaftH - 0.2, 3, 7);
+
+      // terrace landing = roof of the tall shaft (climb target)
+      const terraceY = 20.7;
+      add(new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.28, 6.6), stoneLite), 0, terraceY, 0, false);
+      for (const [rx, rz] of [
+        [-3.15, 0],
+        [3.15, 0],
+        [0, -3.15],
+        [0, 3.15],
+      ] as const) {
+        add(
+          new THREE.Mesh(new THREE.BoxGeometry(rx === 0 ? 6.6 : 0.16, 0.72, rz === 0 ? 6.6 : 0.16), trim),
+          rx,
+          terraceY + 0.5,
+          rz,
+          false,
+        );
+      }
+
+      // —— clock / decorative belt above the lookout ——
+      add(new THREE.Mesh(new THREE.BoxGeometry(7.0, 2.9, 7.0), stoneDeep), 0, terraceY + 1.7, 0);
+      add(new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.22, 7.4), trim), 0, terraceY + 0.35, 0, false);
+      add(new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.22, 7.4), trim), 0, terraceY + 3.15, 0, false);
+      const faceR = 0.95;
+      const faceOut = 3.55;
+      const faceY = terraceY + 1.7;
+      for (const [fx, fz, ry] of [
+        [0, faceOut, 0],
+        [0, -faceOut, Math.PI],
+        [faceOut, 0, Math.PI / 2],
+        [-faceOut, 0, -Math.PI / 2],
+      ] as const) {
+        const dial = new THREE.Mesh(new THREE.CircleGeometry(faceR, 18), cream);
+        dial.position.set(fx, faceY, fz);
+        dial.rotation.y = ry;
+        g.add(dial);
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(faceR, 0.055, 6, 20), gold);
+        rim.position.copy(dial.position);
+        rim.rotation.y = ry;
+        g.add(rim);
+        const hub = new THREE.Mesh(new THREE.CircleGeometry(0.09, 10), mat(0x212529));
+        hub.position.set(fx, faceY, fz);
+        hub.rotation.y = ry;
+        hub.position.x += Math.sin(ry) * 0.02;
+        hub.position.z += Math.cos(ry) * 0.02;
+        g.add(hub);
+        const hour = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.48, 0.035), mat(0x212529));
+        hour.position.set(fx, faceY + 0.14, fz);
+        hour.rotation.y = ry;
+        hour.position.x += Math.sin(ry) * 0.04;
+        hour.position.z += Math.cos(ry) * 0.04;
+        g.add(hour);
+      }
+
+      // crown + distinctive needle / spire
+      add(new THREE.Mesh(new THREE.BoxGeometry(4.2, 3.4, 4.2), stone), 0, terraceY + 4.95, 0);
+      glaze(2.0, 2.0, terraceY + 3.4, terraceY + 6.4, 2, 2);
+      add(new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.25, 4.6), trim), 0, terraceY + 6.7, 0, false);
+      add(new THREE.Mesh(new THREE.ConeGeometry(2.15, 2.4, 4), metal), 0, terraceY + 8.0, 0).rotation.y = Math.PI / 4;
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.38, 4.8, 8), metal), 0, terraceY + 11.2, 0, false);
+      add(new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.6, 8), metal), 0, terraceY + 14.0, 0, false);
+      add(new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), gold), 0, terraceY + 14.85, 0, false);
+
+      // visible stair on +Z — short parapets (not full-height walls → no grey “wedge”)
+      const stairN = 14;
       const rise = terraceY / stairN;
-      const run = 0.55;
+      const run = 0.52;
+      const stairZ0 = 9.2;
       const climbSteps: THREE.Vector3[] = [];
       for (let i = 0; i < stairN; i++) {
         const y = (i + 1) * rise;
-        const z = 5.2 + (stairN - 1 - i) * run;
-        const step = new THREE.Mesh(new THREE.BoxGeometry(2.2, rise * 0.92, run * 0.95), mat(0xb0a090));
-        step.position.set(0, y - rise * 0.5, z);
-        g.add(step);
-        // side walls so it reads as a real staircase into the building
-        const sideH = y + 0.3;
-        for (const sx of [-1.25, 1.25]) {
-          const side = new THREE.Mesh(new THREE.BoxGeometry(0.18, sideH, run * 0.95), mat(0x9a8b7a));
-          side.position.set(sx, sideH / 2, z);
-          g.add(side);
+        const z = stairZ0 + (stairN - 1 - i) * run;
+        add(new THREE.Mesh(new THREE.BoxGeometry(2.35, rise * 0.92, run * 0.95), trim), 0, y - rise * 0.5, z);
+        for (const sx of [-1.32, 1.32]) {
+          add(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.55, run * 0.95), stoneDeep), sx, y + 0.2, z, false);
         }
         climbSteps.push(new THREE.Vector3(at.x, y, at.z + z));
       }
+
       const gem = gemMesh(0xb06bff, 1.4);
-      gem.position.set(0, terraceY + 0.9, 0);
+      gem.position.set(0, terraceY + 0.95, 0);
       g.add(gem);
-      const foot = new THREE.Vector3(at.x, 0, at.z + 5.2 + stairN * run + 0.4);
+      const foot = new THREE.Vector3(at.x, 0, at.z + stairZ0 + stairN * run + 0.45);
       const lookout = new THREE.Vector3(at.x, terraceY + 0.2, at.z);
       things.push(
         towerClimb({
@@ -830,7 +1735,7 @@ const BY_CITY: Record<string, Builder> = {
           sayTop: ['No terraço do Palácio!'],
           sayGem: ['Uma joia do ex-líbris! Guarda-a para a Lua!'],
           interactAt: foot,
-          radius: 5,
+          radius: 5.5,
         }),
       );
     }
@@ -1161,79 +2066,643 @@ const BY_CITY: Record<string, Builder> = {
     return things;
   },
 
+  /**
+   * Pequim — muralha (estilo Grande Muralha, original / «muralha»):
+   * serpente longa com altura variável, caminho no cimo, merlões, 2 torres de vigia.
+   * Obstáculos só sob segmentos/torres — não bloqueia a cidade inteira.
+   */
   Pequim(scene, obstacles, rng, ctx) {
-    const at = place(obstacles, rng, 8);
+    // footprint ~40×20 m — long snaking ridge needs room away from venues
+    const at = place(obstacles, rng, 20);
     const g = new THREE.Group();
     g.position.copy(at);
+    g.userData.landmark = 'muralha';
     scene.add(g);
-    // stylised wall walkway (I87)
-    const stone = mat(0xc2a07a);
-    for (let i = 0; i < 8; i++) {
-      const seg = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.2, 1.6), stone);
-      seg.position.set(i * 2.0 - 7, 0.6 + Math.sin(i * 0.6) * 0.4, Math.sin(i * 0.4) * 1.5);
-      g.add(seg);
-      const batt = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.4), stone);
-      batt.position.set(seg.position.x, seg.position.y + 0.85, seg.position.z - 0.5);
-      g.add(batt);
+
+    const stone = mat(0x9a8f7e); // grey-brown — reads as stone from afar
+    const stoneLite = mat(0xb5a894);
+    const stoneDeep = mat(0x7a7164);
+    const roof = mat(0x5c4033);
+    const roofDark = mat(0x3d2b1f);
+
+    const HALF_LEN = 19; // total ~38 m along X — readable snake from afar
+    const Z_AMP = 7.2;
+    const SEGS = 22;
+    const WALL_W = 2.45;
+    const DECK_W = 1.9;
+
+    /** Ridge path: clear S-curve in Z + climb/dip so the silhouette is not a flat bar. */
+    const ridge = (t: number) => {
+      const x = (t - 0.5) * 2 * HALF_LEN;
+      const z = Math.sin(t * Math.PI * 1.85) * Z_AMP + Math.sin(t * Math.PI * 0.7) * 1.6;
+      // Tall enough to read past nearby buildings; climbs mid-ridge then dips
+      const h = 3.35 + Math.sin(t * Math.PI * 1.05) * 1.65 + Math.sin(t * Math.PI * 2.2) * 0.45;
+      return { x, z, h };
+    };
+
+    const pts: { x: number; z: number; h: number }[] = [];
+    for (let i = 0; i <= SEGS; i++) pts.push(ridge(i / SEGS));
+
+    /** Orient a box along the segment (local Z → tangent). */
+    const zAxis = new THREE.Vector3(0, 0, 1);
+    const dir = new THREE.Vector3();
+    const placeSeg = (
+      mesh: THREE.Mesh,
+      x0: number,
+      z0: number,
+      x1: number,
+      z1: number,
+      y: number,
+    ) => {
+      const dx = x1 - x0;
+      const dz = z1 - z0;
+      mesh.position.set((x0 + x1) / 2, y, (z0 + z1) / 2);
+      dir.set(dx, 0, dz).normalize();
+      mesh.quaternion.setFromUnitVectors(zAxis, dir);
+      g.add(mesh);
+    };
+
+    // —— Wall body + walkway deck + merlons along the ridge ——
+    for (let i = 0; i < SEGS; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const len = Math.hypot(b.x - a.x, b.z - a.z) || 0.01;
+      const hBody = (a.h + b.h) * 0.5;
+      const yTop = hBody;
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(WALL_W, hBody, len + 0.08), i % 2 === 0 ? stone : stoneDeep);
+      body.castShadow = true;
+      placeSeg(body, a.x, a.z, b.x, b.z, hBody * 0.5);
+
+      // Walkable-feel deck on top (lighter stone strip) — tilted to follow height change
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(DECK_W, 0.18, len + 0.06), stoneLite);
+      placeSeg(deck, a.x, a.z, b.x, b.z, yTop + 0.09);
+      // Pitch the deck along the ridge slope so climbs read as ramps
+      const slope = Math.atan2(b.h - a.h, len);
+      deck.rotateX(-slope);
+
+      // Merlons (crenellations) on both long sides — gap every other so they read as battlements
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const nx = -dz / len;
+      const nz = dx / len;
+      const mx = (a.x + b.x) / 2;
+      const mz = (a.z + b.z) / 2;
+      if (i % 2 === 0) {
+        for (const side of [-1, 1] as const) {
+          const merlon = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.78, Math.min(0.9, len * 0.55)), stone);
+          merlon.position.set(mx + nx * side * (WALL_W * 0.48), yTop + 0.48, mz + nz * side * (WALL_W * 0.48));
+          merlon.quaternion.setFromUnitVectors(zAxis, dir.set(dx, 0, dz).normalize());
+          g.add(merlon);
+        }
+      }
+      // Visible riser when the ridge steps up (kid-readable climb)
+      if (b.h - a.h > 0.35) {
+        const rise = new THREE.Mesh(new THREE.BoxGeometry(DECK_W * 0.95, b.h - a.h, 0.35), stoneLite);
+        rise.position.set(b.x, a.h + (b.h - a.h) * 0.5, b.z);
+        rise.quaternion.setFromUnitVectors(zAxis, dir.set(dx, 0, dz).normalize());
+        g.add(rise);
+      }
+
+      // Obstacle only under this segment (tight AABB — city stays walkable around the snake)
+      const pad = WALL_W * 0.55;
+      obstacles.push({
+        minX: at.x + Math.min(a.x, b.x) - pad,
+        maxX: at.x + Math.max(a.x, b.x) + pad,
+        minZ: at.z + Math.min(a.z, b.z) - pad,
+        maxZ: at.z + Math.max(a.z, b.z) + pad,
+        height: hBody + 0.9,
+      });
     }
-    const gong = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.15, 20), mat(0xffd43b));
+
+    /** Square watchtower with small pitched roof + top merlons. */
+    const watchTower = (t: number) => {
+      const p = ridge(t);
+      const tw = 3.35;
+      const th = p.h + 2.9;
+      const base = new THREE.Mesh(new THREE.BoxGeometry(tw, th, tw), stoneDeep);
+      base.position.set(p.x, th * 0.5, p.z);
+      base.castShadow = true;
+      g.add(base);
+      // Slight inset belt so the tower reads as a block, not a wall blob
+      const belt = new THREE.Mesh(new THREE.BoxGeometry(tw + 0.25, 0.28, tw + 0.25), stone);
+      belt.position.set(p.x, th - 0.35, p.z);
+      g.add(belt);
+      // Small square eaves + pyramid roof — kid-readable watchtower top
+      const eaves = new THREE.Mesh(new THREE.BoxGeometry(tw + 0.85, 0.16, tw + 0.85), roof);
+      eaves.position.set(p.x, th + 0.2, p.z);
+      g.add(eaves);
+      const pyramid = new THREE.Mesh(new THREE.ConeGeometry(tw * 0.72, 1.25, 4), roofDark);
+      pyramid.position.set(p.x, th + 0.95, p.z);
+      pyramid.rotation.y = Math.PI / 4;
+      pyramid.castShadow = true;
+      g.add(pyramid);
+      const roofY = th + 1.55;
+      // Merlons at tower corners
+      for (const [sx, sz] of [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+      ] as const) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.7, 0.45), stoneLite);
+        m.position.set(p.x + sx * (tw * 0.42), th + 0.35, p.z + sz * (tw * 0.42));
+        g.add(m);
+      }
+      // Narrow arrow-slit windows (dark recesses)
+      for (const [sx, sz] of [
+        [0, 1],
+        [0, -1],
+        [1, 0],
+        [-1, 0],
+      ] as const) {
+        const slit = new THREE.Mesh(new THREE.BoxGeometry(sx === 0 ? 0.35 : 0.12, 0.7, sz === 0 ? 0.35 : 0.12), mat(0x343a40));
+        slit.position.set(p.x + sx * (tw * 0.51), th * 0.55, p.z + sz * (tw * 0.51));
+        g.add(slit);
+      }
+      const half = tw * 0.55;
+      obstacles.push({
+        minX: at.x + p.x - half,
+        maxX: at.x + p.x + half,
+        minZ: at.z + p.z - half,
+        maxZ: at.z + p.z + half,
+        height: th + 1.2,
+      });
+      return { x: p.x, z: p.z, h: th, roofY };
+    };
+
+    const towerA = watchTower(0.22);
+    const towerB = watchTower(0.72);
+
+    // Steps up to the first tower — walkable-path feel (visual climb along the ridge)
+    {
+      const foot = ridge(0.05);
+      const rise = towerA.h * 0.55;
+      const nSteps = 5;
+      for (let i = 0; i < nSteps; i++) {
+        const t = i / nSteps;
+        const step = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.28, 0.85), stoneLite);
+        step.position.set(
+          foot.x + (towerA.x - foot.x) * t,
+          0.14 + rise * t,
+          foot.z + (towerA.z - foot.z) * t + 2.4,
+        );
+        g.add(step);
+      }
+    }
+
+    // Gong on a short frame beside the first tower (keep «O gongo!» interact)
+    const gongFrame = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.6, 0.15), stoneDeep);
+    gongFrame.position.set(towerA.x + 2.6, 1.3, towerA.z + 2.8);
+    g.add(gongFrame);
+    const gongBeam = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.12), stoneDeep);
+    gongBeam.position.set(towerA.x + 2.6, 2.55, towerA.z + 2.8);
+    g.add(gongBeam);
+    const gong = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.65, 0.14, 20), mat(0xffd43b));
     gong.rotation.x = Math.PI / 2;
-    gong.position.set(0, 2.2, 2);
+    gong.position.set(towerA.x + 2.6, 2.05, towerA.z + 2.8);
     g.add(gong);
-    obstacles.push({ minX: at.x - 9, maxX: at.x + 9, minZ: at.z - 3, maxZ: at.z + 3, height: 1.8 });
+
     const gem = gemMesh(0xffe14d, 1.3);
-    gem.position.set(0, 2.8, 0);
+    gem.position.set(towerB.x, towerB.roofY + 1.15, towerB.z);
     g.add(gem);
-    const things = [diamondAt(ctx, `gem:${ctx.city()}:muralha`, new THREE.Vector3(at.x, 0, at.z + 3), gem)];
+
+    landmarkDebug = {
+      spots: {
+        muralha: { x: at.x, z: at.z },
+        main: { x: at.x, z: at.z },
+        towerA: { x: at.x + towerA.x, z: at.z + towerA.z },
+        towerB: { x: at.x + towerB.x, z: at.z + towerB.z },
+      },
+      count: 1,
+    };
+
+    const things: Interactable[] = [
+      diamondAt(ctx, `gem:${ctx.city()}:muralha`, new THREE.Vector3(at.x + towerB.x, 0, at.z + towerB.z + 3), gem),
+    ];
     things.push({
       object: gong,
-      position: new THREE.Vector3(at.x, 0, at.z + 2),
-      radius: 2.5,
+      position: new THREE.Vector3(at.x + towerA.x + 2.6, 0, at.z + towerA.z + 2.8),
+      radius: 2.6,
       interact() {
         tone(120, 0, 1.5, 'sine', 0.12);
         tone(90, 0.2, 1.2, 'sine', 0.08);
         ctx.say(['O gongo!']);
       },
     });
+    things.push({
+      object: g,
+      position: at.clone(),
+      radius: 8,
+      interact() {
+        ctx.say(['A muralha!']);
+      },
+    });
     return things;
   },
 
-  'Rio de Janeiro'(scene, obstacles, rng, ctx) {
-    const at = place(obstacles, rng, 5);
+  /**
+   * Rio — Pão de Açúcar: two rounded granite peaks (Urca + taller Sugarloaf), stations, cable cars,
+   * plaza at the base. Pay 2 coins to ride the teleférico between stations (~6 s).
+   */
+  'Rio de Janeiro'(scene, obstacles, rng, ctx, world) {
+    const HW = 14;
+    const HD = 9;
+    const at = takeSpot(world, obstacles, rng, HW, HD, null, 12);
+    lastPlaceSpot = { x: at.x, z: at.z };
+
     const g = new THREE.Group();
-    g.position.copy(at);
+    g.position.set(at.x, 0, at.z);
+    g.userData.landmark = 'pao';
     scene.add(g);
-    // cable-car peak + street musicians (I88)
-    const rock = mat(0x868e96);
-    const peak = new THREE.Mesh(new THREE.ConeGeometry(3, 6, 8), rock);
-    peak.position.y = 3;
-    g.add(peak);
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.9), mat(0xffe066));
-    cabin.position.set(-4, 4, 0);
-    g.add(cabin);
-    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 8, 6), mat(0x495057));
-    cable.rotation.z = Math.PI / 2;
-    cable.position.set(-2, 5, 0);
-    g.add(cable);
-    for (let i = 0; i < 3; i++) {
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 1.0, 10), mat(0xe03131));
-      m.position.set(-1 + i * 0.9, 0.5, 2.5);
-      g.add(m);
+
+    const granite = mat(0x868e96);
+    const graniteDeep = mat(0x495057);
+    const graniteLite = mat(0xadb5bd);
+    const cream = mat(0xfff3bf);
+    const yellow = mat(0xffd43b);
+    const red = mat(0xe03131);
+    const steel = mat(0x343a40);
+    const glass = mat(0x1c7ed6);
+    const plazaMat = mat(0xe9ecef);
+
+    // —— two granite peaks: smooth loaf mounds (Urca lower + taller Sugarloaf) ——
+    const addLoaf = (x: number, z: number, rx: number, h: number, rz: number, col: THREE.Material) => {
+      // one elongated sphere = rounded granite (no snowman tiers)
+      const body = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 14), col);
+      body.scale.set(rx, h * 0.52, rz);
+      body.position.set(x, h * 0.48, z);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      g.add(body);
+      // wider skirt buried in grass
+      const skirt = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), graniteDeep);
+      skirt.scale.set(rx * 1.22, h * 0.2, rz * 1.15);
+      skirt.position.set(x, h * 0.1, z);
+      skirt.receiveShadow = true;
+      g.add(skirt);
+      // soft rounded top
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), graniteLite);
+      cap.scale.set(rx * 0.55, h * 0.14, rz * 0.5);
+      cap.position.set(x, h * 0.92, z);
+      cap.castShadow = true;
+      g.add(cap);
+    };
+    addLoaf(-5.5, -1.2, 3.8, 7.0, 3.2, granite); // Urca
+    addLoaf(6.5, -0.8, 4.0, 12.2, 3.4, graniteDeep); // Pão de Açúcar
+
+    // light rocky ledges (sparse — silhouette, not clutter)
+    for (const [lx, ly, lz, sx, sy, sz] of [
+      [4.2, 4.8, -2.0, 1.3, 0.9, 1.1],
+      [8.8, 4.2, 0.5, 1.1, 0.8, 1.0],
+      [-3.6, 2.8, -2.4, 1.0, 0.7, 0.9],
+    ] as const) {
+      const knob = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), granite);
+      knob.scale.set(sx, sy, sz);
+      knob.position.set(lx, ly, lz);
+      knob.castShadow = true;
+      g.add(knob);
     }
-    obstacles.push({ minX: at.x - 4, maxX: at.x + 3, minZ: at.z - 3, maxZ: at.z + 3, height: 2 });
+
+    // —— plaza + ground station (approachable) ——
+    const plaza = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.18, 5.5), plazaMat);
+    plaza.position.set(-8.5, 0.09, 4.2);
+    plaza.receiveShadow = true;
+    g.add(plaza);
+    // station booth
+    boxish(g, cream, 3.2, 2.2, 2.4, -9.2, 1.2, 3.6);
+    boxish(g, red, 3.4, 0.25, 2.6, -9.2, 2.4, 3.6);
+    boxish(g, yellow, 1.4, 1.0, 0.08, -9.2, 1.35, 4.82); // ticket window face
+    // pylons at ground station
+    for (const sx of [-1.4, 1.4] as const) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 4.2, 8), steel);
+      pole.position.set(-9.2 + sx, 2.1, 2.2);
+      g.add(pole);
+    }
+    const groundBeam = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.18, 0.18), steel);
+    groundBeam.position.set(-9.2, 4.15, 2.2);
+    g.add(groundBeam);
+
+    // Urca mid station (small platform on lower peak)
+    const urcaY = 5.9;
+    boxish(g, cream, 2.6, 0.22, 2.2, -5.5, urcaY, -1.2);
+    boxish(g, red, 2.8, 0.12, 2.4, -5.5, urcaY + 1.35, -1.2);
+    for (const sx of [-1.0, 1.0] as const) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.4, 6), steel);
+      leg.position.set(-5.5 + sx, urcaY + 0.7, -1.2);
+      g.add(leg);
+    }
+
+    // Sugarloaf summit station + deck
+    const summitY = 11.35;
+    boxish(g, cream, 3.4, 0.25, 2.8, 6.5, summitY, -0.8);
+    boxish(g, red, 3.6, 0.14, 3.0, 6.5, summitY + 1.55, -0.8);
+    for (const sx of [-1.2, 1.2] as const) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 1.6, 6), steel);
+      leg.position.set(6.5 + sx, summitY + 0.85, -0.8);
+      g.add(leg);
+    }
+    // rail around summit deck
+    for (const [rx, rz, sx, sz] of [
+      [6.5, 0.55, 3.2, 0.1],
+      [6.5, -2.15, 3.2, 0.1],
+      [4.95, -0.8, 0.1, 2.6],
+      [8.05, -0.8, 0.1, 2.6],
+    ] as const) {
+      boxish(g, steel, sx, 0.45, sz, rx, summitY + 0.45, rz);
+    }
+
+    // —— cable (two parallel wires, slight sag) from ground → Urca → summit ——
+    const cablePts = [
+      new THREE.Vector3(-9.2, 4.2, 2.2),
+      new THREE.Vector3(-5.5, urcaY + 1.5, -1.2),
+      new THREE.Vector3(6.5, summitY + 1.7, -0.8),
+    ];
+    const addCableRun = (zOff: number) => {
+      for (let i = 0; i < cablePts.length - 1; i++) {
+        const a = cablePts[i].clone();
+        const b = cablePts[i + 1].clone();
+        a.z += zOff;
+        b.z += zOff;
+        const mid = a.clone().add(b).multiplyScalar(0.5);
+        mid.y -= 0.35; // soft sag
+        const segs = [a, mid, b];
+        for (let s = 0; s < segs.length - 1; s++) {
+          const p0 = segs[s];
+          const p1 = segs[s + 1];
+          const len = p0.distanceTo(p1);
+          const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, len, 5), steel);
+          cyl.position.copy(p0).add(p1).multiplyScalar(0.5);
+          cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p1.clone().sub(p0).normalize());
+          g.add(cyl);
+        }
+      }
+    };
+    addCableRun(-0.28);
+    addCableRun(0.28);
+
+    /** Cabin that looks like a bondinho (hang + windows + frame — not a floating yellow box). */
+    const makeCabin = (): THREE.Group => {
+      const c = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.65, 1.2, 1.1), yellow);
+      body.position.y = -0.7;
+      body.castShadow = true;
+      c.add(body);
+      // corner posts
+      for (const sx of [-0.78, 0.78] as const) {
+        for (const sz of [-0.52, 0.52] as const) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.25, 0.08), red);
+          post.position.set(sx, -0.7, sz);
+          c.add(post);
+        }
+      }
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.14, 1.25), red);
+      roof.position.y = -0.02;
+      c.add(roof);
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.1, 1.15), cream);
+      floor.position.y = -1.32;
+      c.add(floor);
+      for (const side of [-1, 1] as const) {
+        const win = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.5, 0.05), glass);
+        win.position.set(side * 0.38, -0.55, 0.56);
+        c.add(win);
+        const winB = win.clone();
+        winB.position.z = -0.56;
+        c.add(winB);
+      }
+      // end windows
+      for (const sx of [-0.84, 0.84] as const) {
+        const end = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.45, 0.5), glass);
+        end.position.set(sx, -0.55, 0);
+        c.add(end);
+      }
+      const hang = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), steel);
+      hang.position.y = 0.35;
+      c.add(hang);
+      const clamp = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.22), steel);
+      clamp.position.y = 0.68;
+      c.add(clamp);
+      return c;
+    };
+
+    // ride path: ground station → summit (Urca is a visual waypoint on the cable)
+    const pathA = new THREE.Vector3(-9.2, 3.55, 2.2); // cabin hang point at ground
+    const pathB = new THREE.Vector3(6.5, summitY + 0.95, -0.8);
+    /** Feet / seat height inside cabin (group origin = hang clamp above the roof). */
+    const CABIN_SEAT = 1.45;
+    const cabinAlong = (u: number, out: THREE.Vector3) => {
+      const t = THREE.MathUtils.clamp(u, 0, 1);
+      // slight arc via Urca mid-height
+      const mid = new THREE.Vector3(-5.5, urcaY + 0.9, -1.2);
+      const omt = 1 - t;
+      out.set(
+        omt * omt * pathA.x + 2 * omt * t * mid.x + t * t * pathB.x,
+        omt * omt * pathA.y + 2 * omt * t * mid.y + t * t * pathB.y,
+        omt * omt * pathA.z + 2 * omt * t * mid.z + t * t * pathB.z,
+      );
+    };
+
+    const cabin = makeCabin();
+    cabin.position.copy(pathA);
+    g.add(cabin);
+    // decorative second cabin parked near Urca (not rideable alone — same line feel)
+    const cabin2 = makeCabin();
+    cabinAlong(0.42, cabin2.position);
+    cabin2.scale.setScalar(0.92);
+    g.add(cabin2);
+
+    // optional street musicians near plaza (sparse)
+    for (let i = 0; i < 2; i++) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 1.05, 10), mat(i === 0 ? 0xe03131 : 0x1971c2));
+      m.position.set(-6.2 + i * 1.1, 0.52, 5.6);
+      g.add(m);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), mat(0xffe0c2));
+      head.position.set(m.position.x, 1.25, m.position.z);
+      g.add(head);
+    }
+
+    // gem on summit deck
     const gem = gemMesh(0xff3b7f, 1.3);
-    gem.position.set(0, 6.5, 0);
+    gem.position.set(6.5, summitY + 0.9, -0.8);
     g.add(gem);
-    const things = [diamondAt(ctx, `gem:${ctx.city()}:pao`, new THREE.Vector3(at.x, 0, at.z + 3), gem)];
-    things.push({
-      object: g,
-      position: new THREE.Vector3(at.x, 0, at.z + 2.5),
-      radius: 3,
-      interact() {
-        [262, 294, 330, 349, 392].forEach((f, i) => tone(f, i * 0.18, 0.2, 'triangle', 0.05));
-        ctx.say(['Samba! Dança com os músicos!']);
-      },
+
+    // collision: rocks + station footprint (plaza front kept open)
+    obstacles.push({
+      minX: at.x - 12,
+      maxX: at.x + 11,
+      minZ: at.z - 5.5,
+      maxZ: at.z + 1.5,
+      height: 4,
     });
+
+    // walkable platforms: ground plaza edge + summit deck
+    const h0 = world.heightAt;
+    world.heightAt = (x, z) => {
+      const lx = x - at.x;
+      const lz = z - at.z;
+      // summit deck
+      if (Math.abs(lx - 6.5) < 1.7 && Math.abs(lz + 0.8) < 1.4) return summitY + 0.2;
+      // Urca platform
+      if (Math.abs(lx + 5.5) < 1.3 && Math.abs(lz + 1.2) < 1.1) return urcaY + 0.15;
+      return h0?.(x, z) ?? 0;
+    };
+
+    const groundW = new THREE.Vector3(at.x - 9.2, 0, at.z + 4.5);
+    const summitW = new THREE.Vector3(at.x + 6.5, summitY + 0.2, at.z - 0.8);
+    const PRICE = 2;
+    const RIDE_DUR = 6.2;
+    let busy = false;
+    let rideT = 0;
+    let fromU = 0; // 0 = ground, 1 = summit
+    let toU = 1;
+    let cabinU = 0;
+    let shakeT = 0;
+    const cabinPos = new THREE.Vector3();
+    const prox = groundW.clone();
+
+    const placeCabin = (u: number) => {
+      cabinAlong(u, cabinPos);
+      cabin.position.copy(cabinPos);
+      // face along travel direction
+      const look = new THREE.Vector3();
+      cabinAlong(Math.min(1, u + 0.02), look);
+      const dx = look.x - cabinPos.x;
+      const dz = look.z - cabinPos.z;
+      if (dx * dx + dz * dz > 1e-6) cabin.rotation.y = Math.atan2(dx, dz);
+    };
+    placeCabin(0);
+
+    const endRide = (atTop: boolean) => {
+      busy = false;
+      rideT = 0;
+      cabinU = atTop ? 1 : 0;
+      placeCabin(cabinU);
+      ctx.walkAnim(0);
+      if (atTop) {
+        ctx.player.set(summitW.x, summitW.y, summitW.z);
+        prox.copy(summitW).setY(0);
+      } else {
+        ctx.player.set(groundW.x, 0, groundW.z);
+        prox.copy(groundW);
+      }
+      ctx.hold(false);
+      ctx.say(atTop ? ['Chegámos ao cimo!'] : ['De volta à estação!']);
+      tone(660, 0, 0.12, 'triangle', 0.05);
+      tone(880, 0.1, 0.14, 'triangle', 0.04);
+    };
+
+    const disposeRide = () => {
+      if (busy) {
+        busy = false;
+        ctx.hold(false);
+        ctx.walkAnim(0);
+        ctx.player.set(groundW.x, 0, groundW.z);
+      }
+    };
+    clearLandmarkRide();
+    landmarkRideDispose = disposeRide;
+
+    landmarkDebug = {
+      spots: {
+        main: { x: at.x, z: at.z },
+        pao: { x: at.x, z: at.z },
+        station: { x: groundW.x, z: groundW.z },
+        summit: { x: summitW.x, z: summitW.z },
+      },
+      count: 1,
+      price: PRICE,
+    };
+
+    const things: Interactable[] = [
+      diamondAt(ctx, `gem:${ctx.city()}:pao`, new THREE.Vector3(summitW.x, 0, summitW.z), gem),
+      {
+        object: g,
+        position: prox,
+        radius: 4.5,
+        requiresClick: true,
+        interact() {
+          if (ctx.isDriving() || ctx.isPaused()) return false;
+          if (busy) return false;
+          // which station is she nearer?
+          const dG = Math.hypot(ctx.player.x - groundW.x, ctx.player.z - groundW.z);
+          const dS = Math.hypot(ctx.player.x - summitW.x, ctx.player.z - summitW.z);
+          const goingUp = dG <= dS;
+          if (ctx.coins() < PRICE) {
+            shakeT = 0.9;
+            tone(150, 0, 0.3, 'sine', 0.1);
+            tone(130, 0.32, 0.4, 'sine', 0.1);
+            ctx.say([`Precisas de ${PRICE} moedas!`]);
+            return false;
+          }
+          ctx.addCoins(-PRICE);
+          tone(1047, 0, 0.08, 'square', 0.045);
+          tone(1568, 0.08, 0.1, 'triangle', 0.05);
+          busy = true;
+          rideT = 0;
+          fromU = goingUp ? 0 : 1;
+          toU = goingUp ? 1 : 0;
+          cabinU = fromU;
+          placeCabin(cabinU);
+          ctx.hold(true);
+          ctx.say(goingUp ? ['Teleférico! Vamos ao cimo!'] : ['Teleférico! Vamos a descer!']);
+          // seat her inside the cabin (hang origin is above the roof)
+          cabinAlong(cabinU, cabinPos);
+          ctx.player.set(at.x + cabinPos.x, cabinPos.y - CABIN_SEAT, at.z + cabinPos.z);
+          return true;
+        },
+        update(dt) {
+          if (shakeT > 0) {
+            shakeT = Math.max(0, shakeT - dt);
+            cabin.rotation.z = Math.sin(shakeT * 28) * 0.12 * (shakeT / 0.9);
+          } else {
+            cabin.rotation.z = 0;
+          }
+          // idle gem spin
+          if (gem.visible) {
+            gem.rotation.y += dt * 1.6;
+            const matl = (gem as THREE.Mesh).material as THREE.MeshStandardMaterial;
+            if (matl?.emissiveIntensity !== undefined) {
+              matl.emissiveIntensity = 0.45 + Math.sin(performance.now() * 0.008) * 0.3;
+            }
+          }
+          // keep interact point at the station she's near / cabin side
+          if (!busy) {
+            const dG = Math.hypot(ctx.player.x - groundW.x, ctx.player.z - groundW.z);
+            const dS = Math.hypot(ctx.player.x - summitW.x, ctx.player.z - summitW.z);
+            if (dS < dG && dS < 8) prox.set(summitW.x, 0, summitW.z);
+            else prox.copy(groundW);
+            // soft park cabin at the nearer end
+            const want = cabinU > 0.5 ? 1 : 0;
+            cabinU = THREE.MathUtils.lerp(cabinU, want, Math.min(1, dt * 2));
+            placeCabin(cabinU);
+            return;
+          }
+          rideT += dt;
+          const k = Math.min(1, rideT / RIDE_DUR);
+          // ease in-out
+          const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+          cabinU = THREE.MathUtils.lerp(fromU, toU, e);
+          placeCabin(cabinU);
+          ctx.player.set(at.x + cabinPos.x, cabinPos.y - CABIN_SEAT, at.z + cabinPos.z);
+          // face travel
+          const ahead = new THREE.Vector3();
+          cabinAlong(Math.min(1, cabinU + (toU > fromU ? 0.03 : -0.03)), ahead);
+          ctx.walkAnim(0, at.x + ahead.x, at.z + ahead.z);
+          if (k >= 1) endRide(toU >= 0.5);
+        },
+      },
+      {
+        object: g,
+        position: new THREE.Vector3(at.x - 6.2, 0, at.z + 5.6),
+        radius: 2.4,
+        interact() {
+          [262, 294, 330, 349, 392].forEach((f, i) => tone(f, i * 0.18, 0.2, 'triangle', 0.05));
+          ctx.say(['Samba! Dança com os músicos!']);
+        },
+      },
+    ];
+    // expose dispose on the ride interactable for city teardown
+    (things[1] as Interactable & { dispose?: () => void }).dispose = disposeRide;
     return things;
   },
 
@@ -1275,34 +2744,26 @@ const BY_CITY: Record<string, Builder> = {
     return things;
   },
 
-  Nuuk(scene, obstacles, rng, ctx, world) {
-    const at = place(obstacles, rng, 5);
-    const g = new THREE.Group();
-    g.position.copy(at);
-    scene.add(g);
-    // sled + dogs
-    const sled = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.3, 0.7), mat(0x8d5a3b));
-    sled.position.y = 0.25;
-    g.add(sled);
-    for (let i = 0; i < 3; i++) {
-      const dog = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), mat(0xf8f9fa));
-      dog.position.set(-1.5 - i * 0.9, 0.35, (i % 2) * 0.4 - 0.2);
-      g.add(dog);
-    }
-    obstacles.push({ minX: at.x - 4, maxX: at.x + 2, minZ: at.z - 1.5, maxZ: at.z + 1.5, height: 0.8 });
-    const gem = gemMesh(0x74c0fc, 1.2);
-    gem.position.set(0, 1.2, 0);
-    g.add(gem);
-    // aurora ribbons (night glow)
-    const aurora = new THREE.Mesh(
-      new THREE.PlaneGeometry(20, 6),
-      new THREE.MeshBasicMaterial({ color: 0x69db7c, transparent: true, opacity: 0.25, side: THREE.DoubleSide }),
-    );
-    aurora.position.set(0, 18, -10);
-    aurora.rotation.x = -0.3;
-    g.add(aurora);
-    void world;
-    return [diamondAt(ctx, `gem:${ctx.city()}:aurora`, at.clone(), gem)];
+  /** No ex-líbris yet — intentional empty (was sled+dogs; removed). */
+  Nuuk() {
+    return [];
+  },
+
+  /** No fake grey obelisk — intentional empty until a real Madrid attraction is built. */
+  Madrid() {
+    return [];
+  },
+  Vilnius() {
+    return [];
+  },
+  Moscovo() {
+    return [];
+  },
+  'Cidade do México'() {
+    return [];
+  },
+  Reiquiavique() {
+    return [];
   },
 };
 
@@ -1367,32 +2828,14 @@ function boxish(g: THREE.Object3D, m: THREE.Material, sx: number, sy: number, sz
   g.add(mesh);
 }
 
-/** Default landmark: an obelisk monument with a diamond, for cities without a custom builder yet. */
-function defaultLandmark(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number, ctx: GameCtx): Interactable[] {
-  const at = place(obstacles, rng, 3);
-  const g = new THREE.Group();
-  g.position.copy(at);
-  scene.add(g);
-  const stone = mat(0xadb5bd);
-  const plinth = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.7, 2.4), stone);
-  plinth.position.y = 0.35;
-  g.add(plinth);
-  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.9, 4.2, 0.9), mat(0xe9ecef));
-  shaft.position.y = 2.8;
-  g.add(shaft);
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.65, 1.1, 4), mat(0xffd43b));
-  tip.position.y = 5.5;
-  tip.rotation.y = Math.PI / 4;
-  g.add(tip);
-  obstacles.push({ minX: at.x - 1.4, maxX: at.x + 1.4, minZ: at.z - 1.4, maxZ: at.z + 1.4 });
-  const gem = gemMesh(undefined, 1.2);
-  gem.position.set(0, 6.3, 0);
-  g.add(gem);
-  return [diamondAt(ctx, `gem:${ctx.city()}:exlibris`, new THREE.Vector3(at.x, 0, at.z + 2), gem)];
-}
-
+/**
+ * No defaultLandmark / grey-obelisk fallback: cities without a BY_CITY builder (or with an empty one)
+ * simply get no ex-líbris and no landmark gem. EUA uses usa.ts; Lua has none.
+ */
 export function createLandmarks(scene: THREE.Scene, obstacles: Obstacle[], seed: number, ctx: GameCtx, world: World): Interactable[] {
+  clearLandmarkRide(); // drop mid-ride hold if city rebuilds
   landmarkDebug = null;
+  lastPlaceSpot = null;
   if (ctx.city() === 'Estados Unidos' || ctx.city() === 'Lua') return []; // USA has usa.ts; Moon has none
   let s = (seed * 61 + 7) >>> 0;
   const rng = () => {
@@ -1400,5 +2843,15 @@ export function createLandmarks(scene: THREE.Scene, obstacles: Obstacle[], seed:
     return s / 0x100000000;
   };
   const build = BY_CITY[ctx.city()];
-  return build ? build(scene, obstacles, rng, ctx, world) : defaultLandmark(scene, obstacles, rng, ctx);
+  const things = build ? build(scene, obstacles, rng, ctx, world) : [];
+  // Ensure ?debug always has a spot for QA (Porto/Varsóvia/Londres already set their own).
+  const placed = readLastPlaceSpot();
+  if (!landmarkDebug && placed) {
+    landmarkDebug = {
+      spots: { main: { x: placed.x, z: placed.z } },
+      count: 1,
+      generic: false,
+    };
+  }
+  return things;
 }

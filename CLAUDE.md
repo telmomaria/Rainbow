@@ -13,7 +13,7 @@ de cidade em cidade. Ver [CONTEXT.md](CONTEXT.md) e [ROADMAP.md](ROADMAP.md).
   passar a ser o último; por confirmar se passa para a Lua). (Ex-líbris, cidades diferentes e área a dobrar ainda por
   fazer — ver ROADMAP.)
 - **Voz:** Web Speech API (`speechSynthesis`, voz `pt-PT`). Fallback a definir se a voz pt-PT faltar no dispositivo.
-- **Persistência:** `localStorage` (progresso, moedas, roupa, morada de início). Sem contas, sem dados pessoais.
+- **Persistência:** `localStorage` (progresso, moedas, roupa, posição). Sem contas, sem dados pessoais. Sem morada de início.
 
 ## Tags — global
 Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in `-SKILLS_GLOBAL/SKILLS/`
@@ -107,19 +107,21 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
 - **Pausa:** 30 s sem tocar em nada → pausa (ecrã com ▶). O mesmo monstro só tira moedas 2 vezes seguidas.
 - **Vozes:** narradora = voz feminina pt-PT (Helia no Windows); monstros = voz masculina pt-PT se existir (Duarte
   no Edge), senão a mesma voz com tom muito grave. O Windows não instala vozes masculinas pt-PT.
-- **Ordem das cidades:** Porto (futuro: morada nas Definições) → Roma → Madrid → Londres →
+- **Ordem das cidades:** Porto → Roma → Madrid → Londres →
   Paris → Varsóvia → Vilnius → Moscovo → Pequim → Tóquio → Rio de Janeiro → Cidade do México → Reiquiavique → Nuuk.
-  (Estas 14 são as que existem no código.)
+  (Estas 14 são as que existem no código.) **Sem morada de início / address settings** (decisão do Telmo: spawn/arranque fica como está).
 - **Final do jogo (decisão do Telmo a 2026-11-15, por construir):** o penúltimo nível é os **Estados Unidos**, com
-  atrações de várias cidades (Estátua da Liberdade, ponte de São Francisco, parque de diversões) e **sem aeroporto**:
-  de **Cabo Canaveral** lança-se um foguetão para a **Lua**, o último nível. Na Lua há pouca coisa: crateras, moedas
-  espalhadas, subidas e descidas, areia, terra, rochas, pedras e **marcianos que tiram moedas**. **O objetivo do jogo é
-  colocar os diamantes (as joias) num local específico; aí o jogo termina.** Por decidir pelo Telmo: se Nuuk fica antes
-  dos EUA, onde fica o palácio ("o Caesars Palace é na Lua"), quantos diamantes são precisos, e os nomes — "Walt Disney
-  World" e "Caesars Palace" são marcas; pela regra das personagens originais, proposta de parque e palácio originais.
+  atrações de várias cidades (Estátua da Liberdade, ponte de São Francisco, parque de diversões, **Hotel das Fontes**)
+  e **sem aeroporto**: de **Cabo Canaveral** lança-se um foguetão para a **Lua**, o último nível. Na Lua há pouca coisa:
+  crateras, moedas espalhadas, subidas e descidas, areia, terra, rochas, pedras e **marcianos que tiram moedas**.
+  **O objetivo do jogo é colocar os diamantes (as joias) num local específico; aí o jogo termina.** Por decidir pelo
+  Telmo: se Nuuk fica antes dos EUA, quantos diamantes são precisos. O hotel-casino de Las Vegas no nível EUA é o
+  **Hotel das Fontes** (lago + fontes dançantes; inspirado nas fontes do Bellagio, IP original — nunca nomes de marca).
 - **Personagens: só originais.** Arquétipos pedidos (princesa, unicórnio, 3 caçadoras-cantoras K-pop,
   extraterrestre fofo, guerreira de ~1500 d.C., jogadora de vólei, bailarina, karateca) com nomes, visual e
   música próprios — **nunca** personagens, nomes ou arte da Disney, de "KPop Demon Hunters" ou outra IP existente.
+- **Marcas / trademarks:** nunca enviar nomes reais de marca no jogo (Disney, Caesars Palace, Bellagio, etc.); usar
+  nomes originais em PT-PT amigáveis para crianças (ex.: Parque Arco-Íris, Hotel das Fontes).
 - **Gato a passear (src/wandercat.ts):** um gato cinzento por cidade anda pelos passeios (nunca na estrada); quando ela chega
   perto, para, olha para ela, mia e dá um saltinho, e depois segue caminho.
 - **Sentada** (baloiço, sofá, cadeiras, autocarro, diversões): as pernas ficam para a frente, do lado da cara.

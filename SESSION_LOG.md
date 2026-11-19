@@ -93,3 +93,17 @@
 - Não verificado: som real (voz mais lenta, volume da chuva) — o browser de teste não tem áudio.
 - Mais tarde, na mesma janela, o Telmo definiu o final: penúltimo nível nos Estados Unidos (Estátua da Liberdade, ponte de São Francisco, Walt Disney World), sem aeroporto, com foguetão em Cabo Canaveral; último nível na Lua (crateras, moedas, subidas e descidas, areia, terra, rochas, pedras, marcianos que tiram moedas); o jogo acaba ao colocar os diamantes num local específico. Registado em CLAUDE.md, ROADMAP (v2.4) e CONTEXT; propostas US1–US9, LUA1–LUA6 e FIM1–FIM4 no canvas, mais três escolhas (posição de Nuuk, onde fica o palácio, quantos diamantes). Sem código. Assinalado: "Walt Disney World" e "Caesars Palace" são marcas; a frase "o Ceasars Pallace é na Lua" não ficou clara.
 - Lição: no patchright, `page.evaluate` corre num mundo isolado; o que um `addInitScript` guarda em `window` não se lê de lá. Passar os dados por `document.documentElement.dataset`. E não reescrever scripts com `Get-Content`/`Set-Content` do PowerShell 5: estraga os acentos.
+
+## 2026-11-17 — #SEP (ex-líbris + salão + folk)
+
+- **Commit em main:** `d10eb65` — serviços cobertos, atrações por cidade, `replacesHair` no salão, folk fracos fora (sapateiro, juiz, contabilista, político, criadora, empregada). Cabeleireira folk mantida.
+- **Decisões do Telmo:** arranque/morada fica; hotel EUA = réplica tipo Bellagio com nome original **Hotel das Fontes** (não Caesars / não Palácio das Luzes); Nuuk antes dos EUA (já no código, 16 níveis).
+- **Working tree por commitar:** polish visual de landmarks + Estátua.
+  - Melhorados: Londres (relógio∥roda ~38 m), Paris (torre de ferro), Pequim (muralha), Roma (Trevi), Varsóvia (Palácio da Cultura), Rio (Pão de Açúcar + teleférico 2 moedas), EUA (Estátua + Hotel das Fontes).
+  - Removidos: obeliscos em Madrid/Vilnius/Moscovo/Cidade do México/Reiquiavique; trenó de Nuuk. Seis cidades sem ex-líbris.
+- **Auditoria 3D:** bem = Clérigos, torii, barbacã, cultura (após polish), ponte/hotel/estátua EUA, torre Paris, Trevi, muralha, Rio. Fraco ainda = mercado/sereia/castelo/Łazienki Varsóvia. Genérico = (removido).
+- **Parque Arco-Íris** = castelo de contos nos EUA (IP original, não Disney).
+- Lições: (1) `takeSpot` com preference fraca (0.6) colapsa distância — usar strength alta + retry; (2) fotos «both-wide» enganam se a câmara empilha objetos — medir hypot no debug; (3) ROADMAP/CONTEXT estavam desatualizados (EUA→Lua já no código).
+- `.tmp/`: dezenas de `qa-*-landmarks/paris/roma/...` png + mjs — debug, gitignored, nada a promover.
+- Passos 3 e 8: N/A (sem LINEAGE).
+- Capacity: alta (muitas ondas de polish visual + subagentes).

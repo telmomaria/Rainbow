@@ -10,7 +10,7 @@ import {
   buildExamBed,
 } from './clinic';
 import type { GameCtx } from './gamectx';
-import { registerWearable, wearableDef } from './items';
+import { SUNGLASSES_KIND, registerWearable, wearableDef } from './items';
 import {
   MASSAGE_COST,
   MASSAGE_DUR,
@@ -162,14 +162,14 @@ function buildBeadNecklace(): THREE.Group {
   return g;
 }
 
-registerWearable('srv-oculos', { name: 'óculos de sol', slot: 'face', build: buildSunglasses });
+registerWearable(SUNGLASSES_KIND, { name: 'óculos de sol', slot: 'face', build: buildSunglasses });
 registerWearable('srv-laco', { name: 'laço', slot: 'head', build: buildBow });
 registerWearable('srv-chapeu', { name: 'chapéu', slot: 'head', build: buildSunHat });
 registerWearable('srv-colar', { name: 'colar', slot: 'neck', build: buildBeadNecklace });
 
 const ACCESSORIES: { id: string; name: string; slot: 'head' | 'face' | 'neck' }[] = [
   { id: 'srv-chapeu', name: 'chapéu', slot: 'head' },
-  { id: 'srv-oculos', name: 'óculos de sol', slot: 'face' },
+  { id: SUNGLASSES_KIND, name: 'óculos de sol', slot: 'face' },
   { id: 'srv-colar', name: 'colar', slot: 'neck' },
   { id: 'srv-laco', name: 'laço', slot: 'head' },
 ];
@@ -388,27 +388,38 @@ export class ServiceTown {
       requiresClick: true,
       interact: () => {
         if (this.fly.busy || this.busy) return false;
+        // cycle accessories; skip one already worn in that slot when another is free.
+        // Sunglasses stay in the bag: do not sell a second pair.
+        const worn = this.ctx.worn();
+        let pickAcc = ACCESSORIES[this.accIdx % ACCESSORIES.length];
+        let pickN = 0;
+        let found = false;
+        for (let n = 0; n < ACCESSORIES.length; n++) {
+          const a = ACCESSORIES[(this.accIdx + n) % ACCESSORIES.length];
+          if (a.id === SUNGLASSES_KIND && this.ctx.owns(SUNGLASSES_KIND)) continue;
+          if (worn[a.slot] !== a.id) {
+            pickAcc = a;
+            pickN = n;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          clerk.head.rotation.y = Math.sin(performance.now() * 0.02) * 0.5;
+          this.ctx.say(['Já tens estes adereços.']);
+          return false;
+        }
         if (this.ctx.coins() < cost) {
           clerk.head.rotation.y = Math.sin(performance.now() * 0.02) * 0.5;
           this.ctx.say([`Precisas de ${cost} moedas.`]);
           tone(196, 0, 0.3, 'sine', 0.13);
           return false;
         }
+        this.accIdx = this.accIdx + pickN + 1;
         this.ctx.addCoins(-cost);
         clerk.head.rotation.x = 0.25;
         for (let i = 0; i < Math.min(cost, 4); i++) {
           this.fly.send(coinMesh(), this.hand(), payTo, 0.4, i * 0.1, () => tone(800, 0, 0.05, 'square', 0.04));
-        }
-        // cycle accessories; skip one already worn in that slot when another is free
-        const worn = this.ctx.worn();
-        let pickAcc = ACCESSORIES[this.accIdx % ACCESSORIES.length];
-        for (let n = 0; n < ACCESSORIES.length; n++) {
-          const a = ACCESSORIES[(this.accIdx + n) % ACCESSORIES.length];
-          if (worn[a.slot] !== a.id) {
-            pickAcc = a;
-            this.accIdx = this.accIdx + n + 1;
-            break;
-          }
         }
         const def = wearableDef(pickAcc.id);
         const preview = def ? def.build() : new THREE.Group();

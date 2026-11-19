@@ -15,3 +15,6 @@ movimento, sem UI indicadora.
 
 Linhagem: não existe `goat_registry.md` no setup; o BOOK-map ("A Lacuna da Percepção") é estático/fechado — o nascimento do
 Rainbow fica registado aqui e em `docs/diary/` até haver um 2.º volume. Ver [[project-rainbow-stack]].
+
+Decisões 2026-11-15/17: mundo gerado (sem OSM); final Nuuk → EUA → Lua (altar + joias); arranque/morada cancelada;
+hotel EUA = **Hotel das Fontes** (inspirado Bellagio, sem marca); Parque Arco-Íris = castelo de contos (não Disney).
