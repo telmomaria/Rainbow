@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { flagTexture } from './flags';
 import { audioContext, tone } from './audio';
 import { feel } from './bus';
 import type { GameCtx } from './gamectx';
@@ -55,7 +56,7 @@ export function houseColors(city: string): HouseColors {
  * Layout tipo Portugal: campo esquerdo (wall) + direito (roof) + círculo (trim) no meio —
  * legível para crianças (silhueta clara, cores certas).
  */
-export function buildCountryFlag(colors: HouseColors): THREE.Group {
+export function buildCountryFlag(colors: HouseColors, city?: string): THREE.Group {
   const g = new THREE.Group();
   const poleH = 8.2;
   const pole = new THREE.Mesh(
@@ -75,6 +76,20 @@ export function buildCountryFlag(colors: HouseColors): THREE.Group {
   cloth.position.set(0.08, poleH - 0.15, 0);
   const fw = 2.6;
   const fh = 1.65;
+  // the real flag of the country (flags.ts); the 3-colour block below is only a fallback for unknown places
+  const tex = city ? flagTexture(city) : null;
+  if (tex) {
+    const cloth3 = new THREE.Mesh(
+      new THREE.PlaneGeometry(fw, fw / 1.5),
+      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, side: THREE.DoubleSide }),
+    );
+    cloth3.position.set(fw / 2, -fw / 3, 0);
+    cloth3.castShadow = true;
+    cloth.add(cloth3);
+    g.add(cloth);
+    g.userData.flagCloth = cloth;
+    return g;
+  }
   const leftW = fw * 0.4;
   const rightW = fw * 0.6;
   const left = new THREE.Mesh(

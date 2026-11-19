@@ -15,9 +15,11 @@ export type LifeEvent =
   | 'groom' // hairdresser, manicure…
   | 'shop' // bought something
   | 'meal' // lunch / dinner / breakfast
-  | 'massage'
+  | 'massage' // lay down on the massage table (mood, once)
+  | 'massageTick' // every few seconds while she stays on the massage table (energy, one step)
   | 'doctor'
-  | 'spa'
+  | 'spa' // first time in the SPA's hot water on a visit (mood, once)
+  | 'spaTick' // every few seconds while she sits in the SPA's hot water (energy, one step)
   | 'hospital' // left the hospital
   | 'rescue' // saved the kitten
   | 'capsule'; // space-food capsule from her spaceship (the only food on the Moon)

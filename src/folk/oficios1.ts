@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { tone } from '../audio';
 import { feel } from '../bus';
 import { HeartCheck, attachStethoscope, buildClinicCabin, buildExamBed } from '../clinic';
-import { MASSAGE_DUR, buildMassageCabin, buildMassageTable } from '../massage';
+import { MASSEUSE_SPOT, MassageSession, buildMassageCabin, buildMassageTable, kneadPose, restPose } from '../massage';
 import { giftable, greetSpot, personClick } from './common';
 import { registerFolk } from './folk';
 import { Puppet, Seq, Sparkles, apron, box, chefHat, clickSpot, cyl, mat } from './kit';
@@ -229,7 +229,7 @@ registerFolk({
   },
 });
 
-/** I18 — Massagista: covered SPA cabin; she lies face-down; masseuse kneads her back (~10 s). */
+/** I18 — Massagista: covered SPA cabin; she lies on the table as long as she wants while the masseuse kneads. */
 registerFolk({
   id: 'massagista',
   ref: 'I18',
@@ -248,46 +248,51 @@ registerFolk({
     const mx = 1.4;
     const mz = -3.2;
     const masseuse = new Puppet(ctx, { shirt: 0x69db7c, pants: 0xffffff, hair: 0x5c3d2e, dress: true }, mx, mz);
-    const seq = new Seq();
-    let busy = false;
-    let t = 0;
     const TABLE_Y = table.ly;
-    const endMassage = (): void => {
+    const onTable = ctx.at(table.lx, table.lz);
+    const clearPose = (): void => {
       const p = ctx.player;
       p.lyingY = null;
       p.prone = false;
       p.airborne = false;
       p.root.rotation.x = 0;
       p.root.rotation.z = 0;
-      const stand = ctx.at(0, 1.2);
-      p.position.set(stand.x, 0, stand.z);
-      p.heading = ctx.heading(Math.PI);
+      p.root.position.y = 0;
       masseuse.folk.group.position.set(mx, 0, mz);
       masseuse.folk.group.rotation.y = Math.PI;
-      feel('massage');
+      masseuse.stop();
+      restPose(masseuse.folk);
+    };
+    // any key / tap gets her up (the session calls this on the next frame)
+    const session = new MassageSession(() => {
+      const p = ctx.player;
+      const still = Math.hypot(p.position.x - onTable.x, p.position.z - onTable.z) < 1.5;
+      clearPose();
+      if (still) {
+        const stand = ctx.at(0, 1.2);
+        p.position.set(stand.x, 0, stand.z);
+        p.heading = ctx.heading(Math.PI);
+      }
       ctx.say(['Que bem!']);
       [392, 523, 659].forEach((f, i) => tone(f, i * 0.1, 0.18, 'sine', 0.05));
       ctx.game.hold(false);
-      busy = false;
       if (ctx.ready('stretch')) ctx.pay(1, ctx.at(mx, mz, 1));
-    };
+    });
     const startMassage = (): boolean => {
-      if (busy || !ctx.free()) return false;
-      busy = true;
-      t = 0;
+      if (!session.ready || !ctx.free()) return false;
       ctx.game.hold(true);
       const p = ctx.player;
-      const onTable = ctx.at(table.lx, table.lz);
       p.position.x = onTable.x;
       p.position.z = onTable.z;
       p.heading = ctx.heading(table.face);
       p.applyProneLie(TABLE_Y);
-      masseuse.folk.group.position.set(-0.95, 0, -2.35);
-      masseuse.folk.group.rotation.y = Math.PI / 2;
-      masseuse.work('massage', MASSAGE_DUR + 0.4);
-      ctx.say([ctx.greeting(), 'Deita-te — massagem nas costas!']);
+      // at the head end of the table, facing the door: her smiling face toward the camera
+      masseuse.folk.group.position.set(MASSEUSE_SPOT.x, 0, MASSEUSE_SPOT.z);
+      masseuse.face(MASSEUSE_SPOT.face);
+      masseuse.folk.group.rotation.y = MASSEUSE_SPOT.face;
+      session.start(); // mood +1 now; energy +1 every few seconds while she stays
+      ctx.say([ctx.greeting(), 'Deita-te e descansa!']);
       tone(330, 0, 0.15, 'sine', 0.04);
-      seq.after(MASSAGE_DUR, endMassage);
       return true;
     };
     return {
@@ -300,36 +305,24 @@ registerFolk({
       people: [giftable(masseuse, mx, mz, ctx)],
       update(dt) {
         masseuse.update(dt);
-        seq.update(dt);
-        if (!busy) return;
-        t += dt;
-        const onTable = ctx.at(table.lx, table.lz);
+        if (!session.update(dt)) return;
         const p = ctx.player;
         p.position.x = onTable.x;
         p.position.z = onTable.z;
         p.applyProneLie(TABLE_Y);
-        // reinforce kneading — lean in, hands press the back (not arms in the air)
-        const ph = t * 5.2;
-        const pump = Math.abs(Math.sin(ph));
-        const f = masseuse.folk;
-        f.armR.rotation.x = -1.05 - pump * 0.4;
-        f.armL.rotation.x = -1.05 - Math.abs(Math.sin(ph + 1.05)) * 0.4;
-        f.armR.rotation.z = 0.55 + Math.sin(ph * 0.7) * 0.15;
-        f.armL.rotation.z = -0.55 - Math.sin(ph * 0.7 + 0.5) * 0.15;
-        f.body.rotation.x = -0.45 - pump * 0.1;
+        // kneading at the head end (after the puppet's own pose, so this wins)
+        masseuse.folk.group.position.set(MASSEUSE_SPOT.x, 0, MASSEUSE_SPOT.z);
+        masseuse.folk.group.rotation.y = MASSEUSE_SPOT.face;
+        kneadPose(masseuse.folk, session.t);
       },
       dispose() {
-        if (busy) {
-          ctx.player.lyingY = null;
-          ctx.player.prone = false;
-          ctx.player.airborne = false;
-          ctx.player.root.rotation.x = 0;
-          ctx.player.root.rotation.z = 0;
+        if (session.active) {
+          session.stop();
+          clearPose();
           ctx.game.hold(false);
-          busy = false;
         }
       },
-      debug: () => ({ busy, t: +t.toFixed(2) }),
+      debug: () => ({ busy: session.active, t: +session.t.toFixed(2), ticks: session.ticks }),
     };
   },
 });

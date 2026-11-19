@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {
+  buildRobe,
   buildShopOutfit,
   buildSwimsuit,
   characterById,
@@ -45,6 +46,8 @@ export class Character {
   sitting = false;
   /** Standing on a kick scooter: hands on the bars (main.ts places her on the deck). */
   scooterRiding = false;
+  /** Limbs are still in the scooter pose: put them back on the first normal frame after getting off. */
+  private scooterPosed = false;
   private swimPhase = 0;
 
   constructor(id: string) {
@@ -66,9 +69,18 @@ export class Character {
     this.rebuild();
   }
 
+  /** SPA bathrobe on / off (spa.ts). The swimsuit wins while both are set (in the hot water). */
+  robe = false;
+  setRobe(on: boolean): void {
+    if (on === this.robe) return;
+    this.robe = on;
+    this.rebuild();
+  }
+
   private rebuild(): void {
     this.root.remove(this.model.model);
     if (this.swimwear) this.model = buildSwimsuit(this.id);
+    else if (this.robe) this.model = buildRobe(this.id);
     else {
       const bodyKind = this.wearing.body;
       this.model =
@@ -99,6 +111,10 @@ export class Character {
     this.bodyOutfit = nextBody;
     if (bodyChanged && !this.swimwear) this.rebuild();
     else this.applyWear();
+  }
+  /** What is on her right now (slot → kind), including a shop try-on that is not saved. */
+  wornNow(): Record<string, string> {
+    return { ...this.wearing };
   }
   private applyWear(): void {
     for (const o of this.wornObjs) o.removeFromParent();
@@ -314,6 +330,7 @@ export class Character {
       return;
     }
     if (this.scooterRiding) {
+      this.scooterPosed = true;
       this.root.rotation.order = 'YXZ';
       this.root.rotation.x = 0.12; // slight lean over the stem
       this.root.rotation.z = 0;
@@ -322,6 +339,12 @@ export class Character {
       poseScooter(this.model.arms ?? [], legs, speed);
       body.position.y = this.bodyBaseY;
       return;
+    }
+    if (this.scooterPosed) {
+      // just got off the scooter: arms down again, legs straight (main.ts already levelled the body)
+      this.scooterPosed = false;
+      resetLimbs(this.model.arms ?? [], legs);
+      for (const l of legs) l.pivot.rotation.x = 0;
     }
     if (this.lyingY !== null) {
       this.root.rotation.order = 'YXZ';
@@ -370,9 +393,10 @@ function poseScooter(arms: THREE.Object3D[], legs: CharacterModel['legs'], speed
   arms.forEach((a, i) => {
     const z0 = (a.userData.z0 ??= a.rotation.z) as number;
     const side = i === 0 ? -1 : 1;
-    // rest z-spread, then reach hard forward (−X) and a little in toward the bar
+    // rest z-spread, then reach forward to the handlebar. Arms hang along −Y and she faces −Z: a POSITIVE turn
+    // about X swings them forward (same as the legs when sitting). It was −1.35 (arms behind her) until 2026-11-19.
     a.rotation.set(0, 0, z0);
-    a.rotateX(-1.35);
+    a.rotateX(1.35);
     a.rotateY(side * 0.2);
     a.rotateZ(side * -0.15);
   });

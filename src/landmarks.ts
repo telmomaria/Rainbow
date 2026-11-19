@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { flagTexture } from './flags';
 import { AIRPORT_ZONE } from './airport';
 import { tone } from './audio';
 import { FIREWORK_COLORS, Fireworks } from './fireworks';
@@ -1951,10 +1952,8 @@ const BY_CITY: Record<string, Builder> = {
         pole.position.set(tx, 11.7, tz);
         g.add(pole);
         const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.7), new THREE.MeshStandardMaterial({
-          color: 0xffffff,
+          map: flagTexture('Varsóvia'), // Polish flag: white over red
           side: THREE.DoubleSide,
-          emissive: 0xdc143c,
-          emissiveIntensity: 0.25,
         }));
         flag.position.set(tx + 0.55, 11.9, tz);
         flag.userData.baseX = tx + 0.55;
@@ -2000,7 +1999,7 @@ const BY_CITY: Record<string, Builder> = {
       g.add(tipPole);
       const tipFlag = new THREE.Mesh(
         new THREE.PlaneGeometry(1.4, 0.85),
-        new THREE.MeshStandardMaterial({ color: 0xdc143c, side: THREE.DoubleSide, emissive: 0xffffff, emissiveIntensity: 0.15 }),
+        new THREE.MeshStandardMaterial({ map: flagTexture('Varsóvia'), side: THREE.DoubleSide }), // Polish flag
       );
       tipFlag.position.set(tx + 0.7, balconyY + 4.8, tz);
       g.add(tipFlag);

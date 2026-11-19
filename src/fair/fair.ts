@@ -4,6 +4,7 @@ import type { GameCtx } from '../gamectx';
 import type { Interactable, Obstacle } from '../world';
 import { ball, box, cyl, findPlot, mat, toWorld, worldBox, type Plot } from '../venue';
 import { FAIR_ORDER, type AttractionId, type FairAttraction, type FairBuilder, type FairCtx } from './types';
+import { FairVisitors, type VisitSpot } from './visitors';
 
 /**
  * Feira popular: a big open fairground in every city, set back from a street (free entry through a lit arch).
@@ -11,38 +12,57 @@ import { FAIR_ORDER, type AttractionId, type FairAttraction, type FairBuilder, t
  * so the layout grows city by city. Builders register themselves (rides.ts, games.ts, stalls.ts).
  *
  * Local frame (venue.ts convention): entrance at z = 0 facing the road (+Z), grounds x ∈ [-HW, HW], z ∈ [BACK, 0].
- * Main path x ∈ [-2, 2] from the arch to the back; cross path z ∈ [-17, -15].
+ * Paths (kept clear): main path x ∈ [-2, 2] from the arch to the back; cross path z ∈ [-25, -23]; side lanes
+ * x ≈ ±SIDE_LANE_X between the stalls and the big front rides; back lane z ≈ BACK_LANE_Z in front of the two
+ * biggest rides. Every attraction keeps ≥ 3 m of free ground around its footprint (Telmo, 2026-11-19).
  */
 
-const HW = 22.5;
-const BACK = -40;
+export const HW = 28;
+export const BACK = -51;
+export const CROSS_Z = -24;
+export const BACK_LANE_Z = -34.5;
+export const SIDE_LANE_X = 9.1;
 
 const builders = new Map<string, FairBuilder>();
 export function registerAttraction(id: AttractionId, b: FairBuilder): void {
   builders.set(id, b);
 }
 
+/**
+ * How visitors reach an attraction's front: straight off the main path ('main'), via the cross path and a side
+ * lane ('side'), along the cross path ('cross') or along the back lane ('back').
+ */
+export type Access = 'main' | 'side' | 'cross' | 'back';
+export interface Slot {
+  x: number;
+  z: number;
+  rot: number;
+  hw: number;
+  hd: number;
+  access: Access;
+}
+
 /** Slot of each attraction: centre (fair-local), rotation (local +Z of the slot → points at the path), half sizes. */
-const SLOTS: Record<AttractionId, { x: number; z: number; rot: number; hw: number; hd: number }> = {
-  // stalls along the main path (left side faces +x, right side faces -x)
-  pipocas: { x: -4.6, z: -3.5, rot: Math.PI / 2, hw: 1.6, hd: 1.4 },
-  cachorros: { x: 4.6, z: -3.5, rot: -Math.PI / 2, hw: 1.6, hd: 1.4 },
-  pinturas: { x: -4.6, z: -7.5, rot: Math.PI / 2, hw: 1.6, hd: 1.4 },
-  bijuteria: { x: 4.6, z: -7.5, rot: -Math.PI / 2, hw: 1.6, hd: 1.4 },
-  artesanato: { x: -4.6, z: -11.5, rot: Math.PI / 2, hw: 1.6, hd: 1.4 },
-  roupa: { x: 4.6, z: -11.5, rot: -Math.PI / 2, hw: 1.6, hd: 1.4 },
-  // big rides in the front corners (facing the main path)
-  choque: { x: -14.5, z: -7.5, rot: Math.PI / 2, hw: 6.3, hd: 6.3 },
-  carrossel: { x: 14.5, z: -7.5, rot: -Math.PI / 2, hw: 6.3, hd: 6.3 },
-  // games in the middle band, facing the cross path (+z)
-  bolas: { x: -7.2, z: -21.5, rot: 0, hw: 2.9, hd: 3.3 },
-  trampolim: { x: 7.2, z: -21.5, rot: 0, hw: 2.9, hd: 3.3 },
-  baloes: { x: -13.4, z: -21.5, rot: 0, hw: 2.9, hd: 3.3 },
-  arco: { x: 13.4, z: -21.5, rot: 0, hw: 2.9, hd: 3.3 },
-  insuflavel: { x: -19.4, z: -21.5, rot: 0, hw: 2.7, hd: 3.3 },
-  // the two biggest rides at the back, facing the middle (+z)
-  montanha: { x: -12, z: -33, rot: 0, hw: 9.6, hd: 6.2 },
-  river: { x: 12, z: -33, rot: 0, hw: 9.6, hd: 6.2 },
+export const SLOTS: Record<AttractionId, Slot> = {
+  // stalls along the main path (left side faces +x, right side faces -x), 3.3 m apart
+  pipocas: { x: -5.6, z: -5, rot: Math.PI / 2, hw: 1.6, hd: 1.4, access: 'main' },
+  cachorros: { x: 5.6, z: -5, rot: -Math.PI / 2, hw: 1.6, hd: 1.4, access: 'main' },
+  pinturas: { x: -5.6, z: -11.5, rot: Math.PI / 2, hw: 1.6, hd: 1.4, access: 'main' },
+  bijuteria: { x: 5.6, z: -11.5, rot: -Math.PI / 2, hw: 1.6, hd: 1.4, access: 'main' },
+  artesanato: { x: -5.6, z: -18, rot: Math.PI / 2, hw: 1.6, hd: 1.4, access: 'main' },
+  roupa: { x: 5.6, z: -18, rot: -Math.PI / 2, hw: 1.6, hd: 1.4, access: 'main' },
+  // big rides in the front corners (fronts face the side lanes), ≥ 4 m from the fence and the stalls
+  choque: { x: -17.5, z: -10.5, rot: Math.PI / 2, hw: 6.3, hd: 6.3, access: 'side' },
+  carrossel: { x: 17.5, z: -10.5, rot: -Math.PI / 2, hw: 6.3, hd: 6.3, access: 'side' },
+  // games in the middle band, facing the cross path (+z), ≥ 3 m apart
+  bolas: { x: -4.9, z: -29.5, rot: 0, hw: 2.9, hd: 3.3, access: 'cross' },
+  trampolim: { x: 4.9, z: -29.5, rot: 0, hw: 2.9, hd: 3.3, access: 'cross' },
+  baloes: { x: -12.5, z: -29.5, rot: 0, hw: 1.6, hd: 2.0, access: 'cross' }, // a small cart
+  arco: { x: 13.7, z: -29.5, rot: 0, hw: 2.9, hd: 3.3, access: 'cross' },
+  insuflavel: { x: -21, z: -29.5, rot: 0, hw: 2.7, hd: 3.3, access: 'cross' },
+  // the two biggest rides at the back, facing the back lane (+z)
+  montanha: { x: -13, z: -41.5, rot: 0, hw: 9.6, hd: 6.2, access: 'back' },
+  river: { x: 13, z: -41.5, rot: 0, hw: 9.6, hd: 6.2, access: 'back' },
 };
 
 /** How many attractions a city has (level 0 = first city → 5). */
@@ -63,6 +83,8 @@ export class Fair {
   private bulbs: THREE.Mesh[] = [];
   private inside = false;
   private musicT = 0;
+  private visitors: FairVisitors | null = null;
+  private flags: THREE.Mesh[] = [];
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -91,6 +113,14 @@ export class Fair {
     this.interior = worldBox(plot, -HW, HW, BACK, 0.3);
     this.buildGrounds();
     for (const id of this.ids) this.buildAttraction(id, rng);
+    this.visitors = new FairVisitors(
+      this.root,
+      (x, z) => toWorld(plot.x, plot.z, plot.rot, x, z),
+      obstacles,
+      this.attractions.map(({ id }) => visitSpot(SLOTS[id])),
+      HW,
+      rng,
+    );
   }
 
   /* ------------------------------------------------------------ grounds */
@@ -103,7 +133,14 @@ export class Fair {
     ground.position.set(0, 0.02, BACK / 2);
     ground.receiveShadow = true;
     g.add(ground);
-    for (const [x0, x1, z0, z1] of [[-2, 2, BACK, 0], [-HW, HW, -17, -15]] as const) {
+    const paths: [number, number, number, number][] = [
+      [-2, 2, BACK, 0], // main path
+      [-HW, HW, CROSS_Z - 1, CROSS_Z + 1], // cross path
+      [-HW + 3, HW - 3, BACK_LANE_Z - 1, BACK_LANE_Z + 1], // back lane
+      [-SIDE_LANE_X - 1, -SIDE_LANE_X + 1, CROSS_Z + 1, -2], // side lanes to the big front rides
+      [SIDE_LANE_X - 1, SIDE_LANE_X + 1, CROSS_Z + 1, -2],
+    ];
+    for (const [x0, x1, z0, z1] of paths) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), mat(0xd9c39a));
       p.rotation.x = -Math.PI / 2;
       p.position.set((x0 + x1) / 2, 0.03, (z0 + z1) / 2);
@@ -144,17 +181,20 @@ export class Fair {
       const b = ball(g, mat(0xfff3bf, 0.9), 0.09, Math.cos(a) * 3.2, 4.6 + Math.sin(a) * 3.2, 0.3);
       this.bulbs.push(b);
     }
-    // bunting strings over the main path
-    for (let z = -4; z > BACK + 2; z -= 6) {
-      for (let i = 0; i < 9; i++) {
-        const f = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.35, 3), mat([0xff6b6b, 0xfcc419, 0x51cf66, 0x4dabf7, 0xcc5de8][i % 5]));
-        f.position.set(-2 + i * 0.5, 3.6 - Math.sin((i / 8) * Math.PI) * 0.4, z);
-        f.rotation.x = Math.PI;
-        g.add(f);
-      }
+    // only four flag masts, in the corners against the fence (never in the paths — Telmo, 2026-11-19)
+    const flagGeo = new THREE.PlaneGeometry(1.1, 0.7);
+    const flagColors = [0xff6b6b, 0x4dabf7, 0xfcc419, 0x51cf66];
+    let fi = 0;
+    for (const z of [-0.7, BACK + 0.7]) {
       for (const s of [-1, 1]) {
-        cyl(g, mat(0xadb5bd), 0.05, 3.8, s * 2.3, 1.9, z);
-        this.obstacles.push(worldBox(plot, s * 2.3 - 0.1, s * 2.3 + 0.1, z - 0.1, z + 0.1, 3.8));
+        const x = s * (HW - 0.7);
+        cyl(g, mat(0xadb5bd), 0.06, 5.5, x, 2.75, z);
+        ball(g, mat(0xfcc419, 0.3), 0.12, x, 5.55, z);
+        const flag = new THREE.Mesh(flagGeo, new THREE.MeshStandardMaterial({ color: flagColors[fi++], side: THREE.DoubleSide, roughness: 0.7 }));
+        flag.position.set(x - s * 0.6, 5.0, z);
+        g.add(flag);
+        this.flags.push(flag);
+        this.obstacles.push(worldBox(plot, x - 0.12, x + 0.12, z - 0.12, z + 0.12, 5.5));
       }
     }
   }
@@ -307,12 +347,16 @@ export class Fair {
       }
     }
     for (const { a } of this.attractions) a.update(dt);
+    this.visitors?.update(dt, this.time, p, this.ctx.heading());
+    for (let i = 0; i < this.flags.length; i++) this.flags[i].rotation.y = Math.sin(this.time * 2.2 + i) * 0.35;
   }
 
   dispose(): void {
     for (const { a } of this.attractions) a.dispose?.();
     for (const c of this.flying) this.scene.remove(c.mesh);
     this.flying = [];
+    this.visitors?.dispose();
+    this.visitors = null;
   }
 
   debug(): Record<string, unknown> | null {
@@ -324,7 +368,8 @@ export class Fair {
     };
     return {
       entrance: at(0, 2.5),
-      center: at(0, -16),
+      center: at(0, BACK / 2),
+      visitors: this.visitors?.debug() ?? null,
       rot: +this.plot.rot.toFixed(2),
       inside: this.inside,
       ids: this.ids,
@@ -332,4 +377,26 @@ export class Fair {
       slots: Object.fromEntries(this.ids.map((id) => [id, at(SLOTS[id].x, SLOTS[id].z)])),
     };
   }
+}
+
+/** Where fair visitors stand to watch an attraction, and how they get there from the main path. */
+function visitSpot(s: Slot): VisitSpot {
+  const c = Math.cos(s.rot);
+  const n = Math.sin(s.rot);
+  // slot-local (lx, lz) → fair-local
+  const fx = (lx: number, lz: number) => s.x + lx * c + lz * n;
+  const fz = (lx: number, lz: number) => s.z - lx * n + lz * c;
+  const front = s.hd + (s.access === 'main' ? 1.3 : s.hd < 2.5 ? 1.5 : 1.0);
+  const spread = s.access === 'main' ? 1.0 : s.access === 'side' ? 4 : s.access === 'back' ? 7 : Math.min(2.2, s.hw - 0.4);
+  const x = fx(0, front);
+  const z = fz(0, front);
+  const via: [number, number][] =
+    s.access === 'main'
+      ? [[0, z]]
+      : s.access === 'side'
+        ? [[0, CROSS_Z], [Math.sign(s.x) * SIDE_LANE_X, CROSS_Z], [Math.sign(s.x) * SIDE_LANE_X, z]]
+        : s.access === 'cross'
+          ? [[0, CROSS_Z], [x, CROSS_Z]]
+          : [[0, BACK_LANE_Z], [x, BACK_LANE_Z]];
+  return { via, x, z, jx: spread * c, jz: -spread * n, lookX: s.x, lookZ: s.z };
 }

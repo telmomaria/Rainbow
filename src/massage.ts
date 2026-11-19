@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { box, cyl, mat } from './venue';
+import { StaySession } from './stay';
+import { box, cyl, mat, type Folk } from './venue';
 
 /**
  * Small covered SPA / massage cabin — walls + pitched roof + door, warm towels and lamp.
@@ -9,8 +10,14 @@ import { box, cyl, mat } from './venue';
  */
 
 export const MASSAGE_COST = 6;
-/** How long she stays on the table while the masseuse kneads (seconds). */
-export const MASSAGE_DUR = 10;
+/** While she lies on the table: one more energy level every this many seconds (until full). */
+export const MASSAGE_TICK_S = 8;
+/**
+ * Where the masseuse stands (cabin-local, table built at (0, -2.15)): at the HEAD end of the table, facing the door
+ * (+Z), so her face (eyes + smile) looks toward the camera at the door and her long hair hangs behind her.
+ * (She used to stand at the side turned toward the wall: only the back of her head and hair could be seen.)
+ */
+export const MASSEUSE_SPOT = { x: 0, z: -3.5, face: Math.PI };
 
 /** Cream/peach SPA cabin with a door, warm roof, hanging lamp and towel rack. */
 export function buildMassageCabin(g: THREE.Group, hw: number, depth: number): void {
@@ -50,21 +57,22 @@ export function buildMassageCabin(g: THREE.Group, hw: number, depth: number): vo
   const rR = box(g, roof, hw + 0.35, 0.12, depth + 0.5, hw / 2, 3.0, -depth / 2);
   rR.rotation.z = -0.16;
   box(g, mat(0xffe8d6), 0.32, 0.32, depth + 0.55, 0, 3.18, -depth / 2);
-  // warm hanging lamp (emissive — kids read “cozinha / SPA quentinho”)
-  cyl(g, mat(0x868e96), 0.03, 0.45, 0, 2.7, -depth / 2);
+  // warm hanging lamp (emissive — kids read “SPA quentinho”), off to the left so it never hides the masseuse's face
+  const lampX = -1.25;
+  cyl(g, mat(0x868e96), 0.03, 0.45, lampX, 2.7, -depth / 2);
   const lampMat = new THREE.MeshStandardMaterial({
     color: 0xffe066,
     emissive: 0xff922b,
     emissiveIntensity: 1.35,
     roughness: 0.35,
   });
-  box(g, lampMat, 0.62, 0.2, 0.62, 0, 2.45, -depth / 2);
+  box(g, lampMat, 0.62, 0.2, 0.62, lampX, 2.45, -depth / 2);
   const glow = new THREE.PointLight(0xffb067, 1.6, 9, 1.6);
-  glow.position.set(0, 2.2, -depth / 2 + 0.2);
+  glow.position.set(lampX, 2.2, -depth / 2 + 0.2);
   g.add(glow);
-  // second soft lamp near the table so the marquesa reads warm indoors
-  const glow2 = new THREE.PointLight(0xffc078, 0.9, 6, 2);
-  glow2.position.set(0, 2.1, -depth * 0.55);
+  // second soft light toward the door side: the table and the masseuse's face read warm, not burnt orange
+  const glow2 = new THREE.PointLight(0xffc078, 0.7, 6, 2);
+  glow2.position.set(0.6, 2.1, -1.0);
   g.add(glow2);
   // side windows (frosted warm glass)
   for (const s of [-1, 1]) {
@@ -117,4 +125,40 @@ export function buildMassageTable(
   // On her back: head tips toward local +Z of heading → face=π so head lies at −Z (back wall).
   // Feet toward the door (+Z).
   return { lx: x, ly: 0.84, lz: z + 0.4, face: Math.PI };
+}
+
+/**
+ * Kneading pose (call every frame while she lies there): leaning in over the head end of the table, both hands
+ * pressing her shoulders/back in turn, head up so the friendly face stays readable. Folk face −Z; their arm pivots
+ * swing FORWARD with positive rotation.x.
+ */
+export function kneadPose(f: Folk, t: number): void {
+  const ph = t * 4.2;
+  const pumpR = Math.abs(Math.sin(ph));
+  const pumpL = Math.abs(Math.sin(ph + Math.PI / 2));
+  f.body.rotation.x = -0.32 - (pumpR + pumpL) * 0.04;
+  f.armR.rotation.x = 1.0 + pumpR * 0.3;
+  f.armL.rotation.x = 1.0 + pumpL * 0.3;
+  f.armR.rotation.z = -0.22;
+  f.armL.rotation.z = 0.22;
+  // look up a little (counters the lean) and sway gently: the smiling face stays toward the door
+  f.head.rotation.x = 0.38;
+  f.head.rotation.y = Math.sin(t * 0.9) * 0.25;
+}
+
+/** Back to the plain standing pose. */
+export function restPose(f: Folk): void {
+  f.body.rotation.x = 0;
+  f.head.rotation.set(0, 0, 0);
+  for (const a of [f.armL, f.armR]) a.rotation.set(0, 0, 0);
+}
+
+/**
+ * Time on the table: no fixed length, she stays as long as she wants (see StaySession). Energy +1 every
+ * MASSAGE_TICK_S seconds (feel(massageTick)); mood +1 once when she lies down (feel(massage)).
+ */
+export class MassageSession extends StaySession {
+  constructor(onUp: () => void) {
+    super(onUp, { tickS: MASSAGE_TICK_S, tick: 'massageTick', start: 'massage' });
+  }
 }

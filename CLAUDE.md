@@ -96,6 +96,21 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   Andar nas diversões usa os assentos (SwingSeat: sentada, de pé a saltar, ou a conduzir); comida vai para o inventário;
   acessórios (pinturas, colares, chapéus) ficam na personagem e são gravados (save.wear). Se a cidade estiver cheia, a
   feira retira os edifícios provisórios do caminho.
+- **Parque infantil (src/playground.ts, 2026-11-19):** um por cidade, vedado (portões à frente e atrás), chão macio; estrutura
+  grande com 2 torres + ponte, escorrega em tubo e escorrega ondulado (descem SENTADA e saem sozinhas no fim), baloiço de 2
+  lugares, carrossel de rodar, cavalinho e joaninha de mola. Clicar/Enter = sentar; tecla/toque = sair. É colocado antes
+  dos adereços (precisa de ~22×18 m; se a cidade estiver cheia tira os edifícios provisórios do caminho). Sem caixa de areia.
+- **Sapataria, chapelaria e loja de roupa (src/tryon.ts, 2026-11-19):** lojas grandes onde se entra; tocar num artigo = experimentar (fica
+  nela), espelho verdadeiro ao fundo, pagar no balcão/vendedor; sair sem pagar = volta à prateleira. 6 pares de calçado, 6 chapéus, 6 roupas em manequins.
+- **SPA (src/spa.ts, 2026-11-19):** pátio grande, paga 5 à porta, veste o roupão na cabina, entra/sai da água quente quando
+  quiser (energia +1 a cada 10 s, humor +2 por visita); o roupão fica no SPA ao sair. Sem marquesas de massagem.
+- **Fotógrafo:** 1 moeda por foto, quantas quiser seguidas ("Tiramos mais uma?").
+- **Bandeiras (src/flags.ts):** as bandeiras reais de cada país (aeroporto, castelos de Varsóvia), desenhadas em canvas.
+- **Trotinete:** braços para a frente no guiador; as perguntas também aparecem de trotinete (ela para, não sai).
+- **Massagem (2026-11-19):** fica deitada o tempo que quiser (tecla/toque = levantar); energia +1 a cada 8 s, humor +1 uma vez;
+  a massagista está à cabeceira, de cara para a porta.
+- **Feira (2026-11-19):** recinto maior (56×51 m), ≥3 m livres à volta de cada diversão, só 4 mastros (nos cantos);
+  0 a 12 visitantes (por cidade) entram pelo arco, param a ver as diversões e voltam a sair. Nas diversões a câmara não faz zoom.
 - **Baloiço:** clicar/tocar (ou Enter ao lado) = senta-se no assento mais próximo e baloiça; qualquer tecla/toque = sai.
 - **Depois de uma pergunta** a personagem acena e vai-se embora a pé (só desaparece longe/fora de vista).
 - **Artistas do concerto** só estão no palco durante o espetáculo: saem a pé pelo lado depois do final e voltam ~10 s antes do seguinte.

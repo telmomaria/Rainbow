@@ -7,9 +7,10 @@ import type { SaveData } from './save';
  *
  * - Energy: 5 levels. Drops one level every 10 minutes of play; at zero she walks slowly (she never falls).
  *   Up with: eating or drinking (+1), the fountain (+1), sitting down (+1), sleeping in the bed at home (full),
- *   massage (+3), doctor (+3), hospital (full, free).
+ *   massage (+1 every 8 s while she lies on the table, as long as she wants), SPA hot water (+1 every 10 s while
+ *   she sits in it, as long as she wants), doctor (+3), hospital (full, free).
  * - Mood: five faces (muito triste, triste, normal, feliz, muito feliz). Drops one level every 20 minutes of play.
- *   Up with: hairdresser, shopping, eating, a meal, playing, giving a flower, saving the kitten (+1 each); SPA (+2).
+ *   Up with: hairdresser, shopping, eating, a meal, playing, giving a flower, saving the kitten, massage (+1 each); SPA (+2, once a visit).
  * - "Muito feliz" gives one more coin for each right answer. "Muito triste" only shows in the face and in her walk.
  *
  * Gameplay modules never call this class: they call `feel(...)` from bus.ts.
@@ -30,9 +31,11 @@ const EFFECTS: Record<LifeEvent, { energy?: number | 'full'; mood?: number; ever
   groom: { mood: 1, every: 0 },
   shop: { mood: 1, every: 60 },
   meal: { energy: 1, mood: 1, every: 0 },
-  massage: { energy: 3, mood: 1, every: 0 },
+  massage: { mood: 1, every: 0 },
+  massageTick: { energy: 1, every: 0 }, // paced by massage.ts (MASSAGE_TICK_S)
   doctor: { energy: 3, every: 0 },
-  spa: { energy: 2, mood: 2, every: 0 },
+  spa: { mood: 2, every: 0 },
+  spaTick: { energy: 1, every: 0 }, // paced by spa.ts (SPA_TICK_S)
   hospital: { energy: 'full', every: 0 },
   rescue: { mood: 1, every: 0 },
   capsule: { energy: 'full', every: 0 },

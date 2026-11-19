@@ -41,7 +41,7 @@ export class Airport {
     const colors = typeof cityOrColors === 'string' ? houseColors(cityOrColors) : cityOrColors;
     scene.add(buildRunway());
 
-    const terminal = buildTerminal(colors);
+    const terminal = buildTerminal(colors, typeof cityOrColors === 'string' ? cityOrColors : undefined);
     terminal.position.set(42, 0, 18);
     scene.add(terminal);
     this.flagCloth = (terminal.userData.flagCloth as THREE.Object3D | undefined) ?? null;
@@ -124,7 +124,7 @@ function buildRunway(): THREE.Group {
   return g;
 }
 
-function buildTerminal(colors: HouseColors): THREE.Group {
+function buildTerminal(colors: HouseColors, city?: string): THREE.Group {
   const g = new THREE.Group();
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(24, 6, 6),
@@ -147,7 +147,7 @@ function buildTerminal(colors: HouseColors): THREE.Group {
     g.add(sign);
   }
   // bandeira do país: canto oeste do terminal, virada para a estrada (−Z), fora do telhado
-  const flag = buildCountryFlag(colors);
+  const flag = buildCountryFlag(colors, city);
   flag.position.set(-12.2, 0, -4.2);
   flag.rotation.y = Math.PI; // pano abre para −X (afastado do edifício), face para a cidade
   g.add(flag);

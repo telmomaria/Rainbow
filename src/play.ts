@@ -86,7 +86,7 @@ function buildSlide(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number
   // CLOSED tube slide (cyan) — unmistakable playground tube, not stairs
   const chute = new THREE.Group();
   chute.position.set(0, 1.5, -0.35);
-  chute.rotation.x = -0.5;
+  chute.rotation.x = 0.5; // high end at the tower (−Z), low end at the exit (+Z) — was upside down before 2026-11-19
   g.add(chute);
   const tube = new THREE.Mesh(
     new THREE.CylinderGeometry(0.55, 0.6, 5.4, 16, 1, true),
@@ -927,11 +927,13 @@ export function createPlaygrounds(
   obstacles: Obstacle[],
   seed: number,
   ctx: GameCtx,
-  world: World,
+  /** the big fenced playground (playground.ts) was placed: then the old single slide tower is not needed */
+  hasPark: boolean,
 ): Interactable[] {
   const rng = mulberry32(seed * 89 + 41);
+  const out: Interactable[] = [];
   const builders: Array<(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number, ctx: GameCtx) => Interactable | null> = [
-    buildSlide,
+    ...(hasPark ? [] : [buildSlide]),
     buildBallGoal,
     buildSeesaw,
     buildHopscotch,
@@ -939,7 +941,6 @@ export function createPlaygrounds(
     buildBench,
     buildLibrary,
   ];
-  const out: Interactable[] = [];
   for (const b of builders) {
     const it = b(scene, obstacles, rng, ctx);
     if (it) out.push(it);
@@ -951,7 +952,6 @@ export function createPlaygrounds(
   // Quantity→quality cull (2026-11-16 hunt): kept out of spawn —
   // I35 sandbox, I37 jump-rope (cyl kids), I38 kite, I39 bubbles (bare pole),
   // I58 rabbit, I74 bins, I76 living statue. (I42 → scooter.ts · I63 → butterflies.ts)
-  void world;
   void buildTerraceStairs;
   return out;
 }

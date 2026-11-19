@@ -10,12 +10,15 @@ import {
   buildExamBed,
 } from './clinic';
 import type { GameCtx } from './gamectx';
-import { SUNGLASSES_KIND, registerWearable, wearableDef } from './items';
+import { SUNGLASSES_KIND, registerWearable } from './items';
 import {
   MASSAGE_COST,
-  MASSAGE_DUR,
+  MASSEUSE_SPOT,
+  MassageSession,
   buildMassageCabin,
   buildMassageTable,
+  kneadPose,
+  restPose,
 } from './massage';
 import {
   Flyers,
@@ -28,14 +31,10 @@ import {
   siteHeading,
   siteToWorld,
 } from './places';
-import {
-  SHOE_COST,
-  SHOES,
-  buildShoeCabin,
-  type ShoeKind,
-} from './shoes';
+import { createShoeShop } from './shoes';
+import { TryOnShop, type TryOnItem } from './tryon';
 import { createSalon, type Salon } from './salon';
-import { createClothesShop, type ClothesShop } from './clothes';
+import { createClothesShop } from './clothes';
 import { createManicure, type Manicure } from './manicure';
 import { createPhotographer, type Photographer } from './photographer';
 import { createSpa, type Spa } from './spa';
@@ -162,22 +161,124 @@ function buildBeadNecklace(): THREE.Group {
   return g;
 }
 
+/** Knitted beanie with stripes and a big pompom (sits low over the crown). */
+function buildBeanie(): THREE.Group {
+  const g = new THREE.Group();
+  const knit = mat(0x15aabf);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.37, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), knit);
+  dome.position.y = -0.24;
+  dome.castShadow = true;
+  g.add(dome);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.385, 0.385, 0.1, 18), mat(0xffffff));
+  band.position.y = -0.22;
+  g.add(band);
+  const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.025, 6, 18), mat(0xffffff));
+  stripe.rotation.x = Math.PI / 2;
+  stripe.position.y = -0.04;
+  g.add(stripe);
+  const pom = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), mat(0xff6b6b));
+  pom.position.y = 0.16;
+  g.add(pom);
+  return g;
+}
+
+/** Soft red beret, tilted, with a little stalk on top. */
+function buildBeret(): THREE.Group {
+  const g = new THREE.Group();
+  const red = mat(0xe03131);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.34, 18, 10), red);
+  cap.scale.set(1.05, 0.32, 1.05);
+  cap.position.set(0.05, -0.02, 0.02);
+  cap.rotation.z = -0.18;
+  cap.castShadow = true;
+  g.add(cap);
+  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.08, 6), red);
+  stalk.position.set(0.04, 0.1, 0.02);
+  g.add(stalk);
+  return g;
+}
+
+/** Tall purple magic top hat with a golden star on the band. */
+function buildTopHat(): THREE.Group {
+  const g = new THREE.Group();
+  const felt = mat(0x7048e8);
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.035, 22), felt);
+  brim.position.y = -0.01;
+  brim.castShadow = true;
+  g.add(brim);
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.23, 0.44, 18), felt);
+  crown.position.y = 0.22;
+  crown.castShadow = true;
+  g.add(crown);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.245, 0.24, 0.08, 18), mat(0xffd43b));
+  band.position.y = 0.06;
+  g.add(band);
+  const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.08), mat(0xffd43b, 0.5));
+  star.scale.set(1, 1, 0.35);
+  star.position.set(0, 0.07, -0.25);
+  g.add(star);
+  return g;
+}
+
+/** Ring of colourful flowers with green leaves around the crown. */
+function buildFlowerCrown(): THREE.Group {
+  const g = new THREE.Group();
+  const colors = [0xff6b9d, 0xffd43b, 0xffffff, 0x9775fa, 0xff922b, 0x4dabf7];
+  const n = 9;
+  const R = 0.27;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const f = new THREE.Group();
+    f.position.set(Math.sin(a) * R, -0.08, Math.cos(a) * R);
+    g.add(f);
+    for (let k = 0; k < 5; k++) {
+      const b = (k / 5) * Math.PI * 2;
+      const p = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 5), mat(colors[i % colors.length]));
+      p.position.set(Math.cos(b) * 0.04, Math.sin(b) * 0.04, 0);
+      f.add(p);
+    }
+    f.add(new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 5), mat(0xffa94d)));
+    f.lookAt(Math.sin(a) * 2, -0.08, Math.cos(a) * 2);
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 4), mat(0x51cf66));
+    leaf.scale.set(1.6, 0.5, 0.6);
+    leaf.position.set(Math.sin(a + 0.35) * R, -0.1, Math.cos(a + 0.35) * R);
+    g.add(leaf);
+  }
+  return g;
+}
+
+/** Sign pictogram: a big magic top hat. */
+function hatSign(): THREE.Object3D {
+  const g = buildTopHat();
+  g.scale.setScalar(1.9);
+  g.position.y = -0.45;
+  return g;
+}
+
 registerWearable(SUNGLASSES_KIND, { name: 'óculos de sol', slot: 'face', build: buildSunglasses });
 registerWearable('srv-laco', { name: 'laço', slot: 'head', build: buildBow });
 registerWearable('srv-chapeu', { name: 'chapéu', slot: 'head', build: buildSunHat });
 registerWearable('srv-colar', { name: 'colar', slot: 'neck', build: buildBeadNecklace });
+registerWearable('srv-gorro', { name: 'gorro', slot: 'head', build: buildBeanie });
+registerWearable('srv-boina', { name: 'boina', slot: 'head', build: buildBeret });
+registerWearable('srv-cartola', { name: 'cartola', slot: 'head', build: buildTopHat });
+registerWearable('srv-coroa-flores', { name: 'coroa de flores', slot: 'head', build: buildFlowerCrown });
 
-const ACCESSORIES: { id: string; name: string; slot: 'head' | 'face' | 'neck' }[] = [
-  { id: 'srv-chapeu', name: 'chapéu', slot: 'head' },
-  { id: SUNGLASSES_KIND, name: 'óculos de sol', slot: 'face' },
-  { id: 'srv-colar', name: 'colar', slot: 'neck' },
-  { id: 'srv-laco', name: 'laço', slot: 'head' },
+/** S05 — chapelaria: hats on mannequin heads along the walls, glasses + necklace on the island (tryon.ts). */
+const HAT_SHOP: TryOnItem[] = [
+  { id: 'srv-chapeu', name: 'chapéu de palha', slot: 'head', price: 4, display: buildSunHat },
+  { id: 'srv-gorro', name: 'gorro com pompom', slot: 'head', price: 4, display: buildBeanie },
+  { id: 'srv-boina', name: 'boina vermelha', slot: 'head', price: 4, display: buildBeret },
+  { id: 'srv-cartola', name: 'cartola mágica', slot: 'head', price: 5, display: buildTopHat },
+  { id: 'srv-coroa-flores', name: 'coroa de flores', slot: 'head', price: 5, display: buildFlowerCrown },
+  { id: 'srv-laco', name: 'laço', slot: 'head', price: 3, display: buildBow },
+  { id: SUNGLASSES_KIND, name: 'óculos de sol', slot: 'face', price: 4, plural: true, display: buildSunglasses },
+  { id: 'srv-colar', name: 'colar', slot: 'neck', price: 4, display: buildBeadNecklace },
 ];
 
-/** S06 scripted massage: she lies face-down while the masseuse kneads her back (~10 s). */
+/** S06 massage: she lies on the table as long as she wants while the masseuse kneads (energy +1 every few s). */
 interface MassageJob {
-  t: number;
-  dur: number;
+  session: MassageSession;
   stand: THREE.Vector3;
   tableAt: THREE.Vector3;
   tableY: number;
@@ -187,35 +288,17 @@ interface MassageJob {
   site: { x: number; z: number; rot: number };
 }
 
-/** S03 fitting: sit on the stool → new shoes appear on her feet → short show-off walk. */
-interface ShoeJob {
-  t: number;
-  phase: 'sit' | 'wear' | 'show' | 'done';
-  stand: THREE.Vector3;
-  stoolAt: THREE.Vector3;
-  stoolY: number;
-  heading: number;
-  site: { x: number; z: number; rot: number };
-  kind: ShoeKind;
-  name: string;
-  clerk: Folk;
-  clerkHome: THREE.Vector3;
-}
-
 export class ServiceTown {
   readonly things: Interactable[] = [];
   private readonly fly: Flyers;
-  private shoeIdx = 0;
-  private accIdx = 0;
-  private accStand: THREE.Vector3 | null = null;
+  private shoeShop: TryOnShop | null = null;
+  private hatShop: TryOnShop | null = null;
   private massage: MassageJob | null = null;
-  private shoeFit: ShoeJob | null = null;
+  /** The S06 table's session (one cabin per city); `ready` blocks a re-buy right after getting up. */
+  private readonly massageSession = new MassageSession(() => this.endMassage());
   /** World stand of the S06 massage cabin (for QA / debug). */
   private massageStand: THREE.Vector3 | null = null;
   private massageRot = 0;
-  private shoeStand: THREE.Vector3 | null = null;
-  private shoeSite: { x: number; z: number } | null = null;
-  private shoeRot = 0;
   private clinic: {
     check: HeartCheck;
     stand: THREE.Vector3;
@@ -229,7 +312,7 @@ export class ServiceTown {
   private manicure: Manicure | null = null;
   private spa: Spa | null = null;
   private salon: Salon | null = null;
-  private clothes: ClothesShop | null = null;
+  private clothes: TryOnShop | null = null;
   private readonly siteOpts: { apron?: number; clearLamps?: (area: Obstacle, obstacles: Obstacle[]) => void };
 
   constructor(
@@ -248,19 +331,30 @@ export class ServiceTown {
     this.things.push(...this.salon.things);
 
     // S03 — covered shoe shop (montra + fitting stool); shoes appear on her feet
-    this.addShoeShop(scene, obstacles, rng);
+    this.shoeShop = createShoeShop(scene, obstacles, rng, ctx, hero, this.siteOpts);
+    this.things.push(...this.shoeShop.things);
 
-    // S04 — covered clothes shop with fitting curtain
+    // S04 — walk-in clothes shop: dressed mannequins, try on, mirror, pay at the counter (tryon.ts)
     this.clothes = createClothesShop(scene, obstacles, rng, ctx, hero, this.siteOpts);
     this.things.push(...this.clothes.things);
 
     // S05 — covered accessories boutique with montra (hat / sunglasses / necklace / bow)
-    this.addAccessoryShop(scene, obstacles, rng);
+    this.hatShop = new TryOnShop(scene, obstacles, rng, ctx, hero, HAT_SHOP, {
+      stand: 'head',
+      wall: 0xfff0f6,
+      trim: 0xcc5de8,
+      floor: 0xf3d9fa,
+      roof: 0x9c36b5,
+      awning: [0xcc5de8, 0xffffff],
+      sign: hatSign,
+      clerk: { shirt: 0xcc5de8, pants: 0xffffff, dress: true, longHair: true },
+    }, this.siteOpts);
+    this.things.push(...this.hatShop.things);
 
     // S06 massage — covered SPA cabin; marquesa indoors, masseuse kneads her back
     this.massageBooth(scene, obstacles, rng);
 
-    // S07 spa real — Nuuk (gelo) · Vilnius / Moscovo (cabina de vapor); noutras cidades não spawna
+    // S07 spa (termas) — Nuuk (gelo) · Vilnius / Moscovo (madeira): roupão + água quente; noutras cidades não spawna
     this.spa = createSpa(scene, obstacles, rng, ctx, hero, this.siteOpts);
     this.things.push(...this.spa.things);
     // S08 médico — consultório com maca (não quiosque/barraca)
@@ -279,268 +373,11 @@ export class ServiceTown {
     return (
       !!this.massage ||
       !!this.clinic ||
-      !!this.shoeFit ||
       !!this.manicure?.busy ||
       !!this.spa?.busy ||
       !!this.salon?.busy ||
       !!this.clothes?.busy
     );
-  }
-
-  /** Covered lilac boutique: glass montra with hat / glasses / necklace / bow on stands. */
-  private buildAccessoryCabin(g: THREE.Group, hw: number, depth: number): void {
-    const wall = mat(0xfff0f6);
-    const trim = mat(0xcc5de8);
-    const floor = mat(0xf3d9fa);
-    box(g, floor, hw * 2, 0.14, depth, 0, 0.07, -depth / 2);
-    box(g, trim, hw * 2 + 0.08, 0.1, depth + 0.08, 0, 0.03, -depth / 2);
-    box(g, wall, hw * 2, 2.7, 0.2, 0, 1.4, -depth + 0.1);
-    for (const s of [-1, 1]) {
-      box(g, wall, 0.2, 2.7, depth, s * (hw - 0.1), 1.4, -depth / 2);
-      box(g, trim, 0.22, 0.28, depth, s * (hw - 0.1), 0.28, -depth / 2);
-    }
-    // front wall with door + big glass montra to the left
-    const doorW = 1.6;
-    box(g, wall, hw - doorW / 2, 2.7, 0.2, -(hw + doorW / 2) / 2, 1.4, -0.1);
-    box(g, wall, hw - doorW / 2, 2.7, 0.2, (hw + doorW / 2) / 2, 1.4, -0.1);
-    for (const s of [-1, 1]) box(g, trim, 0.12, 2.35, 0.22, s * (doorW / 2 + 0.04), 1.2, -0.05);
-    box(g, trim, doorW + 0.3, 0.35, 0.24, 0, 2.45, -0.05);
-    // glass shop window (left of door) — accessories visible from the street
-    const glass = new THREE.MeshStandardMaterial({
-      color: 0xe7f5ff,
-      roughness: 0.08,
-      metalness: 0.15,
-      transparent: true,
-      opacity: 0.28,
-      depthWrite: false,
-    });
-    const winX = -1.35;
-    box(g, mat(0xffffff), 1.7, 1.55, 0.08, winX, 1.45, -0.02);
-    box(g, glass, 1.55, 1.4, 0.06, winX, 1.45, 0.02);
-    // pitched purple roof
-    const roof = mat(0x9c36b5);
-    const rL = box(g, roof, hw + 0.35, 0.12, depth + 0.5, -hw / 2, 3.0, -depth / 2);
-    rL.rotation.z = 0.16;
-    const rR = box(g, roof, hw + 0.35, 0.12, depth + 0.5, hw / 2, 3.0, -depth / 2);
-    rR.rotation.z = -0.16;
-    box(g, mat(0xfff0f6), 0.3, 0.3, depth + 0.55, 0, 3.18, -depth / 2);
-    // sparkling badge on the lintel (no text)
-    const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.18), mat(0xffd43b, 0.4));
-    star.position.set(0, 2.48, 0.14);
-    g.add(star);
-    // montra shelf + four accessories on little stands (behind the glass)
-    box(g, mat(0xe599f7), 1.5, 0.08, 0.45, winX, 0.85, -0.55);
-    const display = [
-      { build: buildSunHat, x: -1.9 },
-      { build: buildSunglasses, x: -1.5 },
-      { build: buildBeadNecklace, x: -1.15 },
-      { build: buildBow, x: -0.8 },
-    ];
-    for (const d of display) {
-      const stick = box(g, mat(0xadb5bd), 0.04, 0.35, 0.04, d.x, 1.05, -0.5);
-      void stick;
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), mat(0xffdbac));
-      head.position.set(d.x, 1.28, -0.5);
-      g.add(head);
-      const item = d.build();
-      item.scale.setScalar(0.45);
-      item.position.set(d.x, 1.38, -0.5);
-      g.add(item);
-    }
-    // counter inside
-    box(g, mat(0xfff3d6), 1.6, 0.12, 0.7, 1.1, 1.0, -1.5);
-    box(g, wall, 1.6, 0.9, 0.55, 1.1, 0.5, -1.5);
-    box(g, mat(0xadb5bd), doorW + 0.2, 0.08, 0.35, 0, 0.04, 0.2);
-  }
-
-  /** S05 — covered accessories shop; pay → item flies onto her + "Que giro!". */
-  private addAccessoryShop(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number): void {
-    const hw = 2.5;
-    const depth = 3.8;
-    const site = roadsideSite(obstacles, rng, hw, depth, { minD: 40, maxD: 130, ...this.siteOpts });
-    if (!site) return;
-    const g = siteGroup(scene, site);
-    this.buildAccessoryCabin(g, hw, depth);
-    obstacles.push(siteBox(site, -hw, hw, -depth, 0));
-    obstacles.push(siteBox(site, 0.3, 1.9, -1.9, -1.15, 1.05));
-
-    const clerk = buildFolk({
-      shirt: 0xcc5de8,
-      pants: 0xffffff,
-      skin: pick(rng, SKINS),
-      hair: pick(rng, HAIRS),
-      dress: true,
-      longHair: true,
-    });
-    clerk.group.position.set(1.1, 0, -2.4);
-    clerk.group.rotation.y = Math.PI;
-    g.add(clerk.group);
-
-    const cost = 4;
-    const stand = siteToWorld(site, -0.6, 1.15);
-    const payTo = siteToWorld(site, 1.1, -1.5, 1.1);
-    this.accStand = stand.clone();
-
-    this.things.push({
-      object: g,
-      position: stand,
-      radius: 2.4,
-      requiresClick: true,
-      interact: () => {
-        if (this.fly.busy || this.busy) return false;
-        // cycle accessories; skip one already worn in that slot when another is free.
-        // Sunglasses stay in the bag: do not sell a second pair.
-        const worn = this.ctx.worn();
-        let pickAcc = ACCESSORIES[this.accIdx % ACCESSORIES.length];
-        let pickN = 0;
-        let found = false;
-        for (let n = 0; n < ACCESSORIES.length; n++) {
-          const a = ACCESSORIES[(this.accIdx + n) % ACCESSORIES.length];
-          if (a.id === SUNGLASSES_KIND && this.ctx.owns(SUNGLASSES_KIND)) continue;
-          if (worn[a.slot] !== a.id) {
-            pickAcc = a;
-            pickN = n;
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          clerk.head.rotation.y = Math.sin(performance.now() * 0.02) * 0.5;
-          this.ctx.say(['Já tens estes adereços.']);
-          return false;
-        }
-        if (this.ctx.coins() < cost) {
-          clerk.head.rotation.y = Math.sin(performance.now() * 0.02) * 0.5;
-          this.ctx.say([`Precisas de ${cost} moedas.`]);
-          tone(196, 0, 0.3, 'sine', 0.13);
-          return false;
-        }
-        this.accIdx = this.accIdx + pickN + 1;
-        this.ctx.addCoins(-cost);
-        clerk.head.rotation.x = 0.25;
-        for (let i = 0; i < Math.min(cost, 4); i++) {
-          this.fly.send(coinMesh(), this.hand(), payTo, 0.4, i * 0.1, () => tone(800, 0, 0.05, 'square', 0.04));
-        }
-        const def = wearableDef(pickAcc.id);
-        const preview = def ? def.build() : new THREE.Group();
-        preview.scale.setScalar(0.55);
-        const slotY = pickAcc.slot === 'neck' ? 1.35 : pickAcc.slot === 'face' ? 1.55 : 1.85;
-        const headAt = () => new THREE.Vector3(this.ctx.player.x, slotY, this.ctx.player.z);
-        this.fly.send(preview, payTo.clone().setY(1.3), headAt, 0.6, 0.2, () => {
-          this.ctx.wear(pickAcc.slot, pickAcc.id);
-          feel('shop');
-          this.ctx.say(['Que giro!', `Um ${pickAcc.name}!`]);
-          [659, 784, 988].forEach((f, i) => tone(f, i * 0.08, 0.16, 'sine', 0.05));
-        });
-        return true;
-      },
-    });
-  }
-
-  /** S03 — covered sapataria with glass montra of recognisable shoes; pay → sit → wear feet → show walk. */
-  private addShoeShop(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number): void {
-    const hw = 2.6;
-    const depth = 4.2;
-    const site = roadsideSite(obstacles, rng, hw, depth, { minD: 40, maxD: 130, ...this.siteOpts });
-    if (!site) return;
-    const g = siteGroup(scene, site);
-    const cabin = buildShoeCabin(g, hw, depth);
-    obstacles.push(siteBox(site, -hw, hw, -depth, 0));
-    obstacles.push(siteBox(site, 0.6, 1.8, -1.75, -1.05, 0.95)); // counter
-    obstacles.push(siteBox(site, cabin.stool.lx - 0.35, cabin.stool.lx + 0.35, cabin.stool.lz - 0.35, cabin.stool.lz + 0.35, 0.55));
-
-    const clerkHome = { x: 1.25, z: -2.4 };
-    const clerk = buildFolk({
-      shirt: 0xe8590c,
-      pants: 0x343a40,
-      skin: pick(rng, SKINS),
-      hair: pick(rng, HAIRS),
-      cap: 0x862e9c,
-    });
-    clerk.group.position.set(clerkHome.x, 0, clerkHome.z);
-    clerk.group.rotation.y = Math.PI;
-    g.add(clerk.group);
-
-    const stand = siteToWorld(site, -0.9, 1.2);
-    const payTo = siteToWorld(site, 1.2, -1.4, 1.0);
-    this.shoeStand = stand.clone();
-    this.shoeSite = { x: site.x, z: site.z };
-    this.shoeRot = site.rot;
-
-    this.things.push({
-      object: g,
-      position: stand,
-      radius: 2.5,
-      requiresClick: true,
-      interact: () => {
-        if (this.fly.busy || this.busy) return false;
-        if (this.ctx.coins() < SHOE_COST) {
-          clerk.head.rotation.y = Math.sin(performance.now() * 0.02) * 0.5;
-          this.ctx.say([`Os sapatos são ${SHOE_COST} moedas.`]);
-          tone(196, 0, 0.3, 'sine', 0.13);
-          return false;
-        }
-        this.ctx.addCoins(-SHOE_COST);
-        for (let i = 0; i < Math.min(SHOE_COST, 4); i++) {
-          this.fly.send(coinMesh(), this.hand(), payTo, 0.4, i * 0.1, () => tone(800, 0, 0.05, 'square', 0.04));
-        }
-        const pickShoe = SHOES[this.shoeIdx++ % SHOES.length];
-        this.beginShoeFit(site, cabin.stool, clerk, clerkHome, stand, pickShoe.id, pickShoe.name);
-        return true;
-      },
-    });
-  }
-
-  private beginShoeFit(
-    site: { x: number; z: number; rot: number },
-    stool: { lx: number; ly: number; lz: number; face: number },
-    clerk: Folk,
-    clerkHome: { x: number; z: number },
-    stand: THREE.Vector3,
-    kind: ShoeKind,
-    name: string,
-  ): void {
-    if (this.shoeFit) return;
-    const stoolAt = siteToWorld(site, stool.lx, stool.lz);
-    this.ctx.hold(true);
-    this.ctx.say(['Senta-te — vamos calçar!']);
-    const p = this.hero;
-    p.position.set(stoolAt.x, 0, stoolAt.z);
-    p.heading = siteHeading(site, stool.face);
-    p.sitting = true;
-    p.root.position.y = stool.ly;
-    clerk.group.position.set(stool.lx + 0.7, 0, stool.lz - 0.15);
-    clerk.group.rotation.y = -Math.PI / 2;
-    this.shoeFit = {
-      t: 0,
-      phase: 'sit',
-      stand: stand.clone(),
-      stoolAt,
-      stoolY: stool.ly,
-      heading: site.rot,
-      site,
-      kind,
-      name,
-      clerk,
-      clerkHome: new THREE.Vector3(clerkHome.x, 0, clerkHome.z),
-    };
-    tone(392, 0, 0.12, 'sine', 0.04);
-  }
-
-  private endShoeFit(): void {
-    const job = this.shoeFit;
-    if (!job) return;
-    const p = this.hero;
-    p.sitting = false;
-    p.root.position.y = 0;
-    p.position.set(job.stand.x, 0, job.stand.z);
-    p.heading = job.heading;
-    job.clerk.group.position.copy(job.clerkHome);
-    job.clerk.group.rotation.y = Math.PI;
-    job.clerk.armR.rotation.x = 0;
-    job.clerk.armL.rotation.x = 0;
-    this.shoeFit = null;
-    this.ctx.hold(false);
   }
 
   /** S08 — white/green consultório with maca; she lies down, doctor listens (~3 s), then "Estás bem!". */
@@ -657,7 +494,6 @@ export class ServiceTown {
     obstacles.push(siteBox(site, -0.75, 0.75, -2.15 - 1.05, -2.15 + 1.05, 0.9));
 
     const clerkHome = { x: 1.4, z: -3.2 };
-    const clerkBeside = { x: -0.95, z: -2.35 };
     const clerk = buildFolk({
       shirt: 0x69db7c,
       pants: 0xffffff,
@@ -681,7 +517,7 @@ export class ServiceTown {
       radius: 2.6,
       requiresClick: true,
       interact: () => {
-        if (this.fly.busy || this.busy) return false;
+        if (this.fly.busy || this.busy || !this.massageSession.ready) return false;
         if (this.ctx.coins() < MASSAGE_COST) {
           clerk.head.rotation.y = Math.sin(performance.now() * 0.02) * 0.5;
           this.ctx.say([`Precisas de ${MASSAGE_COST} moedas.`]);
@@ -692,7 +528,7 @@ export class ServiceTown {
         for (let i = 0; i < Math.min(MASSAGE_COST, 4); i++) {
           this.fly.send(coinMesh(), this.hand(), payTo, 0.4, i * 0.1, () => tone(800, 0, 0.05, 'square', 0.04));
         }
-        this.beginMassage(site, table, clerk, clerkHome, clerkBeside, stand);
+        this.beginMassage(site, table, clerk, clerkHome, stand);
         return true;
       },
     });
@@ -703,24 +539,23 @@ export class ServiceTown {
     table: { lx: number; ly: number; lz: number; face: number },
     clerk: Folk,
     clerkHome: { x: number; z: number },
-    clerkBeside: { x: number; z: number },
     stand: THREE.Vector3,
   ): void {
     if (this.massage) return;
     const tableAt = siteToWorld(site, table.lx, table.lz);
     this.ctx.hold(true);
-    this.ctx.say(['Deita-te — massagem nas costas!']);
+    this.ctx.say(['Deita-te e descansa!']);
     const p = this.hero;
     p.position.x = tableAt.x;
     p.position.z = tableAt.z;
     p.heading = siteHeading(site, table.face);
     p.applyProneLie(table.ly);
-    // masseuse stands beside the table, leaning over her back
-    clerk.group.position.set(clerkBeside.x, 0, clerkBeside.z);
-    clerk.group.rotation.y = Math.PI / 2;
+    // masseuse at the head end of the table, facing the door: her smiling face toward the camera
+    clerk.group.position.set(MASSEUSE_SPOT.x, 0, MASSEUSE_SPOT.z);
+    clerk.group.rotation.y = MASSEUSE_SPOT.face;
+    this.massageSession.start(); // mood +1 now; energy +1 every few seconds while she stays
     this.massage = {
-      t: 0,
-      dur: MASSAGE_DUR,
+      session: this.massageSession,
       stand: stand.clone(),
       tableAt,
       tableY: table.ly,
@@ -735,23 +570,23 @@ export class ServiceTown {
   private endMassage(): void {
     const job = this.massage;
     if (!job) return;
+    job.session.stop();
     const p = this.hero;
     p.lyingY = null;
     p.prone = false;
     p.airborne = false;
     p.root.rotation.x = 0;
     p.root.rotation.z = 0;
-    p.position.set(job.stand.x, 0, job.stand.z);
-    p.heading = job.heading; // face the cabin door
+    p.root.position.y = 0;
+    // stand up at the cabin door (unless something else already took her away, e.g. Casa)
+    if (Math.hypot(p.position.x - job.tableAt.x, p.position.z - job.tableAt.z) < 1.5) {
+      p.position.set(job.stand.x, 0, job.stand.z);
+      p.heading = job.heading + Math.PI; // back to the cabin, facing the street: ready to walk away
+    }
     job.clerk.group.position.copy(job.clerkHome);
     job.clerk.group.rotation.y = Math.PI;
-    job.clerk.armR.rotation.x = 0;
-    job.clerk.armL.rotation.x = 0;
-    job.clerk.armR.rotation.z = 0;
-    job.clerk.armL.rotation.z = 0;
-    job.clerk.body.rotation.x = 0;
+    restPose(job.clerk);
     this.massage = null;
-    feel('massage');
     this.ctx.say(['Que bem!']);
     [392, 523, 659].forEach((f, i) => tone(f, i * 0.1, 0.18, 'sine', 0.05));
     this.ctx.hold(false);
@@ -769,85 +604,29 @@ export class ServiceTown {
     } else {
       this._clinicIdle?.update(dt);
     }
-    this.updateShoeFit(dt);
+    this.shoeShop?.update(dt);
+    this.clothes?.update(dt);
+    this.hatShop?.update(dt);
     const job = this.massage;
     if (!job) return;
-    job.t += dt;
-    // kneading: lean over the table, both hands press down on her back (not arms in the air)
-    const ph = job.t * 5.2;
-    const pump = Math.abs(Math.sin(ph));
-    const pump2 = Math.abs(Math.sin(ph + 1.05));
-    const c = job.clerk;
-    c.armR.rotation.x = -1.05 - pump * 0.4;
-    c.armL.rotation.x = -1.05 - pump2 * 0.4;
-    c.armR.rotation.z = 0.55 + Math.sin(ph * 0.7) * 0.15;
-    c.armL.rotation.z = -0.55 - Math.sin(ph * 0.7 + 0.5) * 0.15;
-    c.body.rotation.x = -0.45 - pump * 0.1;
-    // keep her face-down on the pad (after player.update — hold() pauses earlier in the frame)
+    // as long as she wants: energy ticks; any key / tap ends it (endMassage via the session callback)
+    if (!job.session.update(dt)) return;
+    // kneading: leaning in at the head end, both hands pressing her shoulders in turn
+    kneadPose(job.clerk, job.session.t);
+    // keep her lying on the pad (after player.update — hold() pauses earlier in the frame)
     const p = this.hero;
     p.position.x = job.tableAt.x;
     p.position.z = job.tableAt.z;
     p.applyProneLie(job.tableY);
-    if (job.t >= job.dur) this.endMassage();
-  }
-
-  private updateShoeFit(dt: number): void {
-    const job = this.shoeFit;
-    if (!job) return;
-    job.t += dt;
-    const p = this.hero;
-    const c = job.clerk;
-    if (job.phase === 'sit') {
-      // keep her on the stool; clerk leans in to lace
-      p.sitting = true;
-      p.position.set(job.stoolAt.x, 0, job.stoolAt.z);
-      p.root.position.y = job.stoolY;
-      c.armR.rotation.x = -1.1 + Math.sin(job.t * 8) * 0.25;
-      c.armL.rotation.x = -1.0 + Math.sin(job.t * 8 + 1) * 0.2;
-      if (job.t >= 1.4) {
-        job.phase = 'wear';
-        job.t = 0;
-        this.ctx.wear('feet', job.kind);
-        feel('shop');
-        // say here (not at show) so the speech queue is free — "Sapatos novos!" must be heard
-        this.ctx.say(['Sapatos novos!']);
-        tone(659, 0, 0.12, 'triangle', 0.06);
-        tone(880, 0.1, 0.15, 'triangle', 0.05);
-      }
-      return;
-    }
-    if (job.phase === 'wear') {
-      p.sitting = true;
-      p.position.set(job.stoolAt.x, 0, job.stoolAt.z);
-      p.root.position.y = job.stoolY;
-      if (job.t >= 0.7) {
-        job.phase = 'show';
-        job.t = 0;
-        p.sitting = false;
-        p.root.position.y = 0;
-        // step to the door apron and show the new shoes with a short walk
-        p.position.set(job.stand.x, 0, job.stand.z);
-        p.heading = job.heading;
-        this.ctx.walkAnim(2.8);
-        [523, 659, 784].forEach((f, i) => tone(f, i * 0.09, 0.16, 'sine', 0.05));
-      }
-      return;
-    }
-    if (job.phase === 'show') {
-      // brief strut on the apron
-      this.ctx.walkAnim(2.6);
-      if (job.t >= 1.6) {
-        job.phase = 'done';
-        this.ctx.walkAnim(0);
-        this.endShoeFit();
-      }
-    }
   }
 
   dispose(): void {
     if (this.massage) this.endMassage();
     if (this.clinic) this.endClinic();
-    if (this.shoeFit) this.endShoeFit();
+    this.shoeShop?.dispose();
+    this.shoeShop = null;
+    this.hatShop?.dispose();
+    this.hatShop = null;
     this.salon?.dispose();
     this.salon = null;
     this.clothes?.dispose();
@@ -861,11 +640,16 @@ export class ServiceTown {
     this.fly.clear();
   }
 
+  /** Walk-in shop interiors (sapataria, chapelaria, loja de roupa): nothing may spawn inside them. */
+  zones(): Obstacle[] {
+    return [this.shoeShop?.zone(), this.hatShop?.zone(), this.clothes?.zone(), this.spa?.zone()].filter((z): z is Obstacle => !!z);
+  }
+
   debug(): Record<string, unknown> {
     return {
       busy: this.busy,
       massage: this.massage
-        ? { t: +this.massage.t.toFixed(2), stand: this.massageStand ? [+this.massageStand.x.toFixed(1), +this.massageStand.z.toFixed(1)] : null }
+        ? { t: +this.massage.session.t.toFixed(2), ticks: this.massage.session.ticks, stand: this.massageStand ? [+this.massageStand.x.toFixed(1), +this.massageStand.z.toFixed(1)] : null }
         : null,
       stand: this.massageStand ? [+this.massageStand.x.toFixed(1), +this.massageStand.z.toFixed(1)] : null,
       table: this.massage ? [+this.massage.tableAt.x.toFixed(1), +this.massage.tableAt.z.toFixed(1)] : null,
@@ -873,11 +657,8 @@ export class ServiceTown {
       clinic: this.clinicStand ? [+this.clinicStand.x.toFixed(1), +this.clinicStand.z.toFixed(1)] : null,
       clinicRot: +this.clinicRot.toFixed(2),
       consulting: !!this.clinic,
-      shoe: this.shoeStand ? [+this.shoeStand.x.toFixed(1), +this.shoeStand.z.toFixed(1)] : null,
-      shoeSite: this.shoeSite ? [+this.shoeSite.x.toFixed(1), +this.shoeSite.z.toFixed(1)] : null,
-      shoeRot: +this.shoeRot.toFixed(2),
-      shoeFit: this.shoeFit ? { t: +this.shoeFit.t.toFixed(2), phase: this.shoeFit.phase, kind: this.shoeFit.kind } : null,
-      accessories: this.accStand ? [+this.accStand.x.toFixed(1), +this.accStand.z.toFixed(1)] : null,
+      shoes: this.shoeShop?.debug() ?? null,
+      hats: this.hatShop?.debug() ?? null,
       salon: this.salon?.debug() ?? null,
       clothes: this.clothes?.debug() ?? null,
       manicure: this.manicure?.debug() ?? null,

@@ -863,7 +863,13 @@ const SWIM: Record<string, { color: number; trunks?: boolean }> = {
 };
 
 /** Shop outfits (S04): kids' clothes on a fresh body, same head/hair as the chosen character. */
-export type ShopOutfitId = 'srv-vestido' | 'srv-casaco' | 'srv-calcoes';
+export type ShopOutfitId =
+  | 'srv-vestido'
+  | 'srv-casaco'
+  | 'srv-calcoes'
+  | 'srv-jardineiras'
+  | 'srv-arcoiris'
+  | 'srv-noite';
 
 const SHOP_OUTFITS: Record<
   ShopOutfitId,
@@ -920,7 +926,76 @@ const SHOP_OUTFITS: Record<
       for (const side of [-1, 1]) b.kit.put(b.body, b.kit.box(0.08, 0.35, 0.42), 0xffffff, [side * 0.12, 1.15, 0]);
     },
   },
+  'srv-jardineiras': {
+    top: 0xffffff,
+    sleeve: 0xff6b6b,
+    legs: 0xfab005,
+    shoes: 0x7048e8,
+    hips: 0xfab005,
+    shortSleeve: true,
+    decorate(b) {
+      // yellow dungarees (bib + straps + front pocket) over a red-and-white striped tee
+      for (const y of [0.98, 1.12, 1.26]) b.kit.put(b.body, b.kit.cyl(0.235, 0.235, 0.05, 16), 0xff6b6b, [0, y, 0]);
+      b.kit.put(b.body, b.kit.box(0.34, 0.3, 0.1), 0xfab005, [0, 1.02, -0.2]);
+      b.kit.put(b.body, b.kit.box(0.16, 0.1, 0.04), 0xf08c00, [0, 1.0, -0.26]);
+      for (const side of [-1, 1]) {
+        b.kit.put(b.body, b.kit.box(0.07, 0.42, 0.5), 0xfab005, [side * 0.13, 1.2, 0]);
+        b.kit.put(b.body, b.kit.sph(0.03), 0x7048e8, [side * 0.13, 1.18, -0.26]);
+      }
+    },
+  },
+  'srv-arcoiris': {
+    top: 0xff6b6b,
+    sleeve: 0x845ef7,
+    legs: 0x1c7ed6,
+    shoes: 0xffffff,
+    hips: 0x1c7ed6,
+    decorate(b) {
+      // rainbow jumper (coloured rings) over blue trousers
+      const bands = [0xff6b6b, 0xff922b, 0xffd43b, 0x51cf66, 0x339af0, 0x845ef7];
+      bands.forEach((c, i) => b.kit.put(b.body, b.kit.cyl(0.255 - i * 0.008, 0.255 - i * 0.008, 0.1, 16), c, [0, 0.84 + i * 0.09, 0]));
+      b.kit.put(b.body, b.kit.cyl(0.14, 0.16, 0.06, 14), 0xffffff, [0, 1.38, 0]); // collar
+    },
+  },
+  'srv-noite': {
+    top: 0x364fc7,
+    sleeve: 0x364fc7,
+    legs: 0xffd9bf,
+    shoes: 0xffd43b,
+    hips: 0x364fc7,
+    decorate(b) {
+      // long navy dress sprinkled with golden stars + golden belt
+      b.kit.put(b.body, b.kit.cyl(0.22, 0.52, 0.9, 20), 0x364fc7, [0, 0.36, 0]);
+      b.kit.put(b.body, b.kit.cyl(0.235, 0.235, 0.06, 16), 0xffd43b, [0, 0.86, 0]);
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2;
+        const y = 0.2 + (i % 3) * 0.2;
+        const r = 0.5 - (y - 0.2) * 0.35 + 0.02;
+        b.kit.put(b.body, b.kit.sph(0.035, 8, 6), b.kit.mat(0xffd43b, 0.5, 0.4), [Math.sin(a) * r, y, Math.cos(a) * r]);
+      }
+    },
+  },
 };
+
+/** Faceless shop mannequin wearing a shop outfit (clothes shop display, full size, faces −Z). */
+export function buildOutfitMannequin(outfit: ShopOutfitId): THREE.Group {
+  const look = SHOP_OUTFITS[outfit];
+  const b = biped({
+    skin: 0xf1e4d8,
+    top: look.top,
+    sleeve: look.sleeve,
+    legs: look.legs,
+    shoes: look.shoes,
+    hips: look.hips,
+    shortSleeve: look.shortSleeve,
+  });
+  look.decorate(b);
+  // plain egg head (no face) so it reads as a shop dummy, not a person
+  const at = b.head.position.clone();
+  b.body.remove(b.head);
+  b.kit.put(b.body, b.kit.sph(0.3, 16, 12), 0xf1e4d8, [at.x, at.y, at.z], undefined, [0.9, 1.1, 0.9]);
+  return b.model;
+}
 
 export function shopOutfitIds(): ShopOutfitId[] {
   return Object.keys(SHOP_OUTFITS) as ShopOutfitId[];
@@ -934,7 +1009,22 @@ export function isShopOutfit(kind: string): kind is ShopOutfitId {
 export function buildShopOutfit(id: string, outfit: ShopOutfitId): CharacterModel {
   const orig = characterById(id).build() as CharacterModel & Partial<Biped>;
   if (!orig.head || orig.skin === undefined || !orig.headR) {
-    // unicorn etc.: keep the body, add a colourful bow on the mane tip
+    // unicorn etc.: keep the body, wear the outfit as a blanket coat on the back + a colourful bow on the mane tip
+    const look = SHOP_OUTFITS[outfit];
+    const main = look.top === 0xffffff ? look.hips : look.top; // white tee under dungarees → show the dungarees
+    const coat = new THREE.MeshStandardMaterial({ color: main, roughness: 0.7 });
+    const edge = new THREE.MeshStandardMaterial({ color: look.sleeve === main ? look.hips : look.sleeve, roughness: 0.7 });
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.07, 0.72), coat);
+    back.position.set(0, 1.3, 0.05);
+    orig.body.add(back);
+    for (const side of [-1, 1]) {
+      const drape = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.36, 0.72), coat);
+      drape.position.set(side * 0.37, 1.13, 0.05);
+      orig.body.add(drape);
+      const hem = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.74), edge);
+      hem.position.set(side * 0.38, 0.96, 0.05);
+      orig.body.add(hem);
+    }
     const bow = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshStandardMaterial({ color: 0xff6b9d }));
     bow.scale.set(1.4, 0.5, 0.8);
     bow.position.set(0, 1.6, -0.6);
@@ -1022,5 +1112,59 @@ export function buildSwimsuit(id: string): CharacterModel {
     b.kit.put(b.body, b.kit.cyl(0.255, 0.255, 0.04), trim, [0, 0.7, 0]);
   }
   b.head = head;
+  return b;
+}
+
+// ---------------------------------------------------------------------------
+// Bathrobe (SPA): same head and hair on a fluffy robe body; the unicorn gets a robe draped over her back
+// ---------------------------------------------------------------------------
+
+const ROBE = 0xfff0f6;
+const ROBE_BELT = 0xf783ac;
+
+/** The character in a fluffy SPA bathrobe (with slippers). Non-human shapes keep their body under a robe blanket. */
+export function buildRobe(id: string): CharacterModel {
+  const orig = characterById(id).build() as CharacterModel & Partial<Biped>;
+  if (!orig.head || orig.skin === undefined || !orig.headR) {
+    // unicorn etc.: a robe blanket over the back + belt band, sized from the model itself
+    orig.model.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(orig.body);
+    const size = bb.getSize(new THREE.Vector3());
+    const c = bb.getCenter(new THREE.Vector3());
+    const robe = new THREE.MeshStandardMaterial({ color: ROBE, roughness: 0.95 });
+    const belt = new THREE.MeshStandardMaterial({ color: ROBE_BELT, roughness: 0.8 });
+    const blanket = new THREE.Mesh(new THREE.BoxGeometry(size.x * 1.08, size.y * 0.32, size.z * 0.5), robe);
+    blanket.position.set(c.x, c.y + size.y * 0.05, c.z + size.z * 0.12);
+    blanket.castShadow = true;
+    orig.body.add(blanket);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(size.x * 1.12, size.y * 0.06, size.z * 0.1), belt);
+    band.position.set(c.x, c.y + size.y * 0.05, c.z + size.z * 0.12);
+    orig.body.add(band);
+    return orig;
+  }
+  const b = biped({
+    skin: orig.skin,
+    top: ROBE,
+    sleeve: ROBE,
+    legs: orig.skin,
+    shoes: 0xffffff, // slippers
+    hips: ROBE,
+    headR: orig.headR,
+  });
+  const k = b.kit;
+  k.put(b.body, k.cyl(0.215, 0.27, 0.6), ROBE, [0, 1.06, 0]); // fluffy body
+  k.put(b.body, k.cyl(0.27, 0.34, 0.5), ROBE, [0, 0.52, 0]); // long robe to the knees
+  k.put(b.body, k.cyl(0.262, 0.262, 0.07), ROBE_BELT, [0, 0.9, 0]); // belt
+  k.put(b.body, k.box(0.09, 0.07, 0.06), ROBE_BELT, [0.1, 0.84, -0.27]); // belt knot
+  for (const side of [-1, 1]) k.put(b.body, k.box(0.07, 0.4, 0.04), 0xffdeeb, [side * 0.07, 1.16, -0.23], [0, 0, side * 0.35]); // lapels
+  k.put(b.body, k.torus(0.16, 0.06), ROBE, [0, 1.37, 0], [Math.PI / 2, 0, 0]); // soft collar
+  k.put(b.body, k.box(0.12, 0.1, 0.03), 0xffdeeb, [-0.13, 0.62, -0.32]); // pocket
+  b.body.remove(b.head);
+  const head = orig.head;
+  head.removeFromParent();
+  head.position.copy(b.head.position);
+  b.body.add(head);
+  b.head = head;
+  stripHeadGear(head); // no space helmet / knight helmet with a bathrobe
   return b;
 }

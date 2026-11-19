@@ -20,10 +20,10 @@ import {
 } from './places';
 import { PERSON_BODY_HALF, PERSON_CLEAR, type Interactable, type Obstacle } from './world';
 
-/** Seconds before he asks again after a “não” (no spam). */
-const COOLDOWN_NO = 90;
-/** Seconds before he asks again after a successful photo. */
-const COOLDOWN_YES = 150;
+/** Seconds before he asks again after a “não” / “já chega” (no spam when she walks past again). */
+const COOLDOWN_NO = 15;
+/** Each photo costs 1 coin; she can take as many as she likes in a row (Telmo, 2026-11-19). */
+const PHOTO_PRICE = 1;
 
 /**
  * Street photographer: recognisable mesh (hat + camera on a strap), asks permission,
@@ -135,42 +135,51 @@ export class Photographer {
     if (this.busy || !this.folk) return;
     if (performance.now() < this.coolUntil) {
       this.waveT = 1.2;
-      this.ctx.say(['Olá outra vez!', 'Daqui a pouco tiro-te outra foto.']);
       return;
     }
     if (this.ctx.isPaused() || this.ctx.isDriving()) return;
 
     this.busy = true;
     this.folk.head.rotation.y = 0;
-    const choice = await this.ctx.choose('Posso tirar-te uma foto?', ['Sim!', 'Não, obrigada']);
-    if (choice === null) {
-      this.busy = false;
-      return;
-    }
-
-    if (choice !== 0) {
-      this.waveT = 1.4;
-      this.ctx.say(['Está bem!', 'Quando quiseres, eu estou aqui.']);
-      this.coolUntil = performance.now() + COOLDOWN_NO * 1000;
-      this.busy = false;
-      return;
-    }
-
-    this.ctx.hold(true);
+    let first = true;
     try {
-      this.ctx.say(['Olha para mim… um, dois…']);
-      this.armLift = 1.1;
-      await wait(900);
-      shutterSound();
-      this.ctx.flash();
-      const url = snapPortrait(this.hero.root);
-      await wait(280);
-      if (url) await this.ctx.showPhoto(url);
-      this.waveT = 1.6;
-      this.ctx.say(['Que foto tão linda!', 'Gostei muito.']);
-      this.coolUntil = performance.now() + COOLDOWN_YES * 1000;
+      // as many photos as she wants, one coin each
+      for (;;) {
+        const choice = await this.ctx.choose(first ? 'Queres uma foto? Custa uma moeda.' : 'Tiramos mais uma? Custa uma moeda.', [
+          first ? 'Sim!' : 'Mais uma!',
+          first ? 'Não, obrigada' : 'Já chega',
+        ]);
+        if (choice !== 0) {
+          this.waveT = 1.4;
+          this.ctx.say([first ? 'Está bem! Quando quiseres, eu estou aqui.' : 'Gostei muito! Adeus!']);
+          this.coolUntil = performance.now() + COOLDOWN_NO * 1000;
+          return;
+        }
+        if (this.ctx.coins() < PHOTO_PRICE) {
+          this.waveT = 1.2;
+          this.ctx.say(['Cada foto custa uma moeda. Volta quando tiveres!']);
+          this.coolUntil = performance.now() + COOLDOWN_NO * 1000;
+          return;
+        }
+        this.ctx.addCoins(-PHOTO_PRICE);
+        first = false;
+        this.ctx.hold(true);
+        try {
+          this.ctx.say(['Olha para mim… um, dois…']);
+          this.armLift = 1.1;
+          await wait(900);
+          shutterSound();
+          this.ctx.flash();
+          const url = snapPortrait(this.hero.root);
+          await wait(280);
+          if (url) await this.ctx.showPhoto(url);
+          this.waveT = 1.0;
+        } finally {
+          this.ctx.hold(false);
+        }
+        if (!this.folk) return; // city changed while the photo was open
+      }
     } finally {
-      this.ctx.hold(false);
       this.busy = false;
     }
   }

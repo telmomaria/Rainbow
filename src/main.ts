@@ -48,6 +48,7 @@ import { Fair } from './fair';
 import { Extras } from './extras';
 import { feel } from './bus';
 import { createPlaygrounds } from './play';
+import { buildPlayground } from './playground';
 import { createServices, type ServiceTown } from './services';
 import { createLandmarks, landmarksDebug } from './landmarks';
 import { setCityLampClearer } from './places';
@@ -667,10 +668,13 @@ function addCityExtras(): Car {
       giveCoin: () => addCoins(-1),
     }),
   );
+  // the big fenced playground first (it needs the most room), then the small props around the city
+  const park = buildPlayground(scene, world.obstacles, mulberry32(city.seed * 89 + 7), gameCtx, world);
+  if (park) world.interactables.push(...park);
   // playground props (swing, fountain, xylophone, cat, dog...) — placed after venues so they avoid walls
   world.interactables.push(...createProps(scene, world.obstacles, mulberry32(city.seed * 97 + 1)));
   // Fase 3: escorrega, balancé, macaca, bolas de sabão, piano, banco, baliza…
-  world.interactables.push(...createPlaygrounds(scene, world.obstacles, city.seed, gameCtx, world));
+  world.interactables.push(...createPlaygrounds(scene, world.obstacles, city.seed, gameCtx, !!park));
   // I63 real butterflies (fly / perch / flee) — Roma onward; park garden with clearArea
   butterflies = new Butterflies(scene, world.obstacles, world, city.seed, save.level);
   // I58 rabbit (real hop/wander) — only Vilnius; clearArea at spawn; never on the road
@@ -724,6 +728,7 @@ function addCityExtras(): Car {
     house.interior && padZone(house.interior, 4),
     fair.interior && padZone(fair.interior),
     trouble.clearance,
+    ...(services?.zones() ?? []), // walk-in try-on shops (tryon.ts)
   ].filter((z): z is Obstacle => !!z);
   setNoSpawnZones(venueZones);
   // Keep venue footprints in obstacles while landmarks pick plots (soft pads were only temporary earlier).
@@ -1230,15 +1235,20 @@ function addCoins(n: number): void {
 }
 
 async function meet(npc: QuestionNpc): Promise<void> {
-  // Never stand inside the question-giver: push out before freezing for the question.
-  keepAway(npc.group.position.x, npc.group.position.z, PERSON_CLEAR);
   paused = true;
   clearTarget();
   input.releaseAll();
-  // face each other
-  const dx = npc.group.position.x - player.position.x;
-  const dz = npc.group.position.z - player.position.z;
-  player.heading = Math.atan2(-dx, -dz);
+  if (scooting) {
+    // on the scooter: just stop (she stays on it, facing where she rides; no shove off the deck)
+    scooting.speed = 0;
+  } else {
+    // Never stand inside the question-giver: push out before freezing for the question.
+    keepAway(npc.group.position.x, npc.group.position.z, PERSON_CLEAR);
+    // face each other
+    const dx = npc.group.position.x - player.position.x;
+    const dz = npc.group.position.z - player.position.z;
+    player.heading = Math.atan2(-dx, -dz);
+  }
   const id = npc.question.id;
   save.retryAt[id] = Date.now() + RETRY_DELAY_MS; // set now: reloading mid-question can't give an instant retry
   writeSave(save);
@@ -1805,7 +1815,7 @@ function tick(time: number): void {
 
   // --- question characters ---
   const met = npcs.update(dt, player.position, paused || onBus());
-  if (met && !paused && !driving && !scooting && !onBus()) void meet(met);
+  if (met && !paused && !driving && !onBus()) void meet(met); // also on the scooter (Telmo, 2026-11-19)
   wanderCat.update(dt, player.position, paused);
   butterflies.update(dt, player.position, paused);
   rabbit.update(dt, player.position, paused);
@@ -1839,14 +1849,15 @@ function tick(time: number): void {
     if (flight.done) endFlight();
   } else {
   const target = player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
-  const wanted = driving || scooting || onBus() ? Math.max(camDist, 12) : camDist;
+  // on a ride (fair, playground, swing…) keep a wide shot: no zoom-in (Telmo, 2026-11-19)
+  const wanted = driving || scooting || onBus() ? Math.max(camDist, 12) : riding ? Math.max(camDist, 10) : camDist;
   // don't let the camera end up inside a building: walk out from her towards the camera and stop before a wall
   // inside the house the roof is hidden; camera stays normal (third-person), walls don't block while she's indoors
   const pitch = camPitch;
   const dir = new THREE.Vector3(Math.sin(camYaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(camYaw) * Math.cos(pitch));
   let dist = wanted;
   const indoors = house.isInside();
-  for (let d = 1.2; d <= wanted; d += 0.4) {
+  for (let d = 1.2; !riding && d <= wanted; d += 0.4) {
     const px = target.x + dir.x * d;
     const pz = target.z + dir.z * d;
     const py = target.y + dir.y * d;
