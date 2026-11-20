@@ -107,3 +107,13 @@
 - `.tmp/`: dezenas de `qa-*-landmarks/paris/roma/...` png + mjs — debug, gitignored, nada a promover.
 - Passos 3 e 8: N/A (sem LINEAGE).
 - Capacity: alta (muitas ondas de polish visual + subagentes).
+
+## 2026-11-19/20 — #SEP (Lua, perguntas, parque, lojas, SPA, feira; WIP por testar)
+
+- **Commits em main = origin/main:** `ca1913c` (polish ex-líbris), `192551c` (Lua + 227 perguntas), `52ab1b0` (parque, lojas, massagem, SPA, feira, fotógrafo, bandeiras, trotinete), `cd46b39` (WIP: carta, macaca, borboletas, folk, padaria, muralha, Moscovo, estádio/moedas).
+- **Decisões do Telmo:** joias para acabar = as trazidas + 10; área a dobrar ignorada; ex-líbris das cidades vazias "depois"; fim = máquina do tempo enterrada na Lua → Rainbow 2; energia na Lua só na nave; cometa a cada 5 min (1 min caída); visitantes da feira 0–12; fotos 1 moeda, quantas quiser.
+- **Bugs encontrados e corrigidos:** altar da Lua impossível de tocar (raio 5 < vedação 5,5); escorrega do parque ao contrário (`rotation.x` −0,5→+0,5); braços da trotinete para trás (+X = para a frente, como as pernas ao sentar) e presos depois de sair; perguntas ignoradas de trotinete (`!scooting`); todas as bandeiras usavam o desenho da portuguesa; reload com a personagem caída bloqueava (TDZ ao chamar `knockDown` no arranque); falas importantes perdidas (`say` não interrompe → `speak`).
+- **Não funcionou / lições:** (1) no patchright, `window.*` da página não se lê no `evaluate` — usar `document.body.dataset`; perdi tempo a achar que o parque não existia; (2) recintos grandes têm de ser colocados antes dos adereços espalhados, senão não há espaço (o parque só coube assim + `clearArea`); (3) 7 agentes em paralelo esgotaram o limite mensal da API e pararam todos a meio — o trabalho ficou nos ficheiros, sem testes. Lançar menos de cada vez quando o crédito é incerto.
+- **Por testar:** tudo o que está no commit `cd46b39` (ver CONTEXT). Som e fps em tablet nunca validados.
+- `.tmp/`: só capturas/scripts de QA, zero `.md` a promover. Passos 3 e 8 N/A (sem LINEAGE).
+- Capacity: muito alta (muitas ondas + 10 subagentes); fecho a pedido do Telmo.

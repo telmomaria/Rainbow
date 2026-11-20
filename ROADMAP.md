@@ -12,11 +12,11 @@ Aplicar no Session End Protocol.
 
 | # | Action | Owner | Blocker |
 |---|---|---|---|
-| 1 | ✅ Commit do polish 2026-11-17 (`ca1913c`) | — | — |
-| 2 | Decidir ex-líbris (ou deixar vazio) para Madrid · Vilnius · Moscovo · Cidade do México · Reiquiavique · Nuuk | Telmo | none |
-| 3 | ✅ Lua: máquina do tempo (fim → Rainbow 2), cápsula de comida na nave, cometas a cada 5 min (2026-11-19). Falta: o Telmo jogar e validar | Telmo | none |
-| 4 | Alinhar ROADMAP/CLAUDE com o código (EUA→Lua, serviços, energia/… já feitos vs ⬜ stale) | agent | none |
-| 5 | Telmo joga com som; medir fps em tablet; afinar chapéus/capa/arco | Telmo + agent | none |
+| 1 | Terminar e testar o WIP de `cd46b39`: carta/lixo/caixa de correio · macaca + borboletas · avião de papel/ponte/penso/sopa · padaria + Muralha · Moscovo (baú + basílica) · estádio + moedas fora | agent | crédito da API |
+| 2 | Telmo joga Lua, lojas (provador), SPA, parque e feira com som; lista o que afinar | Telmo | none |
+| 3 | Ex-líbris para Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk | Telmo decide | "depois" |
+| 4 | Medir fps num tablet médio (espelhos, visitantes, parque) | Telmo + agent | tablet |
+| 5 | Alinhar o ROADMAP com o código (brief 2026-11-15 com ⬜ já feitos) | agent | none |
 
 ---
 
@@ -75,7 +75,10 @@ Aplicar no Session End Protocol.
 - ✅ Página principal acessível em jogo (também no hospital), ⚙ Definições com Zero/Fácil/Médio/Difícil, Novo jogo com confirmação (2026-11-12)
 - ✅ Perguntas lidas devagar (0,75), pernas para a frente ao sentar, som da chuva nas Definições (Sem som/Médio/Normal), aterragem vista do lado de lá da pista, gato a passear, ninguém parado na rua (2026-11-15)
 - ✅ Serviços cobertos + salão `replacesHair` + atrações por cidade + folk fracos removidos (`d10eb65`, 2026-11-17)
-- 🔄 Ex-líbris polish 2026-11-17 (por commitar): Londres/Paris/Pequim/Roma/Cultura/Rio/Estátua/Hotel das Fontes; obeliscos+Nuuk trenó removidos
+- ✅ Ex-líbris polish (`ca1913c`, 2026-11-19)
+- ✅ Lua: máquina do tempo → Rainbow 2, joias +10, cápsula na nave, cometas; 227 perguntas (`192551c`, 2026-11-19)
+- ✅ Parque infantil, lojas com provador, massagem, SPA, feira 0–12 visitantes, fotógrafo, bandeiras reais, trotinete (`52ab1b0`, 2026-11-19)
+- 🔄 WIP por testar (`cd46b39`, 2026-11-20): carta, macaca, borboletas, folk, padaria, muralha, Moscovo, estádio/moedas; página inicial ✅
 
 ---
 
@@ -92,6 +95,7 @@ Aplicar no Session End Protocol.
 | v1.6 | 2026-11-11 | Aeroporto e voo, ícone, Casa, 10 personagens, carro, pobre, 12 adereços |
 | v1.7 | 2026-11-11 | Cidade viva: lojas, pombos, adeptos, bar, trânsito, hospital, tempo real, gato na árvore; ecrã inicial e definições |
 | v1.8 | 2026-11-11 | Compra por clique, inventário, definições no início, dia/noite real com candeeiros |
+| v2.6 | 2026-11-20 | #SEP: Lua (máquina do tempo), 227 perguntas, parque, lojas com provador, SPA, feira, bandeiras; WIP interrompido pelo limite da API |
 | v2.5 | 2026-11-17 | #SEP: polish ex-líbris (Londres/Paris/Pequim/Roma/Cultura/Rio/Estátua); Hotel das Fontes; obeliscos removidos; salão `replacesHair` já em `d10eb65` |
 | v2.4 | 2026-11-15 | Final do jogo definido pelo Telmo: EUA (Cabo Canaveral) → Lua → entregar os diamantes; propostas US/LUA/FIM no canvas |
 | v2.3 | 2026-11-15 | Brief didático do Telmo: sem mapas reais; 6 correções feitas; propostas (90/30/50, joias, ex-líbris, regras) à espera de aprovação |

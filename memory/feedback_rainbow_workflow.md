@@ -25,3 +25,10 @@ Para pedidos grandes com #SUB (ex.: feira com 15 diversões), o que resultou: o 
 corrige os problemas de contrato que eles reportam. Zero conflitos com 3 agentes em paralelo.
 
 O commit das sessões 2 e 3 já está em `main` e em `origin/main`: `68e30da` (2026-11-14). O SESSION_LOG desse dia foi escrito antes do commit e diz "ainda sem commit"; a entrada de 2026-11-15 corrige isso. No fecho, confirmar com `git rev-parse HEAD` e `git rev-parse origin/main`, não só com o log.
+
+Sessão 2026-11-19/20: o Telmo manda listas de 5–10 queixas de uma vez (muitas vezes "X não faz nada" ou "X está mal") e
+quer que cada interação faça algo visível e com sentido — senão retirar. Lançar 1 agente por grupo de ficheiros resultou,
+mas **7 agentes em paralelo esgotaram o limite mensal da API** e pararam todos a meio, sem testes (commit `cd46b39` WIP).
+**How to apply:** com crédito incerto, no máximo 3–4 agentes de cada vez; pedir-lhes que façam primeiro a correção e o
+`tsc`, e só depois as capturas, para o trabalho ficar utilizável se pararem. Ele pediu commit+push mesmo com WIP: marcar
+a mensagem como `wip:` e dizer o que não foi testado.

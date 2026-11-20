@@ -9,9 +9,7 @@ de cidade em cidade. Ver [CONTEXT.md](CONTEXT.md) e [ROADMAP.md](ROADMAP.md).
 - **Mapa:** mundo **gerado** por cidade (grelha de ruas + edifícios low-poly), como está. **Sem mapas reais** (nem
   OpenStreetMap nem Google 3D Tiles): seriam demasiado grandes para as crianças. (Decisão do Telmo a 2026-11-15, que
   substitui a de 2026-11-11.) Cada cidade distingue-se pelos seus ex-líbris e pelo que lá se pode fazer; as cidades não
-  devem ser iguais nem ter todas as mesmas coisas; o último nível terá o dobro da área (pedido para Nuuk antes de a Lua
-  passar a ser o último; por confirmar se passa para a Lua). (Ex-líbris, cidades diferentes e área a dobrar ainda por
-  fazer — ver ROADMAP.)
+  devem ser iguais nem ter todas as mesmas coisas. Área a dobrar: abandonada (Telmo, 2026-11-19). (Ex-líbris de algumas cidades ainda por fazer — ver ROADMAP.)
 - **Voz:** Web Speech API (`speechSynthesis`, voz `pt-PT`). Fallback a definir se a voz pt-PT faltar no dispositivo.
 - **Persistência:** `localStorage` (progresso, moedas, roupa, posição). Sem contas, sem dados pessoais. Sem morada de início.
 
@@ -43,7 +41,7 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   poder ser apanhada. Nunca "morte" violenta — tom infantil. Ficam parados durante perguntas e viagens.
 - **Viagem:** 100 moedas → aviso falado + bússola ✈️ → ir ao aeroporto → tocar nas escadas do avião → cena animada
   (sobe, porta fecha, descola, nuvens, aterra na cidade seguinte, sai). Gastam-se 100 moedas, o resto passa. Sem
-  moedas, o avião diz quantas faltam. Troca de cidade sem recarregar a página. Última cidade (Nuuk) → ecrã final.
+  moedas, o avião diz quantas faltam. Troca de cidade sem recarregar a página. Depois de Nuuk: EUA (foguetão em Cabo Canaveral) → Lua → máquina do tempo → ecrã final "Rainbow 2".
 - **Personagens (src/characters.ts):** Lia (princesa) · Estrela (unicórnio) · Bia, Nina, Inês (cantoras K-pop) ·
   Zuca (extraterrestre) · Leonor (guerreira) · Rita (voleibolista) · Clara (bailarina) · Tomás (karateca) ·
   Vega (astronauta, sem logótipos de agências) · Alice (País das Maravilhas — livro de 1865 / cores de Tenniel 1890,

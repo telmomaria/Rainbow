@@ -18,3 +18,7 @@ Rainbow fica registado aqui e em `docs/diary/` até haver um 2.º volume. Ver [[
 
 Decisões 2026-11-15/17: mundo gerado (sem OSM); final Nuuk → EUA → Lua (altar + joias); arranque/morada cancelada;
 hotel EUA = **Hotel das Fontes** (inspirado Bellagio, sem marca); Parque Arco-Íris = castelo de contos (não Disney).
+
+Decisões 2026-11-19: o fim é uma **máquina do tempo** enterrada na Lua que leva a personagem para o **"Rainbow 2"** (há
+intenção de uma sequela); joias para acabar = as trazidas + 10; área a dobrar abandonada; ex-líbris das cidades vazias
+ficam para depois.
