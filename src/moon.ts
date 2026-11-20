@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mat } from './places';
 import type { Obstacle, World } from './world';
+import { setPlayArea } from './spawn';
 
 /** Half-extent of the walkable Moon (m). */
 export const MOON_HALF = 90;
@@ -506,6 +507,7 @@ export function createMoonWorld(scene: THREE.Scene, city: import('./cities').Cit
   scatterRocks(scene, obstacles);
 
   const e = MOON_HALF;
+  setPlayArea(MOON_HALF); // nothing spawns behind the border wall below (spawn.ts inPlayArea)
   obstacles.push({ minX: -e - 20, maxX: -e, minZ: -e - 20, maxZ: e + 20 });
   obstacles.push({ minX: e, maxX: e + 20, minZ: -e - 20, maxZ: e + 20 });
   obstacles.push({ minX: -e - 20, maxX: e + 20, minZ: -e - 20, maxZ: -e });

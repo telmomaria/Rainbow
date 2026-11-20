@@ -230,6 +230,7 @@ const gameCtx: GameCtx = {
   coins: () => save.coins,
   addCoins: (n) => addCoins(n),
   hurt: (from, cost) => hurt(from, cost),
+  sinceHurt: () => (performance.now() - lastHurtAt) / 1000,
   // A shop handing over an item = it goes into the bag (and into her hand). null = the item in her hand was used up.
   setCarried(item, kind) {
     if (item && kind) {
@@ -428,9 +429,12 @@ function updateEating(dt: number): void {
   }
 }
 
+/** performance.now() of the last hurt() (folk nurse: gameCtx.sinceHurt). */
+let lastHurtAt = -Infinity;
 /** Knock her away from `from`, flash, lose `cost` coins. False if she can't be hurt right now. */
 function hurt(from: THREE.Vector3, cost: number): boolean {
   if (paused || driving || scooting || flight || onBus() || invulnerable > 0) return false;
+  lastHurtAt = performance.now();
   const lost = Math.min(cost, save.coins);
   if (lost > 0) addCoins(-lost);
   sfx.bonk();

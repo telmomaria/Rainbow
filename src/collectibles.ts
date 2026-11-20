@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { inNoSpawn, isFree, randomFreeSpot } from './spawn';
+import { inNoSpawn, inPlayArea, isFree, playAreaHalf, randomFreeSpot } from './spawn';
 import { SPAWN, type Obstacle } from './world';
 
 export const COIN_VALUE = 1;
@@ -11,6 +11,17 @@ const PICKUP_RADIUS = 1.1;
 const TARGET_COINS = 36;
 const TRAIL = 3; // coins are laid out in short trails, easy to follow and satisfying to collect
 const TARGET_JEWELS = 3;
+const ITEM_R = 0.6;
+/** `?debug`: publish how many coins/jewels lie outside the play area on <body data-coins-outside>. */
+const DEBUG = new URLSearchParams(location.search).has('debug');
+/** QA (?debug): the live Collectibles, for the `rainbow-coins-stress` event (n respawn rounds around x, z). */
+let live: Collectibles | null = null;
+if (DEBUG) {
+  window.addEventListener('rainbow-coins-stress', (e) => {
+    const d = (e as CustomEvent<{ x: number; z: number; n?: number; jewels?: boolean }>).detail;
+    live?.debugStress(d.x, d.z, d.n ?? 20, !!d.jewels);
+  });
+}
 
 interface Item {
   mesh: THREE.Mesh;
@@ -67,24 +78,79 @@ export class Collectibles {
     for (let i = 0; i < TRAIL; i++) this.place('coin', new THREE.Vector3(SPAWN.x + 4 + i * 2, 0, SPAWN.z));
     for (let i = 1; i < TARGET_COINS / TRAIL; i++) this.spawnTrail();
     for (let i = 0; i < TARGET_JEWELS; i++) this.spawn('jewel');
+    live = this;
   }
 
-  /** A short straight line of coins starting at a free spot (stops early at walls). */
-  private spawnTrail(avoid?: THREE.Vector3): void {
-    const start = randomFreeSpot(this.obstacles, { radius: 0.8, avoid, minDist: avoid ? 25 : 8, center: avoid, range: avoid ? 70 : 110 });
-    const a = Math.random() * Math.PI * 2;
-    for (let i = 0; i < TRAIL; i++) {
-      const p = start.clone().add(new THREE.Vector3(Math.cos(a) * i * 2, 0, Math.sin(a) * i * 2));
-      if (!isFree(p.x, p.z, 0.6, this.obstacles) || inNoSpawn(p.x, p.z, 0.6)) break;
-      this.place(Math.random() < NOTE_CHANCE ? 'note' : 'coin', p);
+  /** QA: run `n` respawn rounds as if she stood at (x, z) — trails (and jewels) appear around that spot. */
+  debugStress(x: number, z: number, n: number, jewels: boolean): void {
+    const at = new THREE.Vector3(x, 0, z);
+    for (let i = 0; i < n; i++) {
+      this.spawnTrail(at);
+      if (jewels) this.spawn('jewel', at);
     }
+    document.body.dataset.coinsOutside = JSON.stringify(this.outsideStats());
+  }
+
+  /** Fair spot for a coin: inside the play area (≥3 m from its border), not in a building or a no-spawn venue. */
+  private ok(x: number, z: number): boolean {
+    return inPlayArea(x, z, ITEM_R) && isFree(x, z, ITEM_R, this.obstacles) && !inNoSpawn(x, z, ITEM_R);
+  }
+
+  /**
+   * A short straight line of coins starting at a free spot. Every coin of the trail is checked (not only the
+   * first); the trail is laid in whichever direction fits all 3, else it stops early at walls / the border.
+   */
+  private spawnTrail(avoid?: THREE.Vector3): void {
+    const minDist = avoid ? 25 : 8;
+    const start = randomFreeSpot(this.obstacles, { radius: 0.8, avoid, minDist, center: avoid, range: avoid ? 70 : 110 });
+    // randomFreeSpot falls back to its centre (= her feet) when it finds nothing: then just try again in 2 s
+    if (!this.ok(start.x, start.z) || (avoid && Math.hypot(start.x - avoid.x, start.z - avoid.z) < minDist)) return;
+    const a0 = Math.random() * Math.PI * 2;
+    let best: THREE.Vector3[] = [];
+    for (let k = 0; k < 6 && best.length < TRAIL; k++) {
+      const a = a0 + (k * Math.PI) / 3;
+      const pts: THREE.Vector3[] = [];
+      for (let i = 0; i < TRAIL; i++) {
+        const p = start.clone().add(new THREE.Vector3(Math.cos(a) * i * 2, 0, Math.sin(a) * i * 2));
+        if (!this.ok(p.x, p.z)) break;
+        pts.push(p);
+      }
+      if (pts.length > best.length) best = pts;
+    }
+    for (const p of best) this.place(Math.random() < NOTE_CHANCE ? 'note' : 'coin', p);
   }
 
   private spawn(kind: Item['kind'], avoid?: THREE.Vector3): void {
-    this.place(kind, randomFreeSpot(this.obstacles, { radius: 0.8, avoid, minDist: avoid ? 30 : 15, range: 110 }));
+    const minDist = avoid ? 30 : 15;
+    const p = randomFreeSpot(this.obstacles, { radius: 0.8, avoid, minDist, range: 110 });
+    if (!this.ok(p.x, p.z) || (avoid && Math.hypot(p.x - avoid.x, p.z - avoid.z) < minDist)) return; // retry later
+    this.place(kind, p);
+  }
+
+  /** QA (?debug): items lying outside the play area / inside a building or venue, now and ever placed. */
+  private placedOutside = 0;
+  private placedBlocked = 0;
+  private placedTotal = 0;
+  outsideStats(): { outside: number; blocked: number; lying: number; placedOutside: number; placedBlocked: number; placed: number; half: number } {
+    let outside = 0;
+    let blocked = 0;
+    let lying = 0;
+    for (const it of this.items) {
+      if (it.taken !== null) continue;
+      lying++;
+      const { x, z } = it.mesh.position;
+      if (!inPlayArea(x, z)) outside++;
+      else if (!isFree(x, z, 0.3, this.obstacles) || inNoSpawn(x, z)) blocked++;
+    }
+    return { outside, blocked, lying, placedOutside: this.placedOutside, placedBlocked: this.placedBlocked, placed: this.placedTotal, half: playAreaHalf() };
   }
 
   private place(kind: Item['kind'], p: THREE.Vector3): void {
+    if (DEBUG) {
+      this.placedTotal++;
+      if (!inPlayArea(p.x, p.z)) this.placedOutside++;
+      else if (!isFree(p.x, p.z, 0.3, this.obstacles) || inNoSpawn(p.x, p.z)) this.placedBlocked++;
+    }
     let mesh: THREE.Mesh;
     if (kind === 'coin') {
       mesh = new THREE.Mesh(this.coinGeo, this.coinMat);
@@ -153,6 +219,7 @@ export class Collectibles {
       const jewels = this.items.filter((i) => i.kind === 'jewel' && i.taken === null).length;
       if (coins <= TARGET_COINS - TRAIL) this.spawnTrail(player);
       if (jewels < TARGET_JEWELS && Math.random() < 0.1) this.spawn('jewel', player);
+      if (DEBUG) document.body.dataset.coinsOutside = JSON.stringify(this.outsideStats());
     }
     return { value, kinds };
   }

@@ -17,6 +17,8 @@ export interface GameCtx {
    * Returns false (and does nothing) if she can't be hurt right now (just hurt, driving, in a question, flying...).
    */
   hurt(from: THREE.Vector3, cost: number): boolean;
+  /** Seconds since she was last hurt (monster bump, comet, hurt()…); Infinity if not yet. (The nurse's plaster.) */
+  sinceHurt(): number;
   /** Something the character holds in her hand, shown in the world (null = empty hands). */
   setCarried(item: THREE.Object3D | null, kind?: string): void;
   carried(): string | null;

@@ -11,8 +11,8 @@ style.textContent = `
     animation: fadein .3s;
   }
   .select h1 { margin: 12px 0 10px; font: 900 40px/1.1 system-ui, sans-serif; color: #7c3aed; text-align: center; }
-  .select-grid { display: grid; grid-template-columns: repeat(6, minmax(100px, min(150px, 19vh))); gap: 12px; padding: 0 16px 14px; justify-content: center; }
-  @media (max-width: 1000px) { .select-grid { grid-template-columns: repeat(4, minmax(100px, min(150px, 17vh))); } }
+  .select-grid { display: grid; grid-template-columns: repeat(6, minmax(100px, min(150px, 18vh))); gap: 12px; padding: 0 16px 14px; justify-content: center; }
+  @media (max-width: 1000px) { .select-grid { grid-template-columns: repeat(4, minmax(100px, min(150px, 16vh))); } }
   @media (max-width: 760px) { .select-grid { grid-template-columns: repeat(3, minmax(90px, 150px)); } }
   .select-card {
     border: 0; border-radius: 22px; background: #fff; padding: 8px 8px 12px; cursor: pointer;
@@ -31,7 +31,8 @@ style.textContent = `
     font: 800 20px/1 system-ui, sans-serif; box-shadow: 0 4px 0 rgba(124,58,237,.18);
   }
   .select-diff.on { background: #7c3aed; color: #fff; }
-  .select-actions { display: flex; gap: 16px; justify-content: center; padding: 0 16px 24px; margin-top: 28px; }
+  .select-actions { display: flex; gap: 16px; justify-content: center; padding: 0 16px 24px; margin-top: clamp(60px, 10vh, 84px); }
+  @media (max-height: 600px) { .select-actions { margin-top: 36px; } }
   .select-go {
     border: 0; border-radius: 999px; padding: 16px 36px; cursor: pointer; color: #fff;
     font: 900 28px/1 system-ui, sans-serif; box-shadow: 0 6px 0 rgba(0,0,0,.15);

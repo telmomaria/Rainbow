@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { tone } from './audio';
+import { speak, tone } from './audio';
 import { feel } from './bus';
 import type { GameCtx } from './gamectx';
-import { parkSite, roadsideSite, siteBox, siteGroup, siteToWorld } from './places';
+import { parkSite, reserveGround, roadsideSite, siteBox, siteGroup, siteToWorld } from './places';
 import type { SwingSeat } from './props';
 import { mulberry32, onRoad, SPAWN, type Interactable, type Obstacle, type World } from './world';
 
@@ -332,10 +332,31 @@ function hopNumPlane(n: number): THREE.Mesh {
   return m;
 }
 
-/** I36 — Macaca: colourful numbered squares (classic 1–10). Solid colours + big numbers. */
+/** Arrow presses / taps (fresh, not key-repeat) — any of them stops a macaca run. */
+let hopStopAt = 0;
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => {
+    if (!e.repeat && e.key.startsWith('Arrow')) hopStopAt = performance.now();
+  });
+  window.addEventListener('pointerdown', () => {
+    hopStopAt = performance.now();
+  });
+}
+
+const HOP_WORDS = ['Um', 'Dois', 'Três', 'Quatro', 'Cinco', 'Seis', 'Sete', 'Oito', 'Nove', 'Dez'];
+
+/**
+ * I36 — Macaca: colourful numbered squares (classic 1–10, single/double, round "céu").
+ * Tap it (or Enter beside it, or just step onto square 1): she throws a pebble onto a square (2–9), then hops
+ * 1 → 10 counting aloud, skipping the pebble's square (one foot on singles, two feet on doubles), each landed number
+ * lights up; the céu ends it with a jingle and sparkles (+2 coins the first time in each city). Any arrow / tap stops it.
+ */
 function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number, ctx: GameCtx): Interactable | null {
   const site = roadsideSite(obstacles, rng, 1.6, 6.5, { minD: 18, maxD: 95, front: 6.5 });
   if (!site) return null;
+  // walkable chalk on the ground, not an obstacle — but nothing placed later (butterfly garden…) may come within 4 m
+  const area = siteBox(site, -1.3, 1.3, -5.6, 1.4);
+  reserveGround(obstacles, area, 4);
   const g = siteGroup(scene, site);
   g.userData.playHopscotch = true;
   // classic macaca: single, double, single… ending in a round “céu”
@@ -352,7 +373,10 @@ function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => nu
     { n: 9, x: 0.4, z: -4.15 },
     { n: 10, x: 0, z: -4.95, round: true },
   ];
+  /** What she lands on, in order: singles, doubles (two feet) and the céu. */
+  const LANDINGS = [[0], [1, 2], [3], [4, 5], [6], [7, 8], [9]];
   const cells: THREE.Mesh[] = [];
+  const rim = mat(0xffffff);
   for (const cell of layout) {
     const col = COLORS[cell.n - 1];
     const bodyMat = new THREE.MeshStandardMaterial({
@@ -371,13 +395,12 @@ function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => nu
     g.add(mesh);
     // white chalk rim
     if (!cell.round) {
-      const rim = mat(0xffffff);
       box(g, rim, 0.86, 0.02, 0.07, cell.x, 0.04, cell.z - 0.4);
       box(g, rim, 0.86, 0.02, 0.07, cell.x, 0.04, cell.z + 0.4);
       box(g, rim, 0.07, 0.02, 0.86, cell.x - 0.4, 0.04, cell.z);
       box(g, rim, 0.07, 0.02, 0.86, cell.x + 0.4, 0.04, cell.z);
     } else {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.03, 8, 24), mat(0xffffff));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.03, 8, 24), rim);
       ring.rotation.x = Math.PI / 2;
       ring.position.set(cell.x, 0.1, cell.z);
       g.add(ring);
@@ -387,44 +410,240 @@ function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => nu
     g.add(num);
     cells.push(mesh);
   }
-  let step = 0;
-  let cool = 0;
+
+  // the pebble (a flat grey stone) waits beside square 1 — the classic "malha"
+  const PEBBLE_REST = new THREE.Vector3(0.62, 0.07, 0.15);
+  const pebble = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), mat(0x868e96, { roughness: 0.9, flatShading: true }));
+  pebble.scale.set(1, 0.5, 0.85);
+  pebble.position.copy(PEBBLE_REST);
+  pebble.castShadow = true;
+  g.add(pebble);
+
+  // sparkles over the céu (hidden until she gets there)
+  const SPARK_COLS = [0xffe066, 0xff8cc6, 0x74c0fc, 0x8ce99a, 0xffffff];
+  const sparkGeo = new THREE.OctahedronGeometry(0.1, 0);
+  const sparks: { m: THREE.Mesh; v: THREE.Vector3 }[] = [];
+  for (let i = 0; i < 22; i++) {
+    const m = new THREE.Mesh(sparkGeo, new THREE.MeshBasicMaterial({ color: SPARK_COLS[i % SPARK_COLS.length] }));
+    m.visible = false;
+    g.add(m);
+    sparks.push({ m, v: new THREE.Vector3() });
+  }
+  let sparkT = -1;
+
+  const glow = cells.map(() => 0);
+  const WHITE = new THREE.Color(0xffffff);
+  const cellWorld = (i: number, y = 0): THREE.Vector3 => siteToWorld(site, layout[i].x, layout[i].z, y);
+  const sq1 = cellWorld(0);
   const stand = siteToWorld(site, 0, 0.5);
   g.userData.hopAt = [stand.x, stand.z];
+
+  type Phase = 'idle' | 'throw' | 'hop' | 'land' | 'cheer';
+  let phase: Phase = 'idle';
+  let t = 0;
+  let leg = 0; // index into LANDINGS
+  let pebbleCell = -1;
+  let startedAt = 0;
+  let armed = false; // stepping onto square 1 starts a game only after she has been away from it
+  const lit = new Set<number>();
+  const from = new THREE.Vector3();
+  const to = new THREE.Vector3();
+  const pebbleFrom = new THREE.Vector3();
+  const pebbleTo = new THREE.Vector3();
+  const lastSet = new THREE.Vector3();
+  let oneFoot = false;
+  const HOP = 0.48;
+  const LAND = 0.42;
+  const debug = new URLSearchParams(location.search).has('debug');
+  const report = (): void => {
+    if (!debug) return;
+    document.body.dataset.hop = JSON.stringify({
+      at: [+stand.x.toFixed(1), +stand.z.toFixed(1)],
+      box: [area.minX, area.maxX, area.minZ, area.maxZ].map((v) => +v.toFixed(1)),
+      phase,
+      leg,
+      pebble: pebbleCell + 1,
+      lit: [...lit].map((i) => i + 1),
+    });
+  };
+  report();
+
+  const landing = (k: number): number[] => LANDINGS[k].filter((i) => i !== pebbleCell);
+  const setPlayer = (p: THREE.Vector3): void => {
+    ctx.player.set(p.x, p.y, p.z);
+    lastSet.copy(p);
+  };
+
+  const finish = (): void => {
+    phase = 'idle';
+    armed = false;
+    ctx.player.y = 0;
+    ctx.walkAnim(0);
+    ctx.hold(false);
+    // the pebble flies back to its spot beside square 1
+    pebbleFrom.copy(pebble.position);
+    pebbleTo.copy(PEBBLE_REST);
+    t = 0;
+    report();
+  };
+
+  const stop = (): void => {
+    // stopped half-way: lights fade, she stays where she is
+    lit.clear();
+    tone(330, 0, 0.12, 'sine', 0.05);
+    finish();
+  };
+
+  const start = (): boolean => {
+    if (phase !== 'idle' || ctx.isPaused() || ctx.isDriving()) return false;
+    ctx.hold(true);
+    phase = 'throw';
+    t = 0;
+    leg = 0;
+    lit.clear();
+    startedAt = performance.now();
+    pebbleCell = 1 + Math.floor(Math.random() * 8); // squares 2–9
+    // from her hand to the square
+    const w = new THREE.Vector3(ctx.player.x, 1.0, ctx.player.z);
+    g.worldToLocal(w);
+    pebbleFrom.copy(w);
+    pebbleTo.set(layout[pebbleCell].x + 0.12, 0.13, layout[pebbleCell].z + 0.1);
+    lastSet.copy(ctx.player);
+    ctx.walkAnim(0, cellWorld(9).x, cellWorld(9).z); // look down the squares
+    report();
+    return true;
+  };
+
+  const beginHop = (): void => {
+    const cs = landing(leg);
+    to.set(0, 0, 0);
+    for (const i of cs) to.add(cellWorld(i));
+    to.multiplyScalar(1 / cs.length);
+    from.copy(ctx.player);
+    from.y = 0;
+    oneFoot = cs.length === 1 && cs[0] !== 9;
+    // singles: one foot (legs keep swinging); doubles and the céu: two feet together
+    ctx.walkAnim(oneFoot ? 2.4 : 0, to.x, to.z);
+    phase = 'hop';
+    t = 0;
+  };
+
   return {
     object: g,
     position: stand,
     radius: 3.2,
+    requiresClick: true,
+    interact() {
+      return start();
+    },
     update(dt) {
-      cool = Math.max(0, cool - dt);
+      // pebble flying home after a game
+      if (phase === 'idle' && pebble.position.distanceToSquared(PEBBLE_REST) > 1e-4) {
+        t = Math.min(1, t + dt / 0.6);
+        pebble.position.lerpVectors(pebbleFrom, pebbleTo, t);
+        pebble.position.y += Math.sin(t * Math.PI) * 0.8;
+        if (t >= 1) pebble.position.copy(PEBBLE_REST);
+      }
+      // sparkles
+      if (sparkT >= 0) {
+        sparkT += dt;
+        for (const s of sparks) {
+          s.v.y -= 3.5 * dt;
+          s.m.position.addScaledVector(s.v, dt);
+          s.m.rotation.y += dt * 6;
+          s.m.scale.setScalar(Math.max(0.01, 1 - sparkT / 1.6));
+          s.m.visible = sparkT < 1.6;
+        }
+        if (sparkT >= 1.6) sparkT = -1;
+      }
+      // landed squares glow (colour washed towards white) and pop up a touch
       cells.forEach((c, i) => {
-        (c.material as THREE.MeshStandardMaterial).emissiveIntensity = i < step ? 0.7 : i === step ? 0.35 : 0.15;
+        const m = c.material as THREE.MeshStandardMaterial;
+        glow[i] += ((lit.has(i) ? 1 : 0) - glow[i]) * Math.min(1, dt * 8);
+        m.emissive.copy(m.color).lerp(WHITE, glow[i] * 0.55);
+        m.emissiveIntensity = 0.15 + glow[i] * 0.75;
+        c.position.y = 0.05 + glow[i] * 0.03;
       });
-      if (cool > 0 || ctx.isPaused()) return;
-      const p = ctx.player;
-      for (let i = 0; i < cells.length; i++) {
-        const L = layout[i];
-        const w = siteToWorld(site, L.x, L.z);
-        if (Math.hypot(p.x - w.x, p.z - w.z) < 0.5) {
-          if (i === step) {
-            step++;
-            cool = 0.22;
-            tone(520 + step * 70, 0, 0.08, 'square', 0.05);
-            if (step >= cells.length) {
-              step = 0;
-              feel('play');
-              ctx.say(['Completaste a macaca!']);
+
+      if (phase === 'idle') {
+        if (ctx.isPaused() || ctx.isDriving()) return;
+        const d1 = Math.hypot(ctx.player.x - sq1.x, ctx.player.z - sq1.z);
+        if (d1 > 1.6) armed = true;
+        else if (armed && d1 < 0.45) start();
+        return;
+      }
+
+      // stopped by an arrow / a tap, or moved away by the game (Casa, new city…)
+      if (hopStopAt > startedAt + 350 || Math.hypot(ctx.player.x - lastSet.x, ctx.player.z - lastSet.z) > 1) {
+        stop();
+        return;
+      }
+
+      t += dt;
+      if (phase === 'throw') {
+        const k = Math.min(1, t / 0.75);
+        pebble.position.lerpVectors(pebbleFrom, pebbleTo, k);
+        pebble.position.y += Math.sin(k * Math.PI) * 1.1;
+        if (k >= 1) {
+          tone(180, 0, 0.06, 'square', 0.05); // clack on the ground
+          if (t > 1.05) beginHop();
+        }
+      } else if (phase === 'hop') {
+        const k = Math.min(1, t / HOP);
+        const p = from.clone().lerp(to, k);
+        p.y = Math.sin(k * Math.PI) * (leg === LANDINGS.length - 1 ? 0.5 : 0.38);
+        setPlayer(p);
+        if (k >= 1) {
+          to.y = 0;
+          setPlayer(to);
+          const cs = landing(leg);
+          for (const i of cs) lit.add(i);
+          ctx.walkAnim(0, cellWorld(9).x, cellWorld(9).z);
+          const top = cs[cs.length - 1];
+          tone(392 + top * 55, 0, 0.1, 'triangle', 0.07);
+          if (top === 9) {
+            void speak(['Dez! Céu!']);
+            phase = 'cheer';
+            t = 0;
+            sparkT = 0;
+            const c = layout[9];
+            for (const s of sparks) {
+              s.m.position.set(c.x, 0.9, c.z);
+              const a = Math.random() * Math.PI * 2;
+              s.v.set(Math.cos(a) * (0.6 + Math.random()), 2 + Math.random() * 1.8, Math.sin(a) * (0.6 + Math.random()));
+              s.m.visible = true;
+            }
+            [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.13, i === 3 ? 0.4 : 0.15, 'triangle', 0.08));
+            feel('play');
+            const key = `macaca:${ctx.city()}`;
+            if (ctx.flag(key) === 0) {
+              ctx.setFlag(key, 1);
               ctx.addCoins(2);
             }
-          } else if (i > step) {
-            step = 0;
-            tone(200, 0, 0.1, 'sine', 0.05);
+          } else {
+            void speak([cs.map((i) => HOP_WORDS[i]).join(', ') + '!']);
+            phase = 'land';
+            t = 0;
           }
-          break;
+          report();
+        }
+      } else if (phase === 'land') {
+        if (t >= LAND) {
+          leg++;
+          beginHop();
+        }
+      } else if (phase === 'cheer') {
+        // two happy little jumps in the céu
+        const k = t / 0.45;
+        const p = to.clone();
+        p.y = k < 2 ? Math.abs(Math.sin(k * Math.PI)) * 0.3 : 0;
+        setPlayer(p);
+        if (t >= 1.8) {
+          lit.clear();
+          finish();
         }
       }
     },
-    interact() {},
   };
 }
 

@@ -11,6 +11,25 @@ export function isFree(x: number, z: number, r: number, obstacles: Obstacle[]): 
   return true;
 }
 
+/**
+ * Walkable square of the current level: |x|, |z| ≤ half (cities: the ground/road grid, the Moon: ±MOON_HALF,
+ * where its grey border wall stands). Set by createWorld / createMoonWorld. Nothing is spawned closer than
+ * EDGE_MARGIN to it — before 2026-11-19 coins appeared behind the Moon's wall / off the city ground.
+ */
+let playHalf = 140;
+const EDGE_MARGIN = 3;
+export function setPlayArea(half: number): void {
+  playHalf = half;
+}
+export function playAreaHalf(): number {
+  return playHalf;
+}
+/** True if (x, z) is inside the walkable square, at least EDGE_MARGIN + r away from its border. */
+export function inPlayArea(x: number, z: number, r = 0): boolean {
+  const lim = playHalf - EDGE_MARGIN - r;
+  return Math.abs(x) <= lim && Math.abs(z) <= lim;
+}
+
 /** Areas where nothing may be spawned (e.g. inside the concert venue, which needs a ticket). Set per city. */
 const noSpawn: Obstacle[] = [];
 export function setNoSpawnZones(zones: Obstacle[]): void {
@@ -23,7 +42,7 @@ export function inNoSpawn(x: number, z: number, r = 0): boolean {
 }
 
 /**
- * Random free spot inside a square of half-size `range` around `center`,
+ * Random free spot inside a square of half-size `range` around `center` (always inside the play area),
  * at least `minDist` away from `avoid` (usually the player).
  */
 export function randomFreeSpot(
@@ -34,7 +53,7 @@ export function randomFreeSpot(
   for (let tries = 0; tries < 200; tries++) {
     const x = center.x + (Math.random() * 2 - 1) * range;
     const z = center.z + (Math.random() * 2 - 1) * range;
-    if (!isFree(x, z, radius, obstacles) || inNoSpawn(x, z, radius)) continue;
+    if (!inPlayArea(x, z, radius) || !isFree(x, z, radius, obstacles) || inNoSpawn(x, z, radius)) continue;
     if (avoid && Math.hypot(x - avoid.x, z - avoid.z) < minDist) continue;
     return new THREE.Vector3(x, 0, z);
   }

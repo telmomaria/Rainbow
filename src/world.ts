@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { City } from './cities';
 import { AIRPORT_ZONE } from './airport';
+import { setPlayArea } from './spawn';
 
 /** Axis-aligned obstacle on the XZ plane (used for simple circle-vs-box collision). */
 export interface Obstacle {
@@ -102,6 +103,8 @@ export interface World {
 export function createWorld(scene: THREE.Scene, city: City): World {
   scene.background = new THREE.Color(city.sky);
   scene.fog = new THREE.Fog(city.sky, 60, 160);
+  // coins / creatures / people spawn only well inside the 300 m ground (see spawn.ts inPlayArea)
+  setPlayArea(ROADS.extent - 10);
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x7fbf6a, 1.6);
   scene.add(hemi);

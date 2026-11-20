@@ -57,6 +57,23 @@ const overlaps = (a: Obstacle, b: Obstacle, m = 0): boolean => a.maxX + m > b.mi
 const isPost = (o: Obstacle): boolean => o.maxX - o.minX < 0.9 && o.maxZ - o.minZ < 0.9;
 const ROOM_STEPS = [3, 2.2, 1.5] as const;
 
+/**
+ * Walkable ground that later plots must keep a gap from (a hopscotch chalked on the grass…): it is NOT an
+ * obstacle — she walks on it — but nothing placed afterwards by roadsideSite / openSpot / parkSite may come within
+ * `gap` metres of it. Kept per city (keyed by that city's obstacle list), so nothing needs resetting.
+ */
+const reservedGround = new WeakMap<Obstacle[], Obstacle[]>();
+export function reserveGround(obstacles: Obstacle[], area: Obstacle, gap = 4): void {
+  const list = reservedGround.get(obstacles) ?? [];
+  list.push({ minX: area.minX - gap, maxX: area.maxX + gap, minZ: area.minZ - gap, maxZ: area.maxZ + gap });
+  reservedGround.set(obstacles, list);
+}
+/** Does this box come within the gap of reserved walkable ground? */
+export function onReservedGround(obstacles: Obstacle[], b: Obstacle): boolean {
+  const list = reservedGround.get(obstacles);
+  return !!list && list.some((r) => overlaps(b, r));
+}
+
 export interface SiteOpts {
   /** Distance of the plot centre from the start point (default 30–135 m). */
   minD?: number;
@@ -114,6 +131,7 @@ export function roadsideSite(obstacles: Obstacle[], rng: () => number, hw: numbe
       if (overlaps(body, AIRPORT_ZONE, 3) || roads.some((r) => overlaps(body, r))) return;
       // Body: posts only need ~1 m beside the walls; big solids keep full room.
       for (const o of obstacles) if (overlaps(body, o, isPost(o) ? Math.min(room, 1) : room)) return;
+      if (onReservedGround(obstacles, body)) return;
       // Door apron (+Z): no buildings; lamps/posts → prefer another plot, else clearLamps.
       const apronBox = siteBox(s, -hw, hw, 0, apron);
       let postsInApron = false;
@@ -172,6 +190,7 @@ export function openSpot(obstacles: Obstacle[], rng: () => number, r: number, op
       if (x + r + 3 > a.minX && x - r - 3 < a.maxX && z + r + 3 > a.minZ && z - r - 3 < a.maxZ) continue;
       const me: Obstacle = { minX: x - r, maxX: x + r, minZ: z - r, maxZ: z + r };
       if (obstacles.some((o) => overlaps(me, o, isPost(o) ? Math.min(room, 1) : room))) continue;
+      if (onReservedGround(obstacles, me)) continue;
       if (!farthest) return new THREE.Vector3(x, 0, z);
       if (d > bestD) {
         bestD = d;

@@ -4,6 +4,7 @@ import { AIRPORT_ZONE } from './airport';
 import { tone } from './audio';
 import { FIREWORK_COLORS, Fireworks } from './fireworks';
 import type { GameCtx } from './gamectx';
+import { buildMoscovo } from './landmarks-moscovo';
 import { gemMesh, mat, openSpot } from './places';
 import { inNoSpawn } from './spawn';
 import { onRoad, ROADS, type Interactable, type Obstacle, type World } from './world';
@@ -2067,12 +2068,100 @@ const BY_CITY: Record<string, Builder> = {
 
   /**
    * Pequim — muralha (estilo Grande Muralha, original / «muralha»):
-   * serpente longa com altura variável, caminho no cimo, merlões, 2 torres de vigia.
-   * Obstáculos só sob segmentos/torres — não bloqueia a cidade inteira.
+   * uma serpente comprida (~100 m de caminho quando há espaço) com altura variável, caminho no cimo,
+   * merlões e várias torres de vigia. Procura uma faixa livre de estradas, recintos e outras coisas;
+   * só os edifícios provisórios no caminho são retirados (world.clearArea). Obstáculos só sob cada
+   * segmento/torre — a cidade continua a poder ser atravessada à volta da muralha.
+   * Ao lado da 1.ª torre há um gongo chinês (pórtico vermelho) — tocar = «bong» e balança.
    */
-  Pequim(scene, obstacles, rng, ctx) {
-    // footprint ~40×20 m — long snaking ridge needs room away from venues
-    const at = place(obstacles, rng, 20);
+  Pequim(scene, obstacles, rng, ctx, world) {
+    const WALL_W = 2.45;
+    const DECK_W = 1.9;
+    const PAD = WALL_W * 0.55;
+
+    type Shape = { cx: number; cz: number; alongX: boolean; span: number; amp: number; waves: number; flip: number };
+    /** Ridge path in world space: snakes across the axis, climbs and dips so the silhouette is never a flat bar. */
+    const ridgeOf = (s: Shape) => (t: number) => {
+      const u = (t - 0.5) * s.span;
+      const v = s.flip * (Math.sin(t * Math.PI * s.waves) * s.amp + Math.sin(t * Math.PI * 0.7) * 1.6);
+      const h = 3.35 + Math.sin(t * Math.PI * 1.05 * (s.waves / 1.85)) * 1.65 + Math.sin(t * Math.PI * 2.2 * (s.waves / 1.85)) * 0.45;
+      return s.alongX ? { x: s.cx + u, z: s.cz + v, h } : { x: s.cx + v, z: s.cz + u, h };
+    };
+    const segsOf = (s: Shape) => Math.max(22, Math.round(s.span / 2));
+    const pathLen = (s: Shape): number => {
+      const r = ridgeOf(s);
+      let len = 0;
+      let p = r(0);
+      for (let i = 1; i <= 80; i++) {
+        const q = r(i / 80);
+        len += Math.hypot(q.x - p.x, q.z - p.z);
+        p = q;
+      }
+      return len;
+    };
+    const isBuilding = (o: Obstacle) => world.buildings.has(o);
+    const LIM = ROADS.extent - 10;
+    /** Every sample along the path (and the tower squares) clear of roads, venues, the airport and solid things. */
+    const shapeFree = (s: Shape): boolean => {
+      const r = ridgeOf(s);
+      const n = segsOf(s);
+      const boxes: Obstacle[] = [];
+      for (let i = 0; i <= n * 2; i++) {
+        const p = r(i / (n * 2));
+        if (Math.abs(p.x) > LIM || Math.abs(p.z) > LIM) return false;
+        if (onRoad(p.x, p.z, 5)) return false; // ≥ 9 m from the road centre line
+        if (inNoSpawn(p.x, p.z, 4)) return false;
+        if (Math.hypot(p.x - 7, p.z - 7) < 30) return false; // never at the start point
+        boxes.push({ minX: p.x - 2.2, maxX: p.x + 2.2, minZ: p.z - 2.2, maxZ: p.z + 2.2 });
+      }
+      for (const b of boxes) {
+        if (overlaps(b, AIRPORT_ZONE, 4)) return false;
+        for (const o of obstacles) if (!isBuilding(o) && overlaps(b, o, 3)) return false;
+      }
+      return true;
+    };
+
+    // Longest snake that fits: try long spans first (several wiggles), then shorter ones.
+    const tries: Omit<Shape, 'cx' | 'cz' | 'alongX' | 'flip'>[] = [
+      { span: 110, amp: 9, waves: 3.2 },
+      { span: 96, amp: 9, waves: 3 },
+      { span: 82, amp: 10, waves: 3 },
+      { span: 68, amp: 11, waves: 3 },
+      { span: 56, amp: 10, waves: 2.6 },
+      { span: 46, amp: 8, waves: 2.2 },
+      { span: 38, amp: 7.2, waves: 1.85 },
+    ];
+    let shape: Shape | null = null;
+    for (const t of tries) {
+      for (let i = 0; i < 260 && !shape; i++) {
+        const alongX = rng() < 0.5;
+        const half = t.span / 2 + 2;
+        const cand: Shape = {
+          ...t,
+          alongX,
+          flip: rng() < 0.5 ? -1 : 1,
+          cx: alongX ? (rng() * 2 - 1) * (LIM - half) : (rng() * 2 - 1) * (LIM - t.amp - 4),
+          cz: alongX ? (rng() * 2 - 1) * (LIM - t.amp - 4) : (rng() * 2 - 1) * (LIM - half),
+        };
+        if (shapeFree(cand)) shape = cand;
+      }
+      if (shape) break;
+    }
+    if (!shape) {
+      // crowded map: the old compact snake on a free square
+      const c = place(obstacles, rng, 20);
+      shape = { cx: c.x, cz: c.z, alongX: true, span: 38, amp: 7.2, waves: 1.85, flip: 1 };
+    }
+    const S = shape;
+    const ridgeW = ridgeOf(S);
+    const at = new THREE.Vector3(S.cx, 0, S.cz);
+    lastPlaceSpot = { x: at.x, z: at.z };
+    /** Ridge in the group's local frame (group sits at `at`). */
+    const ridge = (t: number) => {
+      const p = ridgeW(t);
+      return { x: p.x - at.x, z: p.z - at.z, h: p.h };
+    };
+
     const g = new THREE.Group();
     g.position.copy(at);
     g.userData.landmark = 'muralha';
@@ -2084,42 +2173,20 @@ const BY_CITY: Record<string, Builder> = {
     const roof = mat(0x5c4033);
     const roofDark = mat(0x3d2b1f);
 
-    const HALF_LEN = 19; // total ~38 m along X — readable snake from afar
-    const Z_AMP = 7.2;
-    const SEGS = 22;
-    const WALL_W = 2.45;
-    const DECK_W = 1.9;
-
-    /** Ridge path: clear S-curve in Z + climb/dip so the silhouette is not a flat bar. */
-    const ridge = (t: number) => {
-      const x = (t - 0.5) * 2 * HALF_LEN;
-      const z = Math.sin(t * Math.PI * 1.85) * Z_AMP + Math.sin(t * Math.PI * 0.7) * 1.6;
-      // Tall enough to read past nearby buildings; climbs mid-ridge then dips
-      const h = 3.35 + Math.sin(t * Math.PI * 1.05) * 1.65 + Math.sin(t * Math.PI * 2.2) * 0.45;
-      return { x, z, h };
-    };
-
+    const SEGS = segsOf(S);
     const pts: { x: number; z: number; h: number }[] = [];
     for (let i = 0; i <= SEGS; i++) pts.push(ridge(i / SEGS));
 
     /** Orient a box along the segment (local Z → tangent). */
     const zAxis = new THREE.Vector3(0, 0, 1);
     const dir = new THREE.Vector3();
-    const placeSeg = (
-      mesh: THREE.Mesh,
-      x0: number,
-      z0: number,
-      x1: number,
-      z1: number,
-      y: number,
-    ) => {
-      const dx = x1 - x0;
-      const dz = z1 - z0;
+    const placeSeg = (mesh: THREE.Mesh, x0: number, z0: number, x1: number, z1: number, y: number) => {
       mesh.position.set((x0 + x1) / 2, y, (z0 + z1) / 2);
-      dir.set(dx, 0, dz).normalize();
+      dir.set(x1 - x0, 0, z1 - z0).normalize();
       mesh.quaternion.setFromUnitVectors(zAxis, dir);
       g.add(mesh);
     };
+    const merlonGeo = new THREE.BoxGeometry(0.42, 0.78, 0.8);
 
     // —— Wall body + walkway deck + merlons along the ridge ——
     for (let i = 0; i < SEGS; i++) {
@@ -2129,47 +2196,41 @@ const BY_CITY: Record<string, Builder> = {
       const hBody = (a.h + b.h) * 0.5;
       const yTop = hBody;
 
-      const body = new THREE.Mesh(new THREE.BoxGeometry(WALL_W, hBody, len + 0.08), i % 2 === 0 ? stone : stoneDeep);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(WALL_W, hBody, len + 0.3), i % 2 === 0 ? stone : stoneDeep);
       body.castShadow = true;
+      body.receiveShadow = true;
       placeSeg(body, a.x, a.z, b.x, b.z, hBody * 0.5);
 
-      // Walkable-feel deck on top (lighter stone strip) — tilted to follow height change
-      const deck = new THREE.Mesh(new THREE.BoxGeometry(DECK_W, 0.18, len + 0.06), stoneLite);
+      // Walkway deck on top (lighter stone strip) — tilted to follow height change
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(DECK_W, 0.18, len + 0.3), stoneLite);
       placeSeg(deck, a.x, a.z, b.x, b.z, yTop + 0.09);
-      // Pitch the deck along the ridge slope so climbs read as ramps
-      const slope = Math.atan2(b.h - a.h, len);
-      deck.rotateX(-slope);
+      deck.rotateX(-Math.atan2(b.h - a.h, len));
 
-      // Merlons (crenellations) on both long sides — gap every other so they read as battlements
+      // Merlons (crenellations) on both long sides — several per segment so they read as battlements
       const dx = b.x - a.x;
       const dz = b.z - a.z;
       const nx = -dz / len;
       const nz = dx / len;
-      const mx = (a.x + b.x) / 2;
-      const mz = (a.z + b.z) / 2;
-      if (i % 2 === 0) {
+      const nM = Math.max(1, Math.round(len / 1.5));
+      for (let k = 0; k < nM; k++) {
+        const f = (k + 0.5) / nM;
+        const px = a.x + dx * f;
+        const pz = a.z + dz * f;
+        const py = a.h + (b.h - a.h) * f;
         for (const side of [-1, 1] as const) {
-          const merlon = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.78, Math.min(0.9, len * 0.55)), stone);
-          merlon.position.set(mx + nx * side * (WALL_W * 0.48), yTop + 0.48, mz + nz * side * (WALL_W * 0.48));
+          const merlon = new THREE.Mesh(merlonGeo, stone);
+          merlon.position.set(px + nx * side * (WALL_W * 0.48), Math.min(py, yTop) + 0.48, pz + nz * side * (WALL_W * 0.48));
           merlon.quaternion.setFromUnitVectors(zAxis, dir.set(dx, 0, dz).normalize());
           g.add(merlon);
         }
       }
-      // Visible riser when the ridge steps up (kid-readable climb)
-      if (b.h - a.h > 0.35) {
-        const rise = new THREE.Mesh(new THREE.BoxGeometry(DECK_W * 0.95, b.h - a.h, 0.35), stoneLite);
-        rise.position.set(b.x, a.h + (b.h - a.h) * 0.5, b.z);
-        rise.quaternion.setFromUnitVectors(zAxis, dir.set(dx, 0, dz).normalize());
-        g.add(rise);
-      }
 
       // Obstacle only under this segment (tight AABB — city stays walkable around the snake)
-      const pad = WALL_W * 0.55;
       obstacles.push({
-        minX: at.x + Math.min(a.x, b.x) - pad,
-        maxX: at.x + Math.max(a.x, b.x) + pad,
-        minZ: at.z + Math.min(a.z, b.z) - pad,
-        maxZ: at.z + Math.max(a.z, b.z) + pad,
+        minX: at.x + Math.min(a.x, b.x) - PAD,
+        maxX: at.x + Math.max(a.x, b.x) + PAD,
+        minZ: at.z + Math.min(a.z, b.z) - PAD,
+        maxZ: at.z + Math.max(a.z, b.z) + PAD,
         height: hBody + 0.9,
       });
     }
@@ -2183,11 +2244,9 @@ const BY_CITY: Record<string, Builder> = {
       base.position.set(p.x, th * 0.5, p.z);
       base.castShadow = true;
       g.add(base);
-      // Slight inset belt so the tower reads as a block, not a wall blob
       const belt = new THREE.Mesh(new THREE.BoxGeometry(tw + 0.25, 0.28, tw + 0.25), stone);
       belt.position.set(p.x, th - 0.35, p.z);
       g.add(belt);
-      // Small square eaves + pyramid roof — kid-readable watchtower top
       const eaves = new THREE.Mesh(new THREE.BoxGeometry(tw + 0.85, 0.16, tw + 0.85), roof);
       eaves.position.set(p.x, th + 0.2, p.z);
       g.add(eaves);
@@ -2197,7 +2256,6 @@ const BY_CITY: Record<string, Builder> = {
       pyramid.castShadow = true;
       g.add(pyramid);
       const roofY = th + 1.55;
-      // Merlons at tower corners
       for (const [sx, sz] of [
         [-1, -1],
         [1, -1],
@@ -2227,44 +2285,155 @@ const BY_CITY: Record<string, Builder> = {
         maxZ: at.z + p.z + half,
         height: th + 1.2,
       });
-      return { x: p.x, z: p.z, h: th, roofY };
+      // unit normal of the ridge here (to put things beside the wall, never on it)
+      const q = ridge(Math.min(1, t + 0.01));
+      const o = ridge(Math.max(0, t - 0.01));
+      const l = Math.hypot(q.x - o.x, q.z - o.z) || 1;
+      return { x: p.x, z: p.z, h: th, roofY, nx: -(q.z - o.z) / l, nz: (q.x - o.x) / l };
     };
 
-    const towerA = watchTower(0.22);
-    const towerB = watchTower(0.72);
+    // a watchtower every ~18 m of path (2 on the short fallback snake)
+    const len = pathLen(S);
+    const nT = Math.max(2, Math.min(7, Math.round(len / 18)));
+    const towers = Array.from({ length: nT }, (_, i) => watchTower(nT === 2 ? [0.22, 0.72][i] : 0.06 + (0.88 * i) / (nT - 1)));
+    const towerA = towers[0];
+    const towerB = towers[Math.min(towers.length - 1, Math.max(1, Math.round(towers.length * 0.6)))];
 
-    // Steps up to the first tower — walkable-path feel (visual climb along the ridge)
-    {
-      const foot = ridge(0.05);
-      const rise = towerA.h * 0.55;
-      const nSteps = 5;
-      for (let i = 0; i < nSteps; i++) {
-        const t = i / nSteps;
-        const step = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.28, 0.85), stoneLite);
-        step.position.set(
-          foot.x + (towerA.x - foot.x) * t,
-          0.14 + rise * t,
-          foot.z + (towerA.z - foot.z) * t + 2.4,
-        );
-        g.add(step);
-      }
+    // the wall's ends: solid end blocks so the snake doesn't stop in a cut-off slice
+    for (const t of [0, 1]) {
+      const p = ridge(t);
+      const end = new THREE.Mesh(new THREE.BoxGeometry(WALL_W + 0.5, p.h + 0.6, WALL_W + 0.5), stoneDeep);
+      end.position.set(p.x, (p.h + 0.6) / 2, p.z);
+      end.castShadow = true;
+      g.add(end);
+      obstacles.push({
+        minX: at.x + p.x - 1.6,
+        maxX: at.x + p.x + 1.6,
+        minZ: at.z + p.z - 1.6,
+        maxZ: at.z + p.z + 1.6,
+        height: p.h + 0.6,
+      });
     }
 
-    // Gong on a short frame beside the first tower (keep «O gongo!» interact)
-    const gongFrame = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.6, 0.15), stoneDeep);
-    gongFrame.position.set(towerA.x + 2.6, 1.3, towerA.z + 2.8);
+    // Placeholder buildings in the snake's way go (venues/shops were never in the way — shapeFree).
+    for (let i = 0; i < SEGS; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      world.clearArea(
+        { minX: at.x + Math.min(a.x, b.x) - PAD, maxX: at.x + Math.max(a.x, b.x) + PAD, minZ: at.z + Math.min(a.z, b.z) - PAD, maxZ: at.z + Math.max(a.z, b.z) + PAD },
+        3,
+      );
+    }
+    for (const t of towers) {
+      world.clearArea({ minX: at.x + t.x - 1.9, maxX: at.x + t.x + 1.9, minZ: at.z + t.z - 1.9, maxZ: at.z + t.z + 1.9 }, 3);
+    }
+
+    // Side of towerA that is clear (the snake bends — pick the side away from the next stretch of wall)
+    const sideOf = (tw: { x: number; z: number; nx: number; nz: number }) => {
+      const probe = (s: number) => {
+        const px = tw.x + tw.nx * s * 5;
+        const pz = tw.z + tw.nz * s * 5;
+        let d = Infinity;
+        for (const p of pts) d = Math.min(d, Math.hypot(p.x - px, p.z - pz));
+        return d;
+      };
+      return probe(1) >= probe(-1) ? 1 : -1;
+    };
+    const sA = sideOf(towerA);
+    // tangent at towerA (along the wall)
+    const tax = towerA.nz;
+    const taz = -towerA.nx;
+
+    // Steps up to the first tower's side — walkable-path feel (visual climb beside the wall)
+    {
+      const nSteps = 5;
+      const rise = towerA.h * 0.5;
+      for (let i = 0; i < nSteps; i++) {
+        const hgt = 0.28 + rise * (i / nSteps);
+        const d = 2.2 + (nSteps - 1 - i) * 0.7; // the tallest step is the one against the tower
+        const step = new THREE.Mesh(new THREE.BoxGeometry(2.0, hgt, 0.7), stoneLite);
+        step.position.set(towerA.x + towerA.nx * sA * d, hgt / 2, towerA.z + towerA.nz * sA * d);
+        step.rotation.y = Math.atan2(towerA.nx * sA, towerA.nz * sA);
+        g.add(step);
+      }
+      const sx = at.x + towerA.x + towerA.nx * sA * 3.6;
+      const sz = at.z + towerA.z + towerA.nz * sA * 3.6;
+      world.clearArea({ minX: sx - 1.6, maxX: sx + 1.6, minZ: sz - 1.6, maxZ: sz + 1.6 }, 1);
+    }
+
+    // Chinese gong in a red lacquered frame beside the first tower (along the wall, away from the steps):
+    // two red posts, a curved dark beam with upturned ends, a bronze gong with a raised boss, a mallet.
+    const gongAt = {
+      x: towerA.x + towerA.nx * sA * 3.2 + tax * 4.2,
+      z: towerA.z + towerA.nz * sA * 3.2 + taz * 4.2,
+    };
+    const gongFrame = new THREE.Group();
+    gongFrame.position.set(gongAt.x, 0, gongAt.z);
+    // face the gong outwards (its disc faces along the wall's normal, to where she comes from)
+    gongFrame.rotation.y = Math.atan2(towerA.nx * sA, towerA.nz * sA);
     g.add(gongFrame);
-    const gongBeam = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.12), stoneDeep);
-    gongBeam.position.set(towerA.x + 2.6, 2.55, towerA.z + 2.8);
-    g.add(gongBeam);
-    const gong = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.65, 0.14, 20), mat(0xffd43b));
+    const lacquer = mat(0xc92a2a);
+    for (const sx of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.8, 10), lacquer);
+      post.position.set(sx * 0.95, 1.4, 0);
+      post.castShadow = true;
+      gongFrame.add(post);
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.18, 0.7), stoneDeep);
+      foot.position.set(sx * 0.95, 0.09, 0);
+      gongFrame.add(foot);
+      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.1, 0.18), roofDark);
+      tip.position.set(sx * 1.32, 2.95, 0);
+      tip.rotation.z = sx * 0.45; // upturned ends, like a little pagoda roof
+      gongFrame.add(tip);
+    }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.16, 0.2), roofDark);
+    beam.position.set(0, 2.85, 0);
+    gongFrame.add(beam);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.1, 0.12), lacquer);
+    bar.position.set(0, 2.55, 0);
+    gongFrame.add(bar);
+    const gongPivot = new THREE.Group(); // swings from the bar when struck
+    gongPivot.position.set(0, 2.5, 0);
+    gongFrame.add(gongPivot);
+    for (const sx of [-0.3, 0.3]) {
+      const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.45, 5), mat(0x343a40));
+      cord.position.set(sx, -0.2, 0);
+      gongPivot.add(cord);
+    }
+    const bronze = new THREE.MeshStandardMaterial({ color: 0xc9902a, metalness: 0.6, roughness: 0.35, emissive: 0x3a2400 });
+    const gong = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.1, 28), bronze);
     gong.rotation.x = Math.PI / 2;
-    gong.position.set(towerA.x + 2.6, 2.05, towerA.z + 2.8);
-    g.add(gong);
+    gong.position.set(0, -1.12, 0);
+    gong.castShadow = true;
+    gongPivot.add(gong);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.05, 6, 28), mat(0x8a5a12));
+    rim.position.set(0, -1.12, 0);
+    gongPivot.add(rim);
+    const boss = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), bronze);
+    boss.rotation.x = Math.PI / 2;
+    boss.position.set(0, -1.12, 0.05);
+    gongPivot.add(boss);
+    // mallet leaning on the right post
+    const mallet = new THREE.Group();
+    mallet.position.set(1.2, 0, 0.2);
+    mallet.rotation.z = 0.25;
+    gongFrame.add(mallet);
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 6), mat(0x8a5a2b));
+    handle.position.y = 0.55;
+    mallet.add(handle);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), mat(0xfff3d6));
+    head.position.y = 1.1;
+    mallet.add(head);
+    const gw = { x: at.x + gongAt.x, z: at.z + gongAt.z };
+    const gongBox: Obstacle = { minX: gw.x - 1.1, maxX: gw.x + 1.1, minZ: gw.z - 1.1, maxZ: gw.z + 1.1, height: 3 };
+    world.clearArea(gongBox, 1.5);
+    obstacles.push(gongBox);
 
     const gem = gemMesh(0xffe14d, 1.3);
     gem.position.set(towerB.x, towerB.roofY + 1.15, towerB.z);
     g.add(gem);
+    const sB = sideOf(towerB);
+    const gemFoot = new THREE.Vector3(at.x + towerB.x + towerB.nx * sB * 3.2, 0, at.z + towerB.z + towerB.nz * sB * 3.2);
 
     landmarkDebug = {
       spots: {
@@ -2272,27 +2441,52 @@ const BY_CITY: Record<string, Builder> = {
         main: { x: at.x, z: at.z },
         towerA: { x: at.x + towerA.x, z: at.z + towerA.z },
         towerB: { x: at.x + towerB.x, z: at.z + towerB.z },
+        gong: gw,
+        gemFoot: { x: gemFoot.x, z: gemFoot.z },
+      },
+      wall: {
+        span: S.span,
+        alongX: S.alongX,
+        length: Math.round(len),
+        towers: towers.map((t) => ({ x: +(at.x + t.x).toFixed(1), z: +(at.z + t.z).toFixed(1) })),
+        ends: [0, 1].map((t) => ridgeW(t)).map((p) => ({ x: +p.x.toFixed(1), z: +p.z.toFixed(1) })),
       },
       count: 1,
     };
 
-    const things: Interactable[] = [
-      diamondAt(ctx, `gem:${ctx.city()}:muralha`, new THREE.Vector3(at.x + towerB.x, 0, at.z + towerB.z + 3), gem),
-    ];
+    const things: Interactable[] = [diamondAt(ctx, `gem:${ctx.city()}:muralha`, gemFoot, gem)];
+    let swing = 0;
+    let swingT = 0;
+    let toldGong = false;
     things.push({
-      object: gong,
-      position: new THREE.Vector3(at.x + towerA.x + 2.6, 0, at.z + towerA.z + 2.8),
+      object: gongFrame,
+      position: new THREE.Vector3(gw.x + towerA.nx * sA * 1.6, 0, gw.z + towerA.nz * sA * 1.6),
       radius: 2.6,
       interact() {
-        tone(120, 0, 1.5, 'sine', 0.12);
-        tone(90, 0.2, 1.2, 'sine', 0.08);
-        ctx.say(['O gongo!']);
+        // deep bronze "bong" with a long shimmer
+        tone(98, 0, 2.6, 'sine', 0.14);
+        tone(147, 0, 2.0, 'sine', 0.07);
+        tone(196.5, 0.02, 1.6, 'triangle', 0.04);
+        tone(523, 0.02, 0.9, 'sine', 0.02);
+        swing = 1;
+        swingT = 0;
+        if (!toldGong) {
+          toldGong = true;
+          ctx.say(['É um gongo chinês!']);
+        }
+      },
+      update(dt) {
+        if (swing <= 0) return;
+        swingT += dt;
+        swing = Math.max(0, 1 - swingT / 2.5);
+        gongPivot.rotation.x = Math.sin(swingT * 7) * 0.22 * swing;
       },
     });
+    const mid = ridgeW(0.5);
     things.push({
       object: g,
-      position: at.clone(),
-      radius: 8,
+      position: new THREE.Vector3(mid.x, 0, mid.z),
+      radius: 4,
       interact() {
         ctx.say(['A muralha!']);
       },
@@ -2755,8 +2949,9 @@ const BY_CITY: Record<string, Builder> = {
   Vilnius() {
     return [];
   },
-  Moscovo() {
-    return [];
+  /** Catedral de São Basílio + Praça Vermelha — src/landmarks-moscovo.ts. */
+  Moscovo(scene, obstacles, rng, ctx, world) {
+    return buildMoscovo(scene, obstacles, rng, ctx, world, { diamondAt, setDebug: (d) => (landmarkDebug = d) });
   },
   'Cidade do México'() {
     return [];

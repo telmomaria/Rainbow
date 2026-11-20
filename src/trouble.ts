@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { AIRPORT_ZONE } from './airport';
 import { taunt, tone } from './audio';
+import { flagTexture } from './flags';
 import type { GameCtx } from './gamectx';
+import { buildCountryFlag, houseColors } from './house';
 import { isFree } from './spawn';
 import { ROADS, SPAWN, onRoad, type Obstacle } from './world';
 
@@ -49,6 +51,39 @@ const TEAMS: [number, number][] = [
   [0x7c3aed, 0xfacc15],
   [0x0ea5e9, 0x1e3a8a],
 ];
+/**
+ * The team of each city plays in its country's flag colours (shirt, scarf). The stadium itself takes the flag
+ * colours from house.ts (wall · trim · roof) and flies the real flag (flags.ts). Unknown places: random TEAMS.
+ */
+const CITY_TEAMS: Record<string, [number, number]> = {
+  Porto: [0xda291c, 0x2b9348], // Portugal
+  Roma: [0x009246, 0xce2b37], // Itália
+  Madrid: [0xaa151b, 0xf1bf00], // Espanha
+  Londres: [0xffffff, 0xc8102e], // Reino Unido
+  Paris: [0x0055a4, 0xef4135], // França
+  'Varsóvia': [0xffffff, 0xdc143c], // Polónia
+  Vilnius: [0xfdb913, 0x006a44], // Lituânia
+  Moscovo: [0x0039a6, 0xd52b1e], // Rússia
+  Pequim: [0xee1c25, 0xffde00], // China
+  'Tóquio': [0xffffff, 0xbc002d], // Japão
+  'Rio de Janeiro': [0xfedf00, 0x009c3b], // Brasil
+  'Cidade do México': [0x006847, 0xce1126], // México
+  Reiquiavique: [0x02529c, 0xdc1e35], // Islândia
+  Nuuk: [0xd00c33, 0xffffff], // Gronelândia
+  'Estados Unidos': [0x3c3b6e, 0xb22234], // Estados Unidos
+};
+interface StadiumLook {
+  wall: number;
+  band: number;
+  roof: number;
+  /** Seat colours of the stand sectors, in turn around the bowl. */
+  seats: number[];
+  /** Real flag texture of the country (null = unknown place). */
+  flag: THREE.CanvasTexture | null;
+}
+/** Seat colour: the flag colour softened a little towards light grey, so the bowl reads pretty, not garish. */
+const soften = (c: number) => new THREE.Color(c).lerp(new THREE.Color(0xd9dde3), 0.18).getHex();
+
 const SKINS = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0xffdbac];
 const HAIRS = [0x2b1d14, 0x5a3825, 0x111111, 0xb5651d, 0x9e9e9e];
 
@@ -423,6 +458,9 @@ export class Trouble {
    */
   readonly clearance: Obstacle | null;
   private readonly team: [number, number];
+  private readonly look: StadiumLook;
+  /** Flag colours for the people on the stands (team shirt/scarf + the other flag colours). */
+  private readonly crowdColors: number[];
   private crowd: THREE.InstancedMesh | null = null;
   private readonly crowdBase: { x: number; y: number; z: number; ph: number }[] = [];
   private fans: Fan[] = [];
@@ -456,7 +494,15 @@ export class Trouble {
     rng: () => number,
     private readonly ctx: GameCtx,
   ) {
-    this.team = TEAMS[Math.floor(rng() * TEAMS.length)];
+    const rnd = TEAMS[Math.floor(rng() * TEAMS.length)]; // always drawn: keeps the site picks below unchanged
+    const city = ctx.city();
+    const flag = flagTexture(city);
+    const fc = houseColors(city);
+    this.team = CITY_TEAMS[city] ?? rnd;
+    this.look = flag
+      ? { wall: fc.wall, band: fc.trim, roof: fc.roof, seats: [...new Set([fc.wall, fc.trim, fc.roof, ...this.team])].map(soften), flag }
+      : { wall: rnd[0], band: 0xf5f5f5, roof: 0xf5f5f5, seats: [0x9ca3af], flag: null };
+    this.crowdColors = flag ? [...new Set([...this.team, fc.wall, fc.trim, fc.roof])] : [...rnd];
     const sites = allSites(rng);
     const R = STADIUM_R;
 
@@ -985,22 +1031,40 @@ export class Trouble {
     this.gateOut.set(go.x, 0, go.z);
     const g = geo();
     const [c1, c2] = this.team;
+    const look = this.look;
 
     const root = new THREE.Group();
     root.position.set(c.x, 0, c.z);
     root.rotation.y = s.rot;
     this.scene.add(root);
 
-    const wallMat = new THREE.MeshStandardMaterial({ color: c1, roughness: 0.8, side: THREE.DoubleSide });
-    const whiteDS = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.8, side: THREE.DoubleSide });
-    const standMat = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.9, side: THREE.DoubleSide });
+    // outside in the country's flag colours: wall · band (trim) · roof ring (house.ts FLAG_COLORS)
+    const wallMat = new THREE.MeshStandardMaterial({ color: look.wall, roughness: 0.8, side: THREE.DoubleSide });
+    const bandMat = new THREE.MeshStandardMaterial({ color: look.band, roughness: 0.8, side: THREE.DoubleSide });
+    const roofMat = new THREE.MeshStandardMaterial({ color: look.roof, roughness: 0.8, side: THREE.DoubleSide });
+    const standMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, side: THREE.DoubleSide, vertexColors: true });
     const wall = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 7, 48, 1, true), wallMat);
     wall.position.y = 3.5;
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.25, R + 0.25, 0.9, 48, 1, true), whiteDS);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.25, R + 0.25, 0.9, 48, 1, true), bandMat);
     band.position.y = 7.2;
-    const stands = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.4, R - 7, 6.5, 48, 1, true), standMat);
+    // the seats: wide sectors in turn in the flag colours (one colour per face, so no blending at the seams)
+    const standGeo = new THREE.CylinderGeometry(R - 0.4, R - 7, 6.5, 48, 1, true).toNonIndexed();
+    const sp = standGeo.getAttribute('position');
+    const sCol = new Float32Array(sp.count * 3);
+    const tmp = new THREE.Color();
+    const sectors = look.seats.length > 1 ? Math.max(6, look.seats.length * 2) : 1;
+    for (let f = 0; f < sp.count; f += 3) {
+      const cx = (sp.getX(f) + sp.getX(f + 1) + sp.getX(f + 2)) / 3;
+      const cz = (sp.getZ(f) + sp.getZ(f + 1) + sp.getZ(f + 2)) / 3;
+      const a = (Math.atan2(cz, cx) + Math.PI * 2) % (Math.PI * 2);
+      const k = Math.floor((a / (Math.PI * 2)) * sectors) % sectors;
+      tmp.setHex(look.seats[k % look.seats.length]);
+      for (let v = 0; v < 3; v++) tmp.toArray(sCol, (f + v) * 3);
+    }
+    standGeo.setAttribute('color', new THREE.BufferAttribute(sCol, 3));
+    const stands = new THREE.Mesh(standGeo, standMat);
     stands.position.y = 0.3 + 3.25;
-    const roof = new THREE.Mesh(new THREE.RingGeometry(R - 3.2, R + 0.3, 48), whiteDS);
+    const roof = new THREE.Mesh(new THREE.RingGeometry(R - 3.2, R + 0.3, 48), roofMat);
     roof.rotation.x = -Math.PI / 2;
     roof.position.y = 7.7;
     for (const m of [wall, band, stands, roof]) {
@@ -1052,7 +1116,7 @@ export class Trouble {
         const z = Math.sin(a) * rad;
         m4.makeTranslation(x, y, z);
         crowd.setMatrixAt(k, m4);
-        col.setHex(Math.random() < 0.7 ? (Math.random() < 0.6 ? c1 : c2) : pick(SKINS));
+        col.setHex(Math.random() < 0.75 ? (Math.random() < 0.5 ? c1 : pick(this.crowdColors)) : pick(SKINS));
         crowd.setColorAt(k, col);
         this.crowdBase.push({ x, y, z, ph: Math.random() * Math.PI * 2 });
         k++;
@@ -1079,14 +1143,23 @@ export class Trouble {
 
     // the gate, facing the road: two tall pillars, a lintel with a big ball, flags, and a dark tunnel
     const gz = R - 0.2 + 0.5; // local to the stadium centre (+z = towards the road)
-    add(root, g.box, mat(c2), -2.6, 4.2, gz, 1.2, 8.4, 1.6);
-    add(root, g.box, mat(c2), 2.6, 4.2, gz, 1.2, 8.4, 1.6);
-    add(root, g.box, mat(c1), 0, 8.4, gz, 6.6, 1.4, 1.7);
+    const pillar = look.flag ? look.band : c2;
+    add(root, g.box, mat(pillar), -2.6, 4.2, gz, 1.2, 8.4, 1.6);
+    add(root, g.box, mat(pillar), 2.6, 4.2, gz, 1.2, 8.4, 1.6);
+    add(root, g.box, mat(look.flag ? look.roof : c1), 0, 8.4, gz, 6.6, 1.4, 1.7);
     add(root, g.box, mat(0x1f2328), 0, 2.9, R + 0.06, 4, 5.8, 0.1);
     add(root, g.sphere, white, 0, 10.1, gz, 1, 1, 1);
+    // the country's real flag (flags.ts) on small masts over the gate and around the rim; team colours if unknown
+    const flagMat = look.flag ? new THREE.MeshStandardMaterial({ map: look.flag, roughness: 0.85, side: THREE.DoubleSide }) : null;
+    const flagPlane = new THREE.PlaneGeometry(1, 1);
+    const smallFlag = (x: number, y: number, z: number, w: number, rotY: number, fallback: number) => {
+      const fl = flagMat ? add(root, flagPlane, flagMat, x, y, z, w, w / 1.5, 1) : add(root, g.box, mat(fallback), x, y, z, w, w * 0.62, 0.04);
+      fl.rotation.y = rotY;
+      return fl;
+    };
     for (const side of [-1, 1]) {
       add(root, g.cyl, steel, side * 2.6, 9.6, gz, 0.06, 2.4, 0.06);
-      add(root, g.box, mat(side < 0 ? c1 : c2), side * 2.6 + 0.6, 10.3, gz, 1.1, 0.7, 0.04);
+      smallFlag(side * 2.6 + 0.62, 10.35, gz, 1.2, 0, side < 0 ? c1 : c2);
     }
     // pennants around the rim
     for (let i = 0; i < 6; i++) {
@@ -1094,8 +1167,15 @@ export class Trouble {
       const x = Math.cos(a) * (R + 0.3);
       const z = Math.sin(a) * (R + 0.3);
       add(root, g.cyl, steel, x, 8.6, z, 0.05, 2, 0.05);
-      const fl = add(root, g.box, mat(i % 2 ? c1 : c2), x, 9.3, z, 0.9, 0.55, 0.04);
-      fl.rotation.y = a;
+      smallFlag(x, 9.3, z, 0.95, a, i % 2 ? c1 : c2);
+    }
+    // one big flag on a tall mast at the back of the roof: the country is recognisable from across the city
+    if (look.flag) {
+      const city = this.ctx.city();
+      const big = buildCountryFlag(houseColors(city), city);
+      big.position.set(0, 7.7, -(R - 1.6));
+      big.scale.setScalar(1.45);
+      root.add(big);
     }
 
     // collision: the round stand as a few overlapping boxes, plus the gate pillars

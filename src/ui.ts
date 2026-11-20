@@ -302,6 +302,69 @@ export function showPhoto(dataUrl: string): Promise<void> {
   });
 }
 
+const letterStyle = document.createElement('style');
+letterStyle.textContent = `
+  .letter-view {
+    position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
+    background: rgba(20, 12, 40, .7); animation: fadein .25s; cursor: pointer;
+  }
+  .letter-paper {
+    position: relative; width: min(90vw, 560px); padding: 30px 34px 26px; border-radius: 10px;
+    background: repeating-linear-gradient(#fffdf3 0 38px, #c9dcf5 38px 40px); background-position: 0 22px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.45); transform: rotate(1deg); animation: letterOpen .45s ease-out;
+    font: 600 27px/40px 'Comic Sans MS', 'Segoe Print', 'Chalkboard SE', cursive, system-ui; color: #2b3a8c;
+  }
+  @keyframes letterOpen { from { transform: rotate(1deg) scaleY(.05) translateY(120px); opacity: 0; } }
+  .letter-paper::before {
+    content: ''; position: absolute; top: -14px; right: 26px; width: 56px; height: 64px; border-radius: 4px;
+    background: #ff6fb5; border: 4px dashed #fff; transform: rotate(6deg); box-shadow: 0 3px 8px rgba(0,0,0,.2);
+  }
+  .letter-paper p { margin: 0; }
+  .letter-paper .letter-hi { font-size: 31px; color: #d6336c; margin-bottom: 2px; }
+  .letter-paper .letter-sign { text-align: right; margin-top: 6px; }
+  .letter-paper .letter-heart { color: #e03131; }
+`;
+document.head.appendChild(letterStyle);
+
+/**
+ * A letter from Mãe / Pai opened full screen (paper with blue lines and a stamp). Closes on any tap or key.
+ * The narrator reads it (the caller speaks it); nothing here must be read to play.
+ */
+export function showLetter(lines: string[]): Promise<void> {
+  const ov = document.createElement('div');
+  ov.className = 'letter-view';
+  const paper = document.createElement('div');
+  paper.className = 'letter-paper';
+  lines.forEach((line, i) => {
+    const p = document.createElement('p');
+    if (i === 0) p.className = 'letter-hi';
+    if (i === lines.length - 1) {
+      p.className = 'letter-sign';
+      p.innerHTML = '<span class="letter-heart">❤</span> ';
+    }
+    p.append(line);
+    paper.appendChild(p);
+  });
+  ov.appendChild(paper);
+  document.body.appendChild(ov);
+  const opened = performance.now();
+  return new Promise((resolve) => {
+    let closed = false;
+    const close = (e: Event) => {
+      // ignore the very tap/key that opened it
+      if (closed || performance.now() - opened < 350) return;
+      closed = true;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      window.removeEventListener('keydown', close, true);
+      ov.remove();
+      resolve();
+    };
+    window.addEventListener('keydown', close, true);
+    ov.addEventListener('pointerdown', close);
+  });
+}
+
 const travelStyle = document.createElement('style');
 travelStyle.textContent = `
   .city-pill {

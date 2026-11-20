@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { tone } from './audio';
 import type { GameCtx } from './gamectx';
 import { registerItem } from './items';
+import { LETTER_KIND, newLetter } from './letters';
 import { inNoSpawn, isFree, randomFreeSpot } from './spawn';
 import { ball, box, buildFolk, mat, pick, HAIRS, SKINS, type Folk } from './venue';
 import { mulberry32, onRoad, PERSON_CLEAR, type Interactable, type Obstacle, type World } from './world';
@@ -16,17 +17,9 @@ const FORGET = 8;
 const CLEAR = 2.2;
 /** Anti-spam entre falas (s). */
 const SPEAK_COOL = 7;
-const LETTER_KIND = 'postal';
-
-const NOTES = [
-  'Diz a carta: Continua a explorar — és muito especial!',
-  'Diz a carta: Um abraço grande de alguém que gosta de ti!',
-  'Diz a carta: Hoje é um dia para descobrir coisas novas!',
-  'Diz a carta: Guarda este postal e lembra-te de sorrir!',
-];
 
 registerItem(LETTER_KIND, {
-  name: 'postal',
+  name: 'carta',
   icon: '✉️',
   edible: false,
   build: buildPostcard,
@@ -226,8 +219,8 @@ export class Postman {
     this.ctx.give(LETTER_KIND);
     tone(880, 0, 0.08, 'square', 0.06);
     tone(1175, 0.09, 0.12, 'triangle', 0.07);
-    const note = NOTES[Math.floor(Math.random() * NOTES.length)];
-    this.ctx.say(['Olá! Tenho uma carta para ti!', note]);
+    const letter = newLetter(this.ctx);
+    this.ctx.say(['Olá! Tenho uma carta para ti!', `É ${letter.from === 'Mãe' ? 'da tua mãe' : 'do teu pai'}! Toca na carta para a leres.`]);
   }
 
   dispose(): void {

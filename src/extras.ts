@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { tone } from './audio';
+import { speak, stopSpeaking, tone } from './audio';
 import { feel } from './bus';
 import type { Character } from './character';
 import { FolkTown } from './folk';
@@ -7,11 +7,13 @@ import type { GameCtx } from './gamectx';
 import { GIFT_COINS, GIVE_DIST, giftDef, receivers, type Receiver } from './gifts';
 import { itemDef } from './items';
 import { JEWEL_ITEM, JewelPlaces, JewelShield } from './jewels';
+import { LETTER_KIND, dropLetter, letterHooks, letterPlaces, topLetter } from './letters';
 import { Life } from './life';
 import type { Monsters } from './monsters';
 import type { Npcs } from './npcs';
 import { Flyers, coinMesh } from './places';
 import type { SaveData } from './save';
+import { showLetter } from './ui';
 import { mulberry32, type Interactable, type World } from './world';
 
 /**
@@ -68,10 +70,47 @@ export class Extras {
     this.life = new Life(host.save);
     this.shield = new JewelShield(host.player.root);
     this.flyers = new Flyers(host.scene);
+    this.hookLetters();
     if (new URLSearchParams(location.search).has('debug')) {
       // QA: set energy / mood, or let play time pass: dispatch 'rainbow-life' with { energy?, mood?, pass? }
       window.addEventListener('rainbow-life', (e) => this.life.debugSet((e as CustomEvent<{ energy?: number; mood?: number; pass?: number }>).detail));
     }
+  }
+
+  /* ---------------------------------------------------------------- letters */
+
+  /** Letters (postman.ts) used out in the street: the mailbox and the paper bins (props.ts) call these. */
+  private hookLetters(): void {
+    const { ctx, save } = this.host;
+    const count = () => save.bag[LETTER_KIND] ?? 0;
+    const has = (inHand: boolean) => this.host.free() && (inHand ? ctx.carried() === LETTER_KIND : count() > 0);
+    letterHooks.has = has;
+    letterHooks.take = (inHand) => {
+      if (!has(inHand)) return false;
+      if (ctx.carried() !== LETTER_KIND) {
+        // out of the bag and into her hand first (give() adds one back), so it can leave her hand
+        save.bag[LETTER_KIND] = count() - 1;
+        ctx.give(LETTER_KIND);
+      }
+      ctx.setCarried(null); // out of her hand and out of the bag (saved)
+      dropLetter(ctx, count());
+      return true;
+    };
+    letterHooks.say = (lines) => ctx.say(lines);
+  }
+
+  /** Tapping the letter in the bag: she takes it out, it opens on screen and the narrator reads it aloud. */
+  private async readLetter(): Promise<void> {
+    const { ctx, save } = this.host;
+    if (!this.host.free() || document.querySelector('.letter-view')) return;
+    const letter = topLetter(ctx, save.bag[LETTER_KIND] ?? 0);
+    ctx.hold(true);
+    for (let i = 0; i < 5; i++) tone(2400 + Math.random() * 1600, i * 0.04, 0.035, 'square', 0.02); // paper rustle
+    const title = letter.from === 'Mãe' ? 'Carta da Mãe!' : 'Carta do Pai!';
+    void speak([title, ...letter.lines], 0.85);
+    await showLetter(letter.lines);
+    stopSpeaking();
+    ctx.hold(false);
   }
 
   /* ---------------------------------------------------------------- city */
@@ -165,6 +204,12 @@ export class Extras {
 
   /** A tap on a bag item (before the game's own handling). True = handled here (the jewel = shield). */
   useBagItem(kind: string): boolean {
+    if (kind === LETTER_KIND) {
+      // main.ts then puts it in her hand (to post it or throw it away); the letter opens right after
+      if (!this.host.free() || (this.host.save.bag[LETTER_KIND] ?? 0) <= 0) return true;
+      setTimeout(() => void this.readLetter(), 0);
+      return false;
+    }
     if (kind !== JEWEL_ITEM) return false;
     if (!this.host.free()) return true;
     const monsters = this.host.monsters();
@@ -297,6 +342,7 @@ export class Extras {
       picking: !!this.pickTarget,
       giving: !!this.giveTarget,
       flags: s.flags,
+      letters: { ...letterPlaces, texts: this.host.ctx.text('letters'), open: !!document.querySelector('.letter-view') },
     };
   }
 }

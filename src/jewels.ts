@@ -193,7 +193,19 @@ export class JewelPlaces {
   private readonly shops: JewelShop[] = [];
   private bank: JewelShop | null = null;
   private jeweller: JewelShop | null = null;
-  private chest: { at: THREE.Vector3; lid: THREE.Group; open: boolean; t: number; rattle: number; glow: THREE.Mesh } | null = null;
+  private chest: {
+    at: THREE.Vector3;
+    lid: THREE.Group;
+    open: boolean;
+    t: number;
+    rattle: number;
+    glow: THREE.Mesh;
+    /** the gem-shaped keyhole: it twinkles when she touches the locked chest ("a jewel goes here") */
+    lock: THREE.Mesh;
+    hint: number;
+    /** narrator lines are not repeated on every bump (game time of the last line) */
+    saidAt: number;
+  } | null = null;
   private ornaments: THREE.Object3D[] = [];
   private time = 0;
 
@@ -451,8 +463,8 @@ export class JewelPlaces {
     g.add(glow);
     obstacles.push({ minX: at.x - 0.8, maxX: at.x + 0.8, minZ: at.z - 0.8, maxZ: at.z + 0.8, height: 1.3 });
     const open = this.ctx.flag(`chest:${this.ctx.city()}`) > 0;
-    this.chest = { at, lid, open, t: open ? 1 : 0, rattle: 0, glow };
-    if (open) lid.rotation.x = -1.9;
+    this.chest = { at, lid, open, t: open ? 1 : 0, rattle: 0, glow, lock, hint: 0, saidAt: -99 };
+    if (open) lid.rotation.x = -1.9; // opened before: lid up, nothing inside
     this.things.push({
       object: g,
       position: at.clone(),
@@ -463,25 +475,46 @@ export class JewelPlaces {
 
   private touchChest(): void {
     const c = this.chest!;
-    if (c.open) return;
+    // Telmo (Moscovo, 2026-11-19): "há um baú que não faz nada" — before, a locked chest only gave a tiny rattle and an
+    // opened one did nothing at all. Now every touch answers: a short spoken line + keyhole twinkle / hollow knock.
+    const talk = (line: string): void => {
+      if (this.time - c.saidAt < 6) return;
+      c.saidAt = this.time;
+      this.ctx.say([line]);
+    };
+    if (c.open) {
+      // already opened in this city: hollow knock, the lid wobbles, nothing inside
+      c.rattle = 0.6;
+      tone(220, 0, 0.12, 'sine', 0.07);
+      tone(165, 0.14, 0.2, 'sine', 0.06);
+      talk('O baú já está vazio. Há outro na próxima cidade!');
+      return;
+    }
     if (!this.ctx.spendJewels(1)) {
-      // locked: it rattles
+      // locked: it rattles and the gem-shaped keyhole twinkles — a jewel is the key
       c.rattle = 1;
+      c.hint = 1;
       for (let i = 0; i < 4; i++) tone(140 + Math.random() * 60, i * 0.07, 0.06, 'square', 0.07);
+      tone(1568, 0.35, 0.12, 'triangle', 0.05);
+      tone(2093, 0.47, 0.18, 'triangle', 0.05);
+      talk('Um baú fechado! A chave é uma joia. Apanha uma joia e volta!');
       return;
     }
     c.open = true;
     this.ctx.setFlag(`chest:${this.ctx.city()}`, 1);
     const top = c.at.clone().setY(0.9);
-    // the jewel flies into the lock, the lid swings up, the coins jump out to her
+    // the jewel flies into the lock, the lid swings up (creak), the coins jump out to her
     this.flyers.send(gemMesh(undefined, 1), this.hand(), top, 0.5, 0, () => {
       tone(880, 0, 0.1, 'square', 0.06);
       tone(1320, 0.1, 0.3, 'triangle', 0.07);
+      for (let i = 0; i < 5; i++) tone(300 - i * 25, 0.05 + i * 0.05, 0.06, 'sawtooth', 0.025); // creak
       c.glow.visible = true;
+      this.ctx.say(['A joia abriu o baú! Um tesouro de moedas!']);
       for (let i = 0; i < CHEST_COINS; i++) {
         this.flyers.send(coinMesh(), top, this.hand, 0.5, 0.5 + i * 0.1, () => {
           this.ctx.addCoins(1);
           tone(1568 + Math.random() * 200, 0, 0.06, 'square', 0.05);
+          if (i === CHEST_COINS - 1) c.glow.visible = false; // all the gold is out: empty now
         });
       }
     });
@@ -500,7 +533,14 @@ export class JewelPlaces {
       }
       if (c.rattle > 0) {
         c.rattle = Math.max(0, c.rattle - dt * 2.2);
-        c.lid.rotation.x = c.open ? c.lid.rotation.x : -Math.abs(Math.sin(this.time * 40)) * 0.08 * c.rattle;
+        const base = c.open ? -1.9 * (c.t * c.t * (3 - 2 * c.t)) : 0;
+        c.lid.rotation.x = base - Math.abs(Math.sin(this.time * 40)) * 0.08 * c.rattle;
+      }
+      if (c.hint > 0) {
+        // keyhole twinkle (~1.5 s): it grows and spins — "a jewel goes here"
+        c.hint = Math.max(0, c.hint - dt * 0.7);
+        c.lock.scale.setScalar(1 + Math.sin(c.hint * Math.PI) * 0.7);
+        c.lock.rotation.z = c.hint * Math.PI * 2;
       }
     }
   }

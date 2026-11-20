@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { SPAWN, onRoad, type Interactable, type Obstacle } from './world';
+import { ROADS, SPAWN, onRoad, type Interactable, type Obstacle } from './world';
 import { AIRPORT_ZONE } from './airport';
 import { tone } from './audio';
 import { feel } from './bus';
+import { letterHooks, letterPlaces } from './letters';
 
 /**
  * Playful props scattered around the placeholder world (swing, fountain, floor xylophone, cat, dog…).
@@ -11,6 +12,8 @@ import { feel } from './bus';
  */
 
 const TAU = Math.PI * 2;
+const ROADS_XS: readonly number[] = ROADS.xs;
+const ROADS_ZS: readonly number[] = ROADS.zs;
 /** Walking room (m) between a prop's footprint and any building/solid; relaxed step by step only on crowded maps. */
 const ROOM = 3;
 const ROOM_STEPS = [ROOM, 2.2, 1.5] as const;
@@ -296,6 +299,32 @@ export function createProps(scene: THREE.Scene, obstacles: Obstacle[], rng: () =
     [1.0, (at) => createWindChimes(kit, at)],
   ];
   far.forEach(([r, build], i) => props.push(build(place(r, 30, 130, spin + q / 2 + (i / far.length) * TAU))));
+
+  letterPlaces.bins.length = 0;
+  // Paper bins (blue, like the recycling one for paper) on the pavements: her letters can go in the bin.
+  {
+    let made = 0;
+    for (let i = 0; i < 400 && made < 4; i++) {
+      margin = roomFor(i / 400);
+      const alongX = rng() < 0.5;
+      const lines = alongX ? ROADS_ZS : ROADS_XS;
+      const line = lines[Math.floor(rng() * lines.length)];
+      const side = rng() < 0.5 ? -1 : 1;
+      const off = 6.5 + rng() * 0.7; // just past the street lamps, still on the pavement
+      const along = (rng() - 0.5) * 230;
+      if (Math.abs(along) < 10) continue; // not at the central crossroads
+      const x = alongX ? along : line + side * off;
+      const z = alongX ? line + side * off : along;
+      if (onRoad(x, z, 1.9) || !isFree(x, z, 0.5, false)) continue;
+      // the bin's front (local +Z) faces the road
+      const rot = alongX ? (side > 0 ? Math.PI : 0) : side > 0 ? -Math.PI / 2 : Math.PI / 2;
+      taken.push({ x, z, r: 2 });
+      props.push(createPaperBin(kit, { x, z, rot }));
+      letterPlaces.bins.push([+x.toFixed(1), +z.toFixed(1)]);
+      made++;
+    }
+    margin = ROOM;
+  }
 
   // The first prop also drives the shared particle pool.
   const first = props[0];
@@ -714,6 +743,7 @@ function createFlowerBed(k: Kit, at: Spot): Interactable {
 /** Caixa de correio: the flag pops up and an envelope flies out and flutters down. Ding! */
 function createMailbox(k: Kit, at: Spot): Interactable {
   const g = k.group(at);
+  letterPlaces.mailbox = [+at.x.toFixed(1), +at.z.toFixed(1)];
   g.scale.setScalar(1.3);
   mk(new THREE.BoxGeometry(0.12, 1.0, 0.12), k.mat(0x8d6e63), g, 0, 0.5, 0);
   // classic red mailbox (was blue by mistake — unreadable from afar)
@@ -740,11 +770,30 @@ function createMailbox(k: Kit, at: Spot): Interactable {
   let upFor = 0;
   let envT = -1;
   const envVel = new THREE.Vector3();
+  /** Posting her letter: it flies from her hand into the slot (seconds since it left her; -1 = not posting). */
+  let postT = -1;
+  const postFrom = new THREE.Vector3();
+  const slot = new THREE.Vector3(0, 1.2, 0.36);
   return {
     object: g,
     position: new THREE.Vector3(at.x, 0, at.z),
     radius: 1.5,
-    interact() {
+    interact(ic) {
+      if (postT < 0 && envT < 0 && letterHooks.take(false)) {
+        // she has a letter: into the slot it goes (the flag goes up when it drops in)
+        postT = 0;
+        envT = -1;
+        env.visible = true;
+        g.updateMatrixWorld();
+        postFrom.set(ic.player.x, 1.15, ic.player.z);
+        g.worldToLocal(postFrom);
+        env.position.copy(postFrom);
+        env.rotation.set(Math.PI / 2, 0, 0); // standing up, like going into a slot
+        env.scale.setScalar(1);
+        tone(988, 0, 0.1, 'triangle', 0.06);
+        return;
+      }
+      if (postT >= 0) return;
       upFor = 4;
       up.v -= 6;
       envT = 0;
@@ -759,6 +808,30 @@ function createMailbox(k: Kit, at: Spot): Interactable {
       upFor = Math.max(0, upFor - dt);
       spring(up, upFor > 0 ? 0 : Math.PI / 2, 90, 7, dt);
       flag.rotation.x = up.x;
+      if (postT >= 0) {
+        postT += dt;
+        const u = Math.min(1, postT / 0.7);
+        env.position.lerpVectors(postFrom, slot, u);
+        env.position.y += Math.sin(u * Math.PI) * 0.6; // little arc
+        if (u >= 1) {
+          // sliding in through the slot
+          const v = Math.min(1, (postT - 0.7) / 0.35);
+          env.position.z = slot.z - v * 0.25;
+          env.scale.set(1, 1, 1 - v * 0.9);
+          if (v >= 1) {
+            postT = -1;
+            env.visible = false;
+            env.rotation.set(0, 0, 0);
+            env.scale.setScalar(1);
+            upFor = 3;
+            up.v -= 6;
+            tone(523, 0, 0.12, 'square', 0.04); // flap
+            [1047, 1319, 1568].forEach((f, i) => tone(f, 0.12 + i * 0.1, 0.3, 'sine', 0.08));
+            letterHooks.say(['A carta já vai a caminho!', 'Os avós vão ficar tão contentes!']);
+            feel('kind');
+          }
+        }
+      }
       if (envT >= 0) {
         envT += dt;
         if (env.position.y > 0.03) {
@@ -776,6 +849,87 @@ function createMailbox(k: Kit, at: Spot): Interactable {
         if (envT > 4.5) {
           envT = -1;
           env.visible = false;
+        }
+      }
+    },
+  };
+}
+
+/**
+ * Papeleira azul (papel): tap / Enter = her letter flies in, the lid flaps and it rattles. With no letter the lid
+ * just pops and clunks. Only on purpose (requiresClick), so walking past never throws her letter away.
+ */
+function createPaperBin(k: Kit, at: Spot): Interactable {
+  const g = k.group(at);
+  const blue = k.mat(0x1c7ed6);
+  const dark = k.mat(0x1864ab);
+  mk(new THREE.CylinderGeometry(0.06, 0.06, 0.25, 8), k.mat(0x495057), g, 0, 0.12, 0); // foot
+  mk(new THREE.BoxGeometry(0.62, 0.82, 0.52), blue, g, 0, 0.62, 0);
+  mk(new THREE.BoxGeometry(0.66, 0.06, 0.56), dark, g, 0, 0.24, 0); // bottom rim
+  // white paper sign on the front: a sheet with folded corner (no text)
+  mk(new THREE.BoxGeometry(0.22, 0.28, 0.02), k.mat(0xffffff), g, 0, 0.62, 0.265);
+  mk(new THREE.BoxGeometry(0.07, 0.07, 0.025), k.mat(0xd0ebff), g, 0.075, 0.725, 0.268);
+  // lid on a hinge at the back
+  const lid = new THREE.Group();
+  lid.position.set(0, 1.03, -0.27);
+  g.add(lid);
+  mk(new THREE.BoxGeometry(0.68, 0.07, 0.58), dark, lid, 0, 0.035, 0.27);
+  mk(new THREE.BoxGeometry(0.2, 0.05, 0.06), k.mat(0x74c0fc), lid, 0, 0.08, 0.5); // handle
+  k.block(at, 0, 0, 0.36, 0.3);
+
+  const paper = mk(new THREE.BoxGeometry(0.28, 0.02, 0.2), k.mat(0xfff4cc), g, 0, 1, 0);
+  paper.visible = false;
+  const open = { x: 0, v: 0 };
+  let openFor = 0;
+  let flyT = -1;
+  const from = new THREE.Vector3();
+  const into = new THREE.Vector3(0, 0.9, 0.05);
+  return {
+    object: g,
+    position: new THREE.Vector3(at.x, 0, at.z),
+    radius: 1.3,
+    requiresClick: true,
+    interact(ic) {
+      if (flyT < 0 && letterHooks.take(false)) {
+        flyT = 0;
+        openFor = 1.3;
+        g.updateMatrixWorld();
+        from.set(ic.player.x, 1.15, ic.player.z);
+        g.worldToLocal(from);
+        paper.position.copy(from);
+        paper.visible = true;
+        tone(700, 0, 0.08, 'triangle', 0.05);
+        return;
+      }
+      if (flyT >= 0) return;
+      openFor = 0.45;
+      tone(180, 0.25, 0.1, 'square', 0.05); // clunk
+    },
+    update(dt) {
+      openFor = Math.max(0, openFor - dt);
+      const was = open.x;
+      spring(open, openFor > 0 ? -1.6 : 0, 80, 9, dt);
+      if (was < -0.15 && open.x >= -0.15 && openFor <= 0) tone(150, 0, 0.12, 'square', 0.06); // lid shuts: clunk
+      lid.rotation.x = Math.min(0, open.x);
+      if (flyT >= 0) {
+        flyT += dt;
+        const u = Math.min(1, flyT / 0.6);
+        paper.position.lerpVectors(from, into, u);
+        paper.position.y += Math.sin(u * Math.PI) * 0.9;
+        paper.rotation.set(flyT * 9, flyT * 4, 0);
+        paper.scale.setScalar(u < 0.85 ? 1 : 1 - (u - 0.85) * 5);
+        if (u >= 1) {
+          flyT = -1;
+          paper.visible = false;
+          paper.scale.setScalar(1);
+          // paper rustle + a happy little ding
+          for (let i = 0; i < 5; i++) tone(2600 + Math.random() * 1400, i * 0.03, 0.03, 'square', 0.025);
+          tone(1319, 0.18, 0.12, 'triangle', 0.07);
+          tone(1760, 0.28, 0.18, 'triangle', 0.07);
+          const top = new THREE.Vector3(0, 1.1, 0);
+          g.localToWorld(top);
+          k.sparks.burst(top, 8, [0x74c0fc, 0xffffff, 0xd0ebff], 1, 2.2, 0.8, 0.05);
+          letterHooks.say(['Papel no caixote azul. Muito bem!']);
         }
       }
     },
