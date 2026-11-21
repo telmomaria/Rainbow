@@ -36,4 +36,5 @@ a mensagem como `wip:` e dizer o que não foi testado.
 Sessão 2026-11-21: 3 agentes de cada vez (lançando o seguinte quando um acabava) fez 12 tarefas sem esgotar crédito.
 Para retomar agentes interrompidos, os briefs originais estão nos transcripts `.jsonl` do projeto (input dos `Agent`).
 Ele quer **a documentação coerente** (CLAUDE.md, CONTEXT, ROADMAP, SESSION_LOG) depois de cada lote de alterações — não
-só no #SEP. E guarda segredos de jogo (ex.: a Lua ser o último nível): nunca os pôr em falas antes do tempo.
+só no #SEP. Nos briefs de QA, exigir capturas da câmara do jogo em vários momentos (início/meio/fim) — um agente
+deu os escorregas como feitos só pelos números do `?debug` e o Telmo viu que ela nem saía do chão. E guarda segredos de jogo (ex.: a Lua ser o último nível): nunca os pôr em falas antes do tempo.

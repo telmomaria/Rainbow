@@ -12,7 +12,7 @@ Aplicar no Session End Protocol.
 
 | # | Action | Owner | Blocker |
 |---|---|---|---|
-| 1 | Respostas do Telmo: rei só em Londres? · tirar o bar de Reiquiavique? · commit + push de 2026-11-21? | Telmo | none |
+| 1 | Commit + push do último lote (escorregas, rei só em Londres, Reiquiavique sem bar + pescador) | Telmo aprova | none |
 | 2 | Telmo joga o que mudou (⚙ → Cidade): Varsóvia, Moscovo, parque, aurora, carta, macaca, folk; lista o que afinar | Telmo | none |
 | 3 | Ex-líbris para Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk | Telmo decide | "depois" |
 | 4 | Medir fps num tablet médio (espelhos, visitantes, parque, aurora) | Telmo + agent | tablet |
@@ -79,7 +79,8 @@ Aplicar no Session End Protocol.
 - ✅ Lua: máquina do tempo → Rainbow 2, joias +10, cápsula na nave, cometas; 227 perguntas (`192551c`, 2026-11-19)
 - ✅ Parque infantil, lojas com provador, massagem, SPA, feira 0–12 visitantes, fotógrafo, bandeiras reais, trotinete (`52ab1b0`, 2026-11-19)
 - ✅ WIP de `cd46b39` terminado e testado (2026-11-21): carta/caixa de correio/caixotes, macaca + borboletas, avião de papel/ponte/penso/sopa, padaria + Muralha + gongo, Moscovo (São Basílio + baú), estádios nas cores da bandeira, moedas dentro do chão
-- ✅ Cidade (testes) nas Definições; Varsóvia (castelo, joias, escadaria do Palácio, `activeClimb`); parque 20×19 com escadas acessíveis; SPA 13×11; rei fora de Moscovo; `CITY_WITHOUT` (5 cidades); aurora boreal em Reiquiavique; joias sem spoiler da Lua (2026-11-21, por commitar)
+- ✅ Cidade (testes) nas Definições; Varsóvia (castelo, joias, escadaria do Palácio, `activeClimb`); parque 20×19 com escadas acessíveis; SPA 13×11; rei fora de Moscovo; `CITY_WITHOUT` (5 cidades); aurora boreal em Reiquiavique; joias sem spoiler da Lua (2026-11-21, `2dcf258`)
+- ✅ Escorregas do parque a sério (subir, sentar, deslizar, câmara de lado); rei só em Londres; Reiquiavique sem bar + pescador (2026-11-21, por commitar)
 
 ---
 

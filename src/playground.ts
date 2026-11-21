@@ -42,6 +42,7 @@ function headingOf(g: THREE.Object3D, dx: number, dz: number): number {
 }
 
 const W = 10;
+const QA = new URLSearchParams(location.search).has('debug');
 const D = 19; // deep enough for a ≥2.5 m walkway behind the ladder/net (Telmo 2026-11-21: "a cerca está muito próxima das escadas")
 
 /**
@@ -119,6 +120,7 @@ function slideSeat(
       const s = local();
       const pos = g.localToWorld(s.p.clone());
       const heading = headingOf(g, s.dir.x, s.dir.z);
+      if (QA) document.body.dataset.slide = JSON.stringify([+pos.y.toFixed(2), s.sit, +t.toFixed(2)]); // QA (?debug): height, sitting, ride time
       return s.sit ? { pos, heading, tilt: s.tilt } : { pos, heading, tilt: 0, stand: true };
     },
     done: () => t >= total,
@@ -148,8 +150,8 @@ function slideSeat(
       // camera: behind the ladder while she climbs, then glides round to watch the slide from the side-front
       g.updateMatrixWorld(true);
       const s = local();
-      const want = g.localToWorld((t < climbT * 0.55 ? cams.climb : cams.slide).clone());
-      const r = Math.min(1, dt * 1.6);
+      const want = g.localToWorld((t < climbT * 0.4 ? cams.climb : cams.slide).clone());
+      const r = Math.min(1, dt * 1.8);
       camPos.lerp(want, r);
       camLook.lerp(g.localToWorld(s.p.clone().setY(s.p.y + 0.8)), Math.min(1, dt * 4));
       aerial(true);
@@ -284,7 +286,7 @@ function buildStructure(g: THREE.Group, obstacles: Obstacle[], site: Site, ctx: 
     g,
     [tubeTop.clone().setY(tubeTop.y + 0.1), tubeTop.clone().lerp(tubeBot, 0.5), tubeBot.clone().setY(0.25)],
     up(T1, 2.1, tubeTop),
-    { climb: new THREE.Vector3(-9.2, 4.6, T1.z - 4.3), slide: new THREE.Vector3(-9.2, 4.4, -1.4) },
+    { climb: new THREE.Vector3(-9.2, 5.2, T1.z - 4.3), slide: new THREE.Vector3(-9.2, 4.6, -1.4) },
     'tube',
     ctx,
     3.4,
@@ -293,7 +295,7 @@ function buildStructure(g: THREE.Group, obstacles: Obstacle[], site: Site, ctx: 
     g,
     [wave[0].clone().setY(wave[0].y + 0.1), ...wave.slice(1)],
     up(T2, 2.3, wave[0]),
-    { climb: new THREE.Vector3(T2.x + 4.5, 4.4, T2.z - 4.3), slide: new THREE.Vector3(7.6, 4.2, -2.4) },
+    { climb: new THREE.Vector3(T2.x + 3.4, 5.0, T2.z - 4.4), slide: new THREE.Vector3(8.4, 5.0, -1.8) },
     'wave',
     ctx,
     3.0,

@@ -57,8 +57,10 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   motorista abana a cabeça). Vai sentada à janela; sair = Espaço/Enter/toque/setas com as portas abertas (a meio da viagem toca a campainha e sai na paragem seguinte). Casa/menu/nova cidade tiram-na do autocarro.
 - **Botões fixos:** Casa (ponto de partida) e retrato → abre a página principal (Continuar · Novo jogo · ⚙ Definições), em qualquer momento exceto a meio do voo ou de uma pergunta (também no hospital). Definições: monstros Zero (sem monstros) / Fácil ×0.5 / Médio / Difícil ×2; som da chuva Sem som / Médio (×0,4) / Normal (a chuva continua a ver-se).
   **Cidade (testes)** nas Definições: salta para qualquer um dos 16 níveis (moedas/joias ficam; "Novo jogo" começa na cidade escolhida). Só aparece em `npm run dev` (localhost) ou com `?debug` — nunca na versão publicada.
-- **Cidades sem certas coisas (src/cities.ts `CITY_WITHOUT`, Telmo 2026-11-21):** Reiquiavique sem estádio (o bar fica) ·
-  Moscovo sem piscina · Tóquio sem feira · Vilnius sem concerto · Rio de Janeiro sem trotinete. O rei (folk) não aparece em Moscovo (`notIn`).
+- **Cidades sem certas coisas (src/cities.ts `CITY_WITHOUT`, Telmo 2026-11-21):** Reiquiavique sem estádio nem bar ·
+  Moscovo sem piscina · Tóquio sem feira · Vilnius sem concerto · Rio de Janeiro sem trotinete. O rei (folk) só existe em Londres
+  (`onlyIn`). Reiquiavique tem um pescador (src/folk/pescador.ts, `onlyIn` + `extra`): lago com pontão num lado da cidade, pesca
+  sozinho; ao chegar perto mostra um peixe; tocar nele = a vez dela (toca quando a boia afunda → peixinho, +1 moeda uma vez).
 - **Aurora boreal (src/aurora.ts):** só em Reiquiavique, à noite e sem nuvens/chuva; da 1.ª vez a narradora diz "Olha para o céu! É a aurora boreal!" e a câmara olha para o céu ~7 s.
 - **Segredo:** ninguém diz que o último nível é a Lua antes de lá chegar (as joias dizem "Guarda-a bem!").
 - **Ordem de construção da cidade:** mundo → aeroporto → extras (candeeiros, carro, pobre, adereços, gato, hospital, lojas, estádio/bar, trânsito) → só depois moedas, personagens das perguntas e monstros (nunca nascem dentro de edifícios).
@@ -104,7 +106,7 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   feira retira os edifícios provisórios do caminho.
 - **Parque infantil (src/playground.ts, 2026-11-19):** um por cidade, vedado (portões à frente e atrás), chão macio; estrutura
   grande com 2 torres + ponte, escorrega em tubo e escorrega ondulado (descem SENTADA e saem sozinhas no fim), baloiço de 2
-  lugares, carrossel de rodar, cavalinho e joaninha de mola. Clicar/Enter = sentar; tecla/toque = sair. Tocar na escada ou na rede = sobe e desce o escorrega; ≥2,7 m livres entre a cerca e as escadas. É colocado antes
+  lugares, carrossel de rodar, cavalinho e joaninha de mola. Clicar/Enter = sentar; tecla/toque = sair. Tocar na escada ou na rede = sobe, senta-se e desce o escorrega a deslizar (tubo transparente; câmara de lado durante a descida); ≥2,7 m livres entre a cerca e as escadas. É colocado antes
   dos adereços (recinto 20×19 m, precisa de ~22×21 m; se a cidade estiver cheia tira os edifícios provisórios do caminho). Sem caixa de areia.
 - **Sapataria, chapelaria e loja de roupa (src/tryon.ts, 2026-11-19):** lojas grandes onde se entra; tocar num artigo = experimentar (fica
   nela), espelho verdadeiro ao fundo, pagar no balcão/vendedor; sair sem pagar = volta à prateleira. 6 pares de calçado, 6 chapéus, 6 roupas em manequins.

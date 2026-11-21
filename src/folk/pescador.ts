@@ -21,7 +21,7 @@ const BUCKET = { x: 1.3, z: -2.05 };
 const STAND = { x: 1.0, z: -0.6 }; // where she stands (in front of the pier, on the grass)
 const FACE_WATER = 0.45; // local heading: looking out over the pond
 const ROD_REST = -1.05;
-const ROD_UP = -0.3;
+const ROD_UP = -0.6; // rod held up and out: the fish dangles in front of him
 
 type State = 'wait' | 'bite' | 'reel' | 'show' | 'drop' | 'cast';
 
@@ -147,6 +147,7 @@ registerFolk({
     float.position.copy(FLOAT_AT);
     g.add(float);
     const fish = fishMesh();
+    fish.scale.setScalar(1.6);
     fish.visible = false;
     float.add(fish);
     fish.position.y = -0.36;
@@ -207,21 +208,21 @@ registerFolk({
     };
     const tryIt = (): boolean => {
       if (!ctx.free()) return false;
-      if (state === 'bite' && herTurn) {
-        // she pulled in time: the fish is hers
+      if (state === 'bite') {
+        // she pulled while the float was under: the fish is hers
         forHer = true;
         herTurn = false;
         go('reel');
         splash(true);
         return true;
       }
-      if (herTurn || state !== 'wait') return true; // already her turn / he is busy: wait a moment
-      herTurn = true;
+      if (herTurn) return true; // already her turn: wait for the float to dip
+      herTurn = true; // if he is busy, her bite comes right after his next cast
       man.lookAt(new THREE.Vector3(ctx.game.player.x, 0, ctx.game.player.z));
       man.nod(1);
       turnBack = 1.2;
-      waitFor = t + 2.5;
-      ctx.say(['Queres tentar? Quando a boia afundar, toca outra vez!']);
+      if (state === 'wait') waitFor = t + 2.5;
+      ctx.say(['Queres tentar? Toca quando a boia afundar!']);
       return true;
     };
 
@@ -286,6 +287,11 @@ registerFolk({
           if (Math.floor(t * 12) !== Math.floor((t - dt) * 12)) tone(1700, 0, 0.025, 'square', 0.015); // reel clicks
           if (t >= 1.0) {
             go('show');
+            // he turns round to show it to her (if she is near)
+            if (ctx.herDist(MAN.x, MAN.z) < 12) {
+              man.lookAt(new THREE.Vector3(ctx.game.player.x, 0, ctx.game.player.z));
+              turnBack = 0;
+            }
             happy();
             if (forHer) {
               herCatches++;
@@ -305,7 +311,9 @@ registerFolk({
             fish.visible = false;
             const from = ctx.at(float.position.x, float.position.z, float.position.y - 0.3);
             const p = ctx.game.player;
-            ctx.fly.send(fishMesh(), from, () => new THREE.Vector3(p.x, 1.2, p.z), 0.8, 0, () => {
+            const flying = fishMesh();
+            flying.scale.setScalar(1.4);
+            ctx.fly.send(flying, from, () => new THREE.Vector3(p.x, 1.2, p.z), 0.8, 0, () => {
               sparks.burst(new THREE.Vector3(p.x, 1.4, p.z), 12);
               happy();
               if (ctx.ready('peixe', 1e9)) ctx.pay(1, new THREE.Vector3(p.x, 1.6, p.z));
@@ -313,8 +321,12 @@ registerFolk({
             ctx.say(['Boa! Apanhaste um peixinho!']);
             man.cheer(1.4);
             forHer = false;
+            turnBack = 1.2;
             go('cast');
-          } else if (t >= 1.8) go('drop');
+          } else if (t >= 2.4) {
+            go('drop');
+            man.lookAt(null);
+          }
         } else if (state === 'drop') {
           // the fish goes into the bucket
           const k = Math.min(1, t / 0.6);

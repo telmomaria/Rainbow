@@ -1,6 +1,6 @@
 # CONTEXT — Rainbow
 
-> Atualizado a 2026-11-21. Uma só janela: sem LINEAGE.
+> Substituído a 2026-11-21 (#SEP). Uma só janela: sem LINEAGE.
 > Ler com [ROADMAP.md](ROADMAP.md) · [CLAUDE.md](CLAUDE.md) · [memory/MEMORY.md](memory/MEMORY.md).
 
 ## O que é
@@ -10,7 +10,7 @@ por movimento. Aos 100 moedas → cidade seguinte. **Mundo gerado** (sem OSM). *
 Porto → … → Nuuk → Estados Unidos → Lua. Fim: máquina do tempo na Lua (joias trazidas + 10) → "Rainbow 2".
 **Segredo:** nada no jogo diz que o último nível é a Lua antes de lá chegar.
 
-## What works (HEAD `cd46b39` + alterações de 2026-11-21 por commitar)
+## What works (`origin/main` = `2dcf258` + último lote por commitar — ver ROADMAP NEXT #1)
 
 - **Testado no browser a 2026-11-21:**
   - WIP de `cd46b39` terminado: carta lida + caixa de correio + caixotes azuis; macaca 1–10 + borboletas novas;
@@ -19,9 +19,10 @@ Porto → … → Nuuk → Estados Unidos → Lua. Fim: máquina do tempo na Lua
   - **Cidade (testes)** nas ⚙ Definições (só dev/`?debug`): salta para qualquer nível.
   - Varsóvia: castelo virado para a rua; joias visíveis no Castelo, Barbican (agora com porta) e Palácio da Cultura;
     o Palácio tem escadaria a sério; bug de duas subidas na mesma cidade corrigido (`activeClimb`). Clérigos re-testado.
-  - Parque infantil 20×19 m: escadas e rede acessíveis (≥2,7 m da cerca), sobe-se tocando na escada/rede.
-  - SPA 13×11 m (Vilnius, Moscovo, Nuuk); rei fora de Moscovo.
-  - `CITY_WITHOUT`: Reiquiavique sem estádio (bar fica), Moscovo sem piscina, Tóquio sem feira, Vilnius sem concerto, Rio sem trotinete.
+  - Parque infantil 20×19 m: escadas e rede acessíveis; ela sobe, senta-se e desce os 2 escorregas a deslizar, com câmara própria de lado; tubo transparente.
+  - SPA 13×11 m (Vilnius, Moscovo, Nuuk); rei só em Londres (`onlyIn`).
+  - Reiquiavique: sem estádio nem bar; pescador num lago com pontão (`src/folk/pescador.ts`) — pesca sozinho, mostra o peixe, ela pode tentar (+1).
+  - `CITY_WITHOUT`: Reiquiavique sem estádio nem bar, Moscovo sem piscina, Tóquio sem feira, Vilnius sem concerto, Rio sem trotinete.
   - Aurora boreal em Reiquiavique (`src/aurora.ts`), à noite; a câmara olha para o céu ~7 s quando a narradora a anuncia.
   - Joias dizem "Guarda-a bem!" (antes "Guarda-a para a Lua!").
 - Antes (2026-11-19/20): Lua, 227 perguntas, lojas com provador, SPA, massagem, feira com visitantes, fotógrafo, bandeiras, trotinete.
@@ -29,15 +30,14 @@ Porto → … → Nuuk → Estados Unidos → Lua. Fim: máquina do tempo na Lua
 
 ## What's broken / blocked
 
-- **Por commitar:** todo o trabalho de 2026-11-21 (o Telmo ainda não pediu commit).
+- **Por commitar:** escorregas, rei só em Londres, Reiquiavique sem bar + pescador (testados; o `2dcf258` tinha-os a meio).
 - Sem ex-líbris: Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk.
 - Nas cidades nada impede a personagem de sair do chão a andar (não há parede na borda).
 - Som real, animações em movimento, toque e fps em tablet nunca validados.
 
 ## Top pending
 
-1. ⏳ **Perguntas ao Telmo:** (a) o rei ainda aparece no Porto, Varsóvia, Rio, Reiquiavique e EUA — fica só em Londres?
-   (b) em Reiquiavique tirar também o bar com os dois homens? (c) commit + push do trabalho de 2026-11-21?
+1. Commit + push do último lote (aguarda o Telmo).
 2. Telmo joga o que mudou (usar ⚙ → Cidade) e diz o que afinar.
 3. Ex-líbris das cidades vazias (Telmo: "depois").
 4. Medir fps num tablet médio.

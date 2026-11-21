@@ -133,3 +133,14 @@
 - **Lições:** (1) os briefs dos agentes interrompidos estão nos transcripts `.jsonl` (input dos `Agent`) — deu para retomar sem perguntar; (2) 3 agentes de cada vez + "código e tsc primeiro, browser depois" chegou sem esgotar crédito; (3) no Git Bash, o node lê `/tmp` como `C:/tmp`.
 - Clérigos: a vista do topo era uma câmara aérea que mostrava a própria torre; agora a câmara fica no varandim a olhar para o centro da cidade (testado).
 - Não verificado: som, animações em movimento, toque, fps em tablet.
+
+## 2026-11-21 — #SEP (fecho)
+
+- **Commit em origin/main:** `2dcf258` (wip: tudo o que está na entrada anterior + rei/bar/pescador e escorregas a meio).
+- **Depois do commit, testado e por commitar:**
+  - Escorregas do parque: ela nunca saía do chão — as subidas paradas de outros sítios (`landmarks.ts`, `play.ts`, `usa.ts`) a puxavam para y=0 a cada frame; main.ts agora repõe a altura da diversão depois do ciclo dos interactables. Câmara própria de lado (`rainbow-aerial`), tubo transparente, buracos nas meias-paredes para a escada/rede.
+  - Rei só em Londres (`onlyIn`); Reiquiavique sem estádio nem bar (`CITY_WITHOUT` + `withBar`); pescador em Reiquiavique (`src/folk/pescador.ts`, `extra` + `edge`).
+- **Decisões do Telmo:** rei só em Londres; sem bar em Reiquiavique; um pescador num lado de Reiquiavique; Lua é segredo; commit + push mesmo com trabalho a meio (marcado `wip:`).
+- **Lições:** (1) um agente deu os escorregas como "a funcionar" só pelos números do debug — o ecrã mostrava outra coisa; exigir sempre capturas da câmara do jogo em vários momentos; (2) várias "redes de segurança" por frame (puxar para o chão) lutam entre si — Varsóvia e o parque partiram pelo mesmo padrão; (3) commit com agentes a trabalhar mistura trabalho a meio — evitar ou marcar `wip:`.
+- `.tmp/`: só capturas/scripts de QA, zero `.md` a promover. Passos 3 e 8 N/A (sem LINEAGE).
+- Capacity: alta (≈14 agentes em ondas de 2–3; nenhum parou por crédito).

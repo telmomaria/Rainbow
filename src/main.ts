@@ -933,6 +933,8 @@ let rescuing = false;
 let buyTarget: Interactable | null = null;
 /** Swing she is sitting on (null = not swinging). */
 let riding: { seat: NonNullable<Interactable['seat']>; i: number } | null = null;
+/** Height the ride put her at this frame (re-applied after the interactables' updates). */
+let rideY = 0;
 function useClickable(it: Interactable): void {
   if (riding) return; // already on a ride: taps steer / get off, they never buy another
   const ok = it.interact({ player: player.position }) !== false;
@@ -947,7 +949,9 @@ function useClickable(it: Interactable): void {
 function getOffSwing(): void {
   if (!riding) return;
   const off = riding.seat.getOff();
+  const rideCam = aerial; // a ride that owned the camera (playground slides): keep looking from that side afterwards
   riding.seat.leave();
+  if (rideCam?.fromX !== undefined && rideCam.fromZ !== undefined) camYaw = Math.atan2(rideCam.fromX - off.x, rideCam.fromZ - off.z);
   riding = null;
   player.sitting = false;
   player.lyingY = null;
@@ -1678,11 +1682,13 @@ function tick(time: number): void {
       player.lyingY = p.pos.y;
       player.position.set(p.pos.x, p.pos.y, p.pos.z);
     } else {
+      player.sitting = true; // (a ride can switch from standing to sitting: playground slide climb → slide)
       player.root.rotation.order = 'YXZ';
       player.root.rotation.y = p.heading;
       player.root.rotation.x = p.tilt;
       player.position.set(p.pos.x, p.pos.y - 0.7, p.pos.z);
     }
+    rideY = player.position.y;
   }
 
   // --- touch-to-interact (edge triggered: fires once when the character reaches the object) ---
@@ -1757,6 +1763,9 @@ function tick(time: number): void {
   // (not while she's watching the concert — standing still is the whole point there)
   if (!paused && !flight && !onBus() && hospitalPhase === 'none' && !concert.isInside() && !pool.isInside() && !house.isInside() && !fair.isInside() && performance.now() - lastActivity > IDLE_MS) void idlePause();
   for (const it of world.interactables) it.update?.(dt);
+  // the tower climbs' "never leave her floating" safety (landmarks / play / usa) drops anyone high up to y = 0:
+  // a ride (slide, roller coaster…) keeps the height it set this frame
+  if (riding) player.position.y = rideY;
   // climb updates set walkAnim after the early player.update — refresh the walk cycle same frame
   if (scriptedWalk > 0 && !flight && !rescuing) player.update(dt, scriptedWalk);
 
