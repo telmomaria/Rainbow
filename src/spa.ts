@@ -9,8 +9,8 @@ import { buildFolk, pick, HAIRS, SKINS, type Folk } from './venue';
 import type { Interactable, Obstacle } from './world';
 
 /**
- * SPA (termas) — Nuuk (ice walls), Vilnius and Moscovo (wooden walls). Open-air walled courtyard (10 × 8 m) she
- * walks into:
+ * SPA (termas) — Nuuk (ice walls), Vilnius and Moscovo (wooden walls). Open-air walled courtyard (13 × 11 m, walkways ≥ 2.5 m round
+ * the tub, cabins and desk) she walks into:
  *  - pay once at the entrance (click / Enter at the door): the sliding doors open;
  *  - changing cabins on the left: walk into one → the curtain closes → she comes out in a bathrobe (in again = clothes);
  *  - the round hot tub (steam, bubbles, two bathers): tap the water / Enter next to it in the robe = she leaves the robe
@@ -37,11 +37,12 @@ function spaKindFor(city: string): SpaKind | null {
   return null;
 }
 
-const HW = 5;
-const DEPTH = 8;
+// 13 × 11 m (was 10 × 8 until 2026-11-21: Telmo wanted more room to move around)
+const HW = 6.5;
+const DEPTH = 11;
 const WALL_H = 1.7;
 const DOOR_HW = 1.05;
-const TUB = { x: 1.0, z: -5.0, r: 2.0, inner: 1.75, rim: 0.7, water: 0.6 };
+const TUB = { x: 1.0, z: -6.0, r: 2.0, inner: 1.75, rim: 0.7, water: 0.6 };
 /** Seat circle radius inside the tub; she sits with her hips at SEAT_Y (under water). */
 const SEAT_R = 1.2;
 const SEAT_Y = 0.3;
@@ -53,10 +54,10 @@ const SEATS: [number, number][] = [
   [1, 0],
 ];
 const HER_SEATS = [0, 1];
-const CABIN_Z = [-2.3, -4.5];
+const CABIN_Z = [-3.2, -5.8];
 const CABIN_X0 = -HW + 0.3; // inner face of the left wall
-const CABIN_X1 = -3.4; // curtain line
-const DESK = { x: 3.4, z: -1.5 };
+const CABIN_X1 = -HW + 1.6; // curtain line
+const DESK = { x: HW - 1.6, z: -1.5 };
 
 const THEMES: Record<SpaKind, { wall: number; trim: number; floor: number; rim: number; deck: number }> = {
   ice: { wall: 0x74c0fc, trim: 0xa5d8ff, floor: 0xe9ecef, rim: 0xd0ebff, deck: 0xc5f6fa },

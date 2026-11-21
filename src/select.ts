@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CHARACTERS, characterById } from './characters';
 import { speak, stopSpeaking } from './audio';
-import { openSettings, type RainSound } from './ui';
+import { openSettings, type CityPicker, type RainSound } from './ui';
 
 const style = document.createElement('style');
 style.textContent = `
@@ -145,6 +145,8 @@ export function chooseCharacter(
     onDifficulty: (d: 'zero' | 'facil' | 'medio' | 'dificil') => void;
     rainSound: RainSound;
     onRainSound: (r: RainSound) => void;
+    /** Testing only: jump to any city from the settings. */
+    cities?: CityPicker;
   },
 ): Promise<{ id: string; mode: StartMode }> {
   const pics = renderThumbs();
@@ -200,6 +202,7 @@ export function chooseCharacter(
           start.onRainSound(r);
         },
       },
+      start.cities,
     ));
     row.appendChild(setBtn);
     wrap.appendChild(row);

@@ -32,3 +32,8 @@ mas **7 agentes em paralelo esgotaram o limite mensal da API** e pararam todos a
 **How to apply:** com crédito incerto, no máximo 3–4 agentes de cada vez; pedir-lhes que façam primeiro a correção e o
 `tsc`, e só depois as capturas, para o trabalho ficar utilizável se pararem. Ele pediu commit+push mesmo com WIP: marcar
 a mensagem como `wip:` e dizer o que não foi testado.
+
+Sessão 2026-11-21: 3 agentes de cada vez (lançando o seguinte quando um acabava) fez 12 tarefas sem esgotar crédito.
+Para retomar agentes interrompidos, os briefs originais estão nos transcripts `.jsonl` do projeto (input dos `Agent`).
+Ele quer **a documentação coerente** (CLAUDE.md, CONTEXT, ROADMAP, SESSION_LOG) depois de cada lote de alterações — não
+só no #SEP. E guarda segredos de jogo (ex.: a Lua ser o último nível): nunca os pôr em falas antes do tempo.

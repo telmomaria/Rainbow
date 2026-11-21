@@ -775,7 +775,7 @@ export function createShops(
       mk(box(3.2, 0.08, 0.45), wood, g, -0.9, y, back + 0.55);
       for (let i = 0; i < 4; i++) {
         if ((i + (y > 1.5 ? 1 : 0)) % 2) roundLoaf(g, -2.1 + i * 0.8, y + 0.04, back + 0.55, 1.2);
-        else ball(g, 0xe9b872, 0.36, 0.07, 0.08, -2.1 + i * 0.8, y + 0.11, back + 0.55).rotation.y = 0.15; // baguette
+        else ball(g, 0xe9b872, 0.34, 0.1, 0.11, -2.1 + i * 0.8, y + 0.13, back + 0.55).rotation.y = 0.15; // baguette
       }
     }
     // brick oven (dome) with a warm glowing mouth

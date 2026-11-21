@@ -9,7 +9,7 @@ de cidade em cidade. Ver [CONTEXT.md](CONTEXT.md) e [ROADMAP.md](ROADMAP.md).
 - **Mapa:** mundo **gerado** por cidade (grelha de ruas + edifícios low-poly), como está. **Sem mapas reais** (nem
   OpenStreetMap nem Google 3D Tiles): seriam demasiado grandes para as crianças. (Decisão do Telmo a 2026-11-15, que
   substitui a de 2026-11-11.) Cada cidade distingue-se pelos seus ex-líbris e pelo que lá se pode fazer; as cidades não
-  devem ser iguais nem ter todas as mesmas coisas. Área a dobrar: abandonada (Telmo, 2026-11-19). (Ex-líbris de algumas cidades ainda por fazer — ver ROADMAP.)
+  devem ser iguais nem ter todas as mesmas coisas. Área a dobrar: abandonada (Telmo, 2026-11-19). Sem ex-líbris ainda: Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk (ver ROADMAP).
 - **Voz:** Web Speech API (`speechSynthesis`, voz `pt-PT`). Fallback a definir se a voz pt-PT faltar no dispositivo.
 - **Persistência:** `localStorage` (progresso, moedas, roupa, posição). Sem contas, sem dados pessoais. Sem morada de início.
 
@@ -56,11 +56,19 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   do anel, servidas por todas as linhas; os autocarros param ~5 s de portas abertas. Entrar = tocar no autocarro / ir à porta / Enter (paga 1 moeda; sem moedas o
   motorista abana a cabeça). Vai sentada à janela; sair = Espaço/Enter/toque/setas com as portas abertas (a meio da viagem toca a campainha e sai na paragem seguinte). Casa/menu/nova cidade tiram-na do autocarro.
 - **Botões fixos:** Casa (ponto de partida) e retrato → abre a página principal (Continuar · Novo jogo · ⚙ Definições), em qualquer momento exceto a meio do voo ou de uma pergunta (também no hospital). Definições: monstros Zero (sem monstros) / Fácil ×0.5 / Médio / Difícil ×2; som da chuva Sem som / Médio (×0,4) / Normal (a chuva continua a ver-se).
+  **Cidade (testes)** nas Definições: salta para qualquer um dos 16 níveis (moedas/joias ficam; "Novo jogo" começa na cidade escolhida). Só aparece em `npm run dev` (localhost) ou com `?debug` — nunca na versão publicada.
+- **Cidades sem certas coisas (src/cities.ts `CITY_WITHOUT`, Telmo 2026-11-21):** Reiquiavique sem estádio (o bar fica) ·
+  Moscovo sem piscina · Tóquio sem feira · Vilnius sem concerto · Rio de Janeiro sem trotinete. O rei (folk) não aparece em Moscovo (`notIn`).
+- **Aurora boreal (src/aurora.ts):** só em Reiquiavique, à noite e sem nuvens/chuva; da 1.ª vez a narradora diz "Olha para o céu! É a aurora boreal!" e a câmara olha para o céu ~7 s.
+- **Segredo:** ninguém diz que o último nível é a Lua antes de lá chegar (as joias dizem "Guarda-a bem!").
 - **Ordem de construção da cidade:** mundo → aeroporto → extras (candeeiros, carro, pobre, adereços, gato, hospital, lojas, estádio/bar, trânsito) → só depois moedas, personagens das perguntas e monstros (nunca nascem dentro de edifícios).
 - **Arranque:** ecrã de escolha com "Continuar" (tudo como estava) e "Novo jogo" (tudo a zero, mantém personagem e definições).
 - **Situações por cidade (só movimento, sem texto):** gato na árvore (+5), padaria (pão = 2) → pombos, gelado 3 / chocolate 2 / chupa 1,
-  adeptos do estádio (-20), dois homens à porta do bar (-10), trânsito (atropelada = -30 + hospital 5 min; o tempo persiste em reload).
-  Tudo espalhado pela cidade, nunca no centro nem no ponto de partida (SPAWN em world.ts).
+  adeptos do estádio (-20; estádio e adeptos nas cores da bandeira do país), dois homens à porta do bar (-10), trânsito (atropelada = -30 + hospital 5 min; o tempo persiste em reload).
+  Tudo espalhado pela cidade, nunca no centro nem no ponto de partida (SPAWN em world.ts). Moedas e joias nascem sempre ≥3 m dentro da borda do chão (±140 nas cidades, ±90 na Lua).
+- **Carta (src/letters.ts):** o carteiro (Paris+) traz cartas da mãe/do pai; tocar na carta no inventário = abre e a narradora lê-a. Pô-la na caixa de correio (encostar) = vai para os avós; caixotes azuis (tocar/Enter) = deita-a fora.
+- **Macaca (src/play.ts):** jogo 1–10 com pedrinha, contagem falada, "Céu!" = +2 moedas uma vez por cidade; ≥4 m do jardim de borboletas.
+- **Baú (src/jewels.ts):** um por cidade; a chave é uma joia → abre e dá +15 moedas; depois fica vazio.
 - **Concerto (src/concert.ts):** recinto vedado em cada cidade; bilhete = 5 moedas na bilheteira (clique/Enter), o porteiro
   abana a cabeça e aponta para a bilheteira sem bilhete; com bilhete o portão abre e o bilhete é recolhido à entrada (sair é
   livre, voltar a entrar pede novo bilhete). **Um concerto a cada 20 min** pelo relógio do dispositivo (:00, :20, :40):
@@ -96,13 +104,15 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   feira retira os edifícios provisórios do caminho.
 - **Parque infantil (src/playground.ts, 2026-11-19):** um por cidade, vedado (portões à frente e atrás), chão macio; estrutura
   grande com 2 torres + ponte, escorrega em tubo e escorrega ondulado (descem SENTADA e saem sozinhas no fim), baloiço de 2
-  lugares, carrossel de rodar, cavalinho e joaninha de mola. Clicar/Enter = sentar; tecla/toque = sair. É colocado antes
-  dos adereços (precisa de ~22×18 m; se a cidade estiver cheia tira os edifícios provisórios do caminho). Sem caixa de areia.
+  lugares, carrossel de rodar, cavalinho e joaninha de mola. Clicar/Enter = sentar; tecla/toque = sair. Tocar na escada ou na rede = sobe e desce o escorrega; ≥2,7 m livres entre a cerca e as escadas. É colocado antes
+  dos adereços (recinto 20×19 m, precisa de ~22×21 m; se a cidade estiver cheia tira os edifícios provisórios do caminho). Sem caixa de areia.
 - **Sapataria, chapelaria e loja de roupa (src/tryon.ts, 2026-11-19):** lojas grandes onde se entra; tocar num artigo = experimentar (fica
   nela), espelho verdadeiro ao fundo, pagar no balcão/vendedor; sair sem pagar = volta à prateleira. 6 pares de calçado, 6 chapéus, 6 roupas em manequins.
-- **SPA (src/spa.ts, 2026-11-19):** pátio grande, paga 5 à porta, veste o roupão na cabina, entra/sai da água quente quando
+- **SPA (src/spa.ts, 2026-11-19):** só em Vilnius, Moscovo e Nuuk; pátio 13×11 m (corredores ≥2,7 m), paga 5 à porta, veste o roupão na cabina, entra/sai da água quente quando
   quiser (energia +1 a cada 10 s, humor +2 por visita); o roupão fica no SPA ao sair. Sem marquesas de massagem.
 - **Fotógrafo:** 1 moeda por foto, quantas quiser seguidas ("Tiramos mais uma?").
+- **Ex-líbris onde se sobe (src/landmarks.ts `towerClimb`):** só uma subida ativa de cada vez (Varsóvia tem duas); no topo, terraço aberto com a joia num pedestal ao lado dela. Moscovo: Catedral de São Basílio (src/landmarks-moscovo.ts). Pequim: muralha longa com torres + gongo.
+- **Personagens de rua (src/folk/):** cada uma faz algo visível (avião de papel, ponte com tábuas, enfermeira: penso só se se magoou há < 3 min, senão lavar as mãos; sopa); "Bom dia/Boa tarde/Boa noite" segue a hora local.
 - **Bandeiras (src/flags.ts):** as bandeiras reais de cada país (aeroporto, castelos de Varsóvia), desenhadas em canvas.
 - **Trotinete:** braços para a frente no guiador; as perguntas também aparecem de trotinete (ela para, não sai).
 - **Massagem (2026-11-19):** fica deitada o tempo que quiser (tecla/toque = levantar); energia +1 a cada 8 s, humor +1 uma vez;

@@ -31,16 +31,27 @@ export interface FolkHost {
 }
 
 /** Which characters live in the city of this level. `?folk=a,b` (or `?folk=all`) overrides it, for testing. */
-export function folkForLevel(level: number): string[] {
+export function folkForLevel(level: number, city = ''): string[] {
   const forced = new URLSearchParams(location.search).get('folk');
   if (forced === 'all') return folkIds();
   if (forced) return forced.split(',').filter((id) => defs.has(id));
   const out: string[] = [];
+  const allowed = (d: FolkDef) => !d.notIn?.includes(city) && (!d.onlyIn || d.onlyIn.includes(city));
   for (const group of ['fantasia', 'profissao'] as const) {
-    const ids = [...defs.values()].filter((d) => d.group === group).map((d) => d.id);
-    const n = Math.min(PER_CITY[group], ids.length);
-    for (let k = 0; k < n; k++) out.push(ids[(level * PER_CITY[group] + k) % ids.length]);
+    // the rotation runs over the whole list (extras aside), so the other cities keep their usual line-up
+    const all = [...defs.values()].filter((d) => d.group === group && !d.extra);
+    // characters that make no sense in this city (notIn / onlyIn) are skipped: the next one in the rotation takes the place
+    const n = Math.min(PER_CITY[group], all.filter(allowed).length);
+    const start = level * PER_CITY[group];
+    const picked: string[] = [];
+    for (let k = 0; picked.length < n && k < all.length; k++) {
+      const d = all[(start + k) % all.length];
+      if (allowed(d)) picked.push(d.id);
+    }
+    out.push(...picked);
   }
+  // a character that belongs to this city (onlyIn) is always there, even when the rotation did not bring him
+  for (const d of defs.values()) if (d.onlyIn?.includes(city) && allowed(d) && !out.includes(d.id)) out.push(d.id);
   return out;
 }
 
@@ -64,7 +75,7 @@ export class FolkTown {
   constructor(private readonly host: FolkHost, seed: number, level: number, city: string) {
     this.fly = new Flyers(host.scene);
     const rng = mulberry32(seed * 73 + 29);
-    for (const id of folkForLevel(level)) {
+    for (const id of folkForLevel(level, city)) {
       const def = defs.get(id);
       if (!def) continue;
       const site = this.findSite(def, rng);
@@ -118,6 +129,7 @@ export class FolkTown {
       });
     }
     // open grass inside the block — never roadside (baliza / brincar no meio da rua)
+    if (def.edge) return parkSite(obstacles, rng, def.hw, def.depth, { minD: 60, maxD: 400, roadGap: 7, farthest: true });
     return parkSite(obstacles, rng, def.hw, def.depth, { minD: 28, maxD: 140, roadGap: 7 });
   }
 

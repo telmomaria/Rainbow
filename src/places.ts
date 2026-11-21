@@ -235,9 +235,9 @@ export function faceAwayFromRoad(x: number, z: number): number {
  * Default roadGap 7 m so goals / play areas never sit on the kerb. Null if the city is full.
  */
 export function parkSite(obstacles: Obstacle[], rng: () => number, hw: number, depth: number, opts: SpotOpts = {}): Site | null {
-  const { minD = 30, maxD = 135, roadGap = 7 } = opts;
+  const { minD = 30, maxD = 135, roadGap = 7, farthest = false } = opts;
   const r = Math.hypot(hw, depth / 2);
-  const spot = openSpot(obstacles, rng, r, { minD, maxD, roadGap });
+  const spot = openSpot(obstacles, rng, r, { minD, maxD, roadGap, farthest });
   if (!spot) return null;
   const rot = faceAwayFromRoad(spot.x, spot.z);
   const centred = { x: spot.x, z: spot.z, rot };

@@ -550,7 +550,7 @@ registerFolk({
 
 /**
  * I20 — Enfermeira. Only offers a plaster when she really got hurt (a monster bump / comet — game.sinceHurt()):
- * tap the nurse or the plaster box = a colourful plaster flies onto her knee and stays there ~3 min (+mood via
+ * tap the nurse or the plaster box = a colourful plaster flies onto her arm and stays there ~3 min (+mood via
  * feel('doctor'), 1 coin). Not hurt = "Lavaste as mãos hoje?": tap the nurse or the washbasin = the tap runs,
  * soap bubbles rise, "Mãos limpinhas!". (Until 2026-11-19 she offered a plaster to anyone, for nothing.)
  */
@@ -582,7 +582,7 @@ registerFolk({
     const seq = new Seq();
 
     const HURT_RECENT = 180; // s: a bump this recent still "hurts"
-    const PLASTER_TIME = 180; // s on her knee
+    const PLASTER_TIME = 180; // s on her arm
     let plaster: THREE.Object3D | null = null;
     let plasterLeft = 0;
     let busy = false;
@@ -594,10 +594,10 @@ registerFolk({
       nurse.work('reach', 1.2);
       ctx.say(['Deixa ver… um penso colorido!']);
       const flying = plasterMesh();
-      ctx.fly.send(flying, ctx.at(1.3, -1.4, 1.0), () => kneeWorld(ctx.player), 0.8, 0.5, () => {
+      ctx.fly.send(flying, ctx.at(1.3, -1.4, 1.0), () => limbWorld(ctx.player), 0.8, 0.5, () => {
         plaster = attachPlaster(ctx.player);
         plasterLeft = PLASTER_TIME;
-        sparks.burst(kneeWorld(ctx.player), 10, [0xff6b9d, 0xffe066, 0x74c0fc, 0xffffff]);
+        sparks.burst(limbWorld(ctx.player), 10, [0xff6b9d, 0xffe066, 0x74c0fc, 0xffffff]);
         [659, 784, 988].forEach((f, i) => tone(f, i * 0.08, 0.14, 'triangle', 0.05));
         feel('doctor');
         if (ctx.ready('plaster')) ctx.pay(1, ctx.at(0.2, -1.2, 1.2));
@@ -667,7 +667,7 @@ registerFolk({
         seq.update(dt);
         if (plaster) {
           if (!ctx.game.isPaused()) plasterLeft -= dt;
-          // the model is rebuilt on a character / clothes change: put it back on the new knee
+          // the model is rebuilt on a character / clothes change: put it back on the new arm
           if (!isOnPlayer(plaster, ctx.player)) {
             plaster.removeFromParent();
             plaster = attachPlaster(ctx.player);
@@ -697,46 +697,61 @@ function plasterMesh(): THREE.Group {
   return g;
 }
 
-/** The front leg's swing pivot of the player's model (Character keeps the model private: read it defensively). */
-function legPivot(player: Character): THREE.Object3D | null {
-  const model = (player as unknown as { model?: { legs?: { pivot: THREE.Object3D }[] } }).model;
-  return model?.legs?.[0]?.pivot ?? null;
+/**
+ * Where the plaster goes: the outer side of an arm (the camera is behind her, and the dresses hide the knees);
+ * characters without arms (unicorn) get it on the outer side of a leg. Character keeps the model private: read it
+ * defensively.
+ */
+function limbPivot(player: Character): THREE.Object3D | null {
+  const model = (player as unknown as { model?: { legs?: { pivot: THREE.Object3D }[]; arms?: THREE.Object3D[] } }).model;
+  return model?.arms?.[0] ?? model?.legs?.[0]?.pivot ?? null;
 }
 
-/** Knee, in the leg pivot's frame: half way down the leg, on its front (-Z) surface. */
-function kneeLocal(pivot: THREE.Object3D): THREE.Vector3 {
+/** Outer side of the limb (away from the body), a bit below half way down, in the pivot's frame. */
+function limbSpot(pivot: THREE.Object3D): { at: THREE.Vector3; side: number } {
+  const side = pivot.position.x < 0 ? -1 : 1;
   const bb = new THREE.Box3();
   pivot.updateMatrixWorld(true);
   const inv = pivot.matrixWorld.clone().invert();
   const m = new THREE.Matrix4();
   pivot.traverse((o) => {
     const mesh = o as THREE.Mesh;
-    if (!mesh.isMesh) return;
+    if (!mesh.isMesh || isPlaster(mesh)) return;
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     bb.union(mesh.geometry.boundingBox!.clone().applyMatrix4(m.multiplyMatrices(inv, mesh.matrixWorld)));
   });
-  if (bb.isEmpty()) return new THREE.Vector3(0, -0.45, -0.1);
-  return new THREE.Vector3((bb.min.x + bb.max.x) / 2, bb.min.y + (bb.max.y - bb.min.y) * 0.5, bb.min.z - 0.012);
+  if (bb.isEmpty()) return { at: new THREE.Vector3(side * 0.08, -0.4, 0), side };
+  const x = side > 0 ? bb.max.x + 0.012 : bb.min.x - 0.012;
+  return { at: new THREE.Vector3(x, bb.max.y - (bb.max.y - bb.min.y) * 0.6, (bb.min.z + bb.max.z) / 2), side };
+}
+
+function isPlaster(o: THREE.Object3D): boolean {
+  for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p.userData.plaster) return true;
+  return false;
 }
 
 function attachPlaster(player: Character): THREE.Object3D {
   const p = plasterMesh();
-  const pivot = legPivot(player);
+  p.userData.plaster = true;
+  const pivot = limbPivot(player);
   if (pivot) {
-    p.position.copy(kneeLocal(pivot));
-    p.rotation.z = 0.35;
+    const { at, side } = limbSpot(pivot);
+    p.position.copy(at);
+    p.rotation.set(0, side * (Math.PI / 2), 0.35); // flat on the outer side of the arm, a little slanted
+    p.scale.setScalar(1.5); // cartoon size: readable from the follow camera
     pivot.add(p);
   } else {
-    p.position.set(0.12, 0.5, -0.16);
+    p.position.set(0.25, 1.1, 0);
+    p.rotation.y = Math.PI / 2;
     player.root.add(p);
   }
   return p;
 }
 
-function kneeWorld(player: Character): THREE.Vector3 {
-  const pivot = legPivot(player);
-  if (!pivot) return player.root.localToWorld(new THREE.Vector3(0.12, 0.5, -0.16));
-  return pivot.localToWorld(kneeLocal(pivot));
+function limbWorld(player: Character): THREE.Vector3 {
+  const pivot = limbPivot(player);
+  if (!pivot) return player.root.localToWorld(new THREE.Vector3(0.25, 1.1, 0));
+  return pivot.localToWorld(limbSpot(pivot).at);
 }
 
 function isOnPlayer(o: THREE.Object3D, player: Character): boolean {

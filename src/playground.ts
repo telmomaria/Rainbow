@@ -42,38 +42,89 @@ function headingOf(g: THREE.Object3D, dx: number, dz: number): number {
 }
 
 const W = 10;
-const D = 16;
+const D = 19; // deep enough for a ≥2.5 m walkway behind the ladder/net (Telmo 2026-11-21: "a cerca está muito próxima das escadas")
 
-/** A slide ridden sitting: a short pause at the top, then down the path; she gets off at the bottom by herself. */
+/**
+ * A slide ridden sitting: she climbs up (ladder / net, standing), crosses the deck, sits at the top, slides down the
+ * path (facing down the slide, leaning with it) and gets off at the bottom by herself.
+ * While she's on it the camera is the ride's own (`rainbow-aerial` with fromX/fromZ): first behind the ladder, then
+ * gliding to a three-quarter front view of the slide so she's seen going down; cleared when she gets off.
+ */
 function slideSeat(
   g: THREE.Group,
   path: THREE.Vector3[],
+  climb: THREE.Vector3[],
+  cams: { climb: THREE.Vector3; slide: THREE.Vector3 },
   sound: 'tube' | 'wave',
   ctx: GameCtx,
-  speed = 1,
+  speed = 3,
 ): { seat: SwingSeat; update: (dt: number) => void } {
   const curve = new THREE.CatmullRomCurve3(path);
   const len = curve.getLength();
+  // climbing: polyline at walking-up speed
+  const CLIMB_V = 1.9;
+  const legT: number[] = [];
+  let climbT = 0;
+  for (let i = 0; i < climb.length - 1; i++) {
+    climbT += climb[i].distanceTo(climb[i + 1]) / CLIMB_V;
+    legT.push(climbT);
+  }
+  const SIT = 0.6; // sitting at the top before letting go
+  const slideT = len / speed;
+  const total = climbT + SIT + slideT;
   let t = -1; // −1 = nobody on it
-  const total = 0.5 + len / (4.5 * speed);
+  const camPos = new THREE.Vector3();
+  const camLook = new THREE.Vector3();
+  const local = (): { p: THREE.Vector3; dir: THREE.Vector3; sit: boolean; tilt: number } => {
+    if (t < climbT) {
+      let i = 0;
+      while (i < legT.length - 1 && t > legT[i]) i++;
+      const t0 = i === 0 ? 0 : legT[i - 1];
+      const k = Math.min(1, Math.max(0, (t - t0) / (legT[i] - t0)));
+      const a = climb[i];
+      const b = climb[i + 1];
+      const d = b.clone().sub(a).setY(0);
+      // on the ladder (vertical leg) she faces the tower = the direction of the next level leg
+      const dir = d.lengthSq() > 0.01 ? d : (climb[i + 2] ?? path[0]).clone().sub(b).setY(0);
+      return { p: a.clone().lerp(b, k), dir, sit: false, tilt: 0 };
+    }
+    const k = Math.min(1, Math.max(0, (t - climbT - SIT) / slideT));
+    const e = k * k * (1.6 - 0.6 * k); // speeds up, eases out a little at the bottom
+    const p = curve.getPointAt(Math.min(1, e));
+    const tan = curve.getTangentAt(Math.min(0.999, Math.max(0.001, e)));
+    const tilt = k > 0 ? Math.atan2(tan.y, Math.hypot(tan.x, tan.z)) * 0.7 : 0;
+    return { p: p.clone().setY(p.y + 0.12), dir: tan.clone().setY(0), sit: true, tilt };
+  };
+  const aerial = (on: boolean) => {
+    if (!on) {
+      window.dispatchEvent(new CustomEvent('rainbow-aerial', { detail: null }));
+      return;
+    }
+    window.dispatchEvent(
+      new CustomEvent('rainbow-aerial', { detail: { x: camLook.x, z: camLook.z, h: camPos.y, fromX: camPos.x, fromZ: camPos.z, lookY: camLook.y } }),
+    );
+  };
   const seat: SwingSeat = {
     take() {
       t = 0;
       feel('play');
-      ctx.say(['Wiiii!']);
+      g.updateMatrixWorld(true);
+      camPos.copy(g.localToWorld(cams.climb.clone()));
+      camLook.copy(g.localToWorld(climb[0].clone().setY(1.2)));
+      aerial(true);
       return 0;
     },
     pose() {
       g.updateMatrixWorld(true);
-      const k = Math.min(1, Math.max(0, (t - 0.5) / (total - 0.5)));
-      const e = k * k * (1.6 - 0.6 * k); // speeds up, eases out a little at the bottom
-      const p = curve.getPointAt(Math.min(1, e));
-      const tan = curve.getTangentAt(Math.min(0.999, Math.max(0.001, e)));
-      return { pos: g.localToWorld(p.clone().setY(p.y + 0.12)), heading: headingOf(g, tan.x, tan.z), tilt: 0 };
+      const s = local();
+      const pos = g.localToWorld(s.p.clone());
+      const heading = headingOf(g, s.dir.x, s.dir.z);
+      return s.sit ? { pos, heading, tilt: s.tilt } : { pos, heading, tilt: 0, stand: true };
     },
     done: () => t >= total,
     leave() {
       t = -1;
+      aerial(false);
     },
     getOff() {
       const end = path[path.length - 1];
@@ -88,10 +139,20 @@ function slideSeat(
       if (t < 0) return;
       const was = t;
       t += dt;
-      if (was < 0.5 && t >= 0.5) {
+      const go = climbT + SIT;
+      if (was < climbT && t >= climbT) ctx.say(['Wiiii!']);
+      if (was < go && t >= go) {
         if (sound === 'tube') [700, 600, 500, 420, 360].forEach((f, i) => tone(f, i * 0.12, 0.14, 'sine', 0.05));
         else [523, 659, 523, 659, 784].forEach((f, i) => tone(f, i * 0.13, 0.12, 'triangle', 0.05));
       }
+      // camera: behind the ladder while she climbs, then glides round to watch the slide from the side-front
+      g.updateMatrixWorld(true);
+      const s = local();
+      const want = g.localToWorld((t < climbT * 0.55 ? cams.climb : cams.slide).clone());
+      const r = Math.min(1, dt * 1.6);
+      camPos.lerp(want, r);
+      camLook.lerp(g.localToWorld(s.p.clone().setY(s.p.y + 0.8)), Math.min(1, dt * 4));
+      aerial(true);
     },
   };
 }
@@ -101,14 +162,16 @@ function buildStructure(g: THREE.Group, obstacles: Obstacle[], site: Site, ctx: 
   const red = mat(0xfa5252);
   const green = mat(0x40c057);
   const blue = mat(0x339af0);
-  const cyan = mat(0x22b8cf, { side: THREE.DoubleSide });
+  // see-through tube (coloured plastic): she can be seen sliding inside it
+  const cyan = mat(0x22b8cf, { side: THREE.DoubleSide, transparent: true, opacity: 0.42, depthWrite: false });
   const cyanDeep = mat(0x0c8599);
   const orange = mat(0xff922b);
   const purple = mat(0x9775fa);
 
   // tall tower (deck 3.3 m) on the left, low tower (deck 2.0 m) to its right, bridge between them
-  const T1 = { x: -6.5, z: -12.5, deck: 3.3 };
-  const T2 = { x: -1.5, z: -12.5, deck: 2.0 };
+  // (x/z keep ≥2.5 m of free floor between the fence and the ladder, the net, the tower sides and both slide exits)
+  const T1 = { x: -5.8, z: -14.0, deck: 3.3 };
+  const T2 = { x: -0.8, z: -14.0, deck: 2.0 };
   for (const [T, wall, roof] of [
     [T1, yellow, red],
     [T2, blue, purple],
@@ -116,7 +179,8 @@ function buildStructure(g: THREE.Group, obstacles: Obstacle[], site: Site, ctx: 
     // corner posts + deck + half walls (open so she can be seen up there)
     for (const sx of [-1.25, 1.25]) for (const sz of [-1.25, 1.25]) cyl(g, green, 0.12, T.deck + 1.6, T.x + sx, (T.deck + 1.6) / 2, T.z + sz, 8);
     box(g, mat(0xffe8cc), 2.6, 0.16, 2.6, T.x, T.deck, T.z);
-    box(g, wall, 2.6, 0.9, 0.1, T.x, T.deck + 0.55, T.z - 1.3);
+    // back half wall with a gap in the middle: that's where the ladder / net arrives
+    for (const sx of [-0.95, 0.95]) box(g, wall, 0.7, 0.9, 0.1, T.x + sx, T.deck + 0.55, T.z - 1.3);
     box(g, wall, 0.1, 0.9, 2.6, T.x - 1.3, T.deck + 0.55, T.z);
     // pointed roof
     const r = new THREE.Mesh(new THREE.ConeGeometry(2.1, 1.3, 4), roof);
@@ -134,10 +198,24 @@ function buildStructure(g: THREE.Group, obstacles: Obstacle[], site: Site, ctx: 
   box(g, mat(0xc08552), 2.6, 0.12, 1.1, (T1.x + T2.x) / 2, (T1.deck + T2.deck) / 2, T1.z);
   for (const s of [-0.55, 0.55]) box(g, orange, 2.6, 0.08, 0.08, (T1.x + T2.x) / 2, (T1.deck + T2.deck) / 2 + 0.8, T1.z + s);
   // ladder at the back of the tall tower, climbing net at the back of the low one
-  for (const sx of [-0.45, 0.45]) box(g, green, 0.14, T1.deck + 0.4, 0.14, T1.x + sx, (T1.deck + 0.4) / 2, T1.z - 1.55);
-  for (let i = 0; i < 10; i++) box(g, yellow, 1.0, 0.08, 0.1, T1.x, 0.3 + i * 0.33, T1.z - 1.55);
-  for (let i = 0; i < 5; i++) box(g, orange, 2.2, 0.06, 0.06, T2.x, 0.4 + i * 0.38, T2.z - 1.6 - i * 0.12);
-  for (let i = 0; i < 6; i++) box(g, orange, 0.06, 2.1, 0.06, T2.x - 1.0 + i * 0.4, 1.1, T2.z - 1.85);
+  // (own groups: tapping the ladder / net = climb up and slide down)
+  const ladderG = new THREE.Group();
+  const netG = new THREE.Group();
+  g.add(ladderG, netG);
+  for (const sx of [-0.45, 0.45]) box(ladderG, green, 0.14, T1.deck + 0.4, 0.14, T1.x + sx, (T1.deck + 0.4) / 2, T1.z - 1.55);
+  for (let i = 0; i < 10; i++) box(ladderG, yellow, 1.0, 0.08, 0.1, T1.x, 0.3 + i * 0.33, T1.z - 1.55);
+  for (let i = 0; i < 5; i++) box(netG, orange, 2.2, 0.06, 0.06, T2.x, 0.4 + i * 0.38, T2.z - 1.6 - i * 0.12);
+  for (let i = 0; i < 6; i++) box(netG, orange, 0.06, 2.1, 0.06, T2.x - 1.0 + i * 0.4, 1.1, T2.z - 1.85);
+  // rungs and ropes are thin: an unseen box over each makes the whole ladder / net easy to tap
+  const hitMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+  for (const [p, sx, sy, x, y, z] of [
+    [ladderG, 1.2, T1.deck + 0.4, T1.x, (T1.deck + 0.4) / 2, T1.z - 1.6],
+    [netG, 2.4, 2.2, T2.x, 1.1, T2.z - 1.85],
+  ] as const) {
+    const hit = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, 0.6), hitMat);
+    hit.position.set(x, y, z);
+    p.add(hit);
+  }
 
   // TUBE slide from the tall tower, going FORWARD (+Z) and DOWN: high end at the deck, low end on the ground
   const tubeTop = new THREE.Vector3(T1.x, T1.deck + 0.05, T1.z + 1.3);
@@ -191,11 +269,35 @@ function buildStructure(g: THREE.Group, obstacles: Obstacle[], site: Site, ctx: 
   }
   for (const k of [4, 9]) cyl(waveG, green, 0.08, wave[k].y, wave[k].x + 0.45, wave[k].y / 2, wave[k].z, 8);
 
-  // solid parts: both towers + bridge (the slides stay walk-around)
-  obstacles.push(siteBox(site, T1.x - 1.4, T2.x + 1.4, T1.z - 1.9, T1.z + 1.4, 3));
+  // solid parts: both towers + bridge + ladder/net (the slides stay walk-around)
+  obstacles.push(siteBox(site, T1.x - 1.4, T2.x + 1.4, T1.z - 2.1, T1.z + 1.4, 3));
 
-  const tubeRide = slideSeat(g, [tubeTop.clone().setY(tubeTop.y + 0.1), tubeTop.clone().lerp(tubeBot, 0.5), tubeBot.clone().setY(0.25)], 'tube', ctx, 1.1);
-  const waveRide = slideSeat(g, [wave[0].clone().setY(wave[0].y + 0.1), ...wave.slice(1)], 'wave', ctx);
+  // climb: ladder / net foot → up → over the deck → the top of the slide (feet heights, she's standing)
+  const up = (T: { x: number; z: number; deck: number }, back: number, slideTop: THREE.Vector3) => [
+    new THREE.Vector3(T.x, 0, T.z - back),
+    new THREE.Vector3(T.x, T.deck + 0.08, T.z - 1.75),
+    new THREE.Vector3(T.x, T.deck + 0.08, T.z - 0.6),
+    new THREE.Vector3(slideTop.x, T.deck + 0.08, slideTop.z - 0.4),
+  ];
+  // cameras (site frame, kept inside the fence): behind the ladder / net, then three-quarter front of the slide
+  const tubeRide = slideSeat(
+    g,
+    [tubeTop.clone().setY(tubeTop.y + 0.1), tubeTop.clone().lerp(tubeBot, 0.5), tubeBot.clone().setY(0.25)],
+    up(T1, 2.1, tubeTop),
+    { climb: new THREE.Vector3(-9.2, 4.6, T1.z - 4.3), slide: new THREE.Vector3(-9.2, 4.4, -1.4) },
+    'tube',
+    ctx,
+    3.4,
+  );
+  const waveRide = slideSeat(
+    g,
+    [wave[0].clone().setY(wave[0].y + 0.1), ...wave.slice(1)],
+    up(T2, 2.3, wave[0]),
+    { climb: new THREE.Vector3(T2.x + 4.5, 4.4, T2.z - 4.3), slide: new THREE.Vector3(7.6, 4.2, -2.4) },
+    'wave',
+    ctx,
+    3.0,
+  );
   const at = (x: number, z: number) => g.localToWorld(new THREE.Vector3(x, 0, z));
   return [
     {
@@ -215,6 +317,23 @@ function buildStructure(g: THREE.Group, obstacles: Obstacle[], site: Site, ctx: 
       seat: waveRide.seat,
       interact: () => !ctx.isPaused() && !ctx.isDriving(),
       update: waveRide.update,
+    },
+    // the ladder foot (tube) and the net foot (wavy slide): tap it / Enter there = up she goes and down the slide
+    {
+      object: ladderG,
+      position: at(T1.x, T1.z - 2.6),
+      radius: 1.8,
+      requiresClick: true,
+      seat: tubeRide.seat,
+      interact: () => !ctx.isPaused() && !ctx.isDriving(),
+    },
+    {
+      object: netG,
+      position: at(T2.x, T2.z - 2.7),
+      radius: 1.9,
+      requiresClick: true,
+      seat: waveRide.seat,
+      interact: () => !ctx.isPaused() && !ctx.isDriving(),
     },
   ];
 }
@@ -464,9 +583,9 @@ function buildGround(g: THREE.Group, obstacles: Obstacle[], site: Site): void {
   g.add(floor);
   // a few coloured play circles on the floor
   [
-    [3, -9, 0xffd43b],
-    [-1, -5, 0xff8787],
-    [7, -14, 0x74c0fc],
+    [2.5, -10.5, 0xffd43b],
+    [-1, -3.5, 0xff8787],
+    [7.5, -11, 0x74c0fc],
   ].forEach(([x, z, c]) => {
     const dot = new THREE.Mesh(new THREE.CircleGeometry(1.1, 24), mat(c));
     dot.rotation.x = -Math.PI / 2;
@@ -517,8 +636,8 @@ export function buildPlayground(scene: THREE.Scene, obstacles: Obstacle[], rng: 
   if (new URLSearchParams(location.search).has('debug')) document.body.dataset.park = JSON.stringify(site);
   buildGround(g, obstacles, site);
   const things = buildStructure(g, obstacles, site, ctx);
-  things.push(buildSwings(g, obstacles, site, ctx, 5.5, -12.5));
-  things.push(buildRoundabout(g, obstacles, site, ctx, 5.5, -5));
+  things.push(buildSwings(g, obstacles, site, ctx, 5.5, -14.5));
+  things.push(buildRoundabout(g, obstacles, site, ctx, 5.5, -7));
   things.push(buildSpringRider(g, obstacles, site, ctx, 3.0, -2.4, 'horse'));
   things.push(buildSpringRider(g, obstacles, site, ctx, -4.0, -2.4, 'ladybird'));
   return things;

@@ -493,6 +493,10 @@ export class Trouble {
     private readonly obstacles: Obstacle[],
     rng: () => number,
     private readonly ctx: GameCtx,
+    /** false = this city has no stadium (only the bar); see CITY_WITHOUT in cities.ts. */
+    withStadium = true,
+    /** false = this city has no bar (no squabbling men); see CITY_WITHOUT in cities.ts. */
+    withBar = true,
   ) {
     const rnd = TEAMS[Math.floor(rng() * TEAMS.length)]; // always drawn: keeps the site picks below unchanged
     const city = ctx.city();
@@ -508,11 +512,12 @@ export class Trouble {
 
     // stadium: 60-130 m from the spawn (measured at its centre)
     // rect = stand + 1 m all round (the gate front is at -2.9; the pavement strip by the road keeps its lamps)
-    this.stadium = pickSite(sites, [-R - 1, R + 1, -2 * R - 5, -3], obstacles, (s) => {
+    const stadium = pickSite(sites, [-R - 1, R + 1, -2 * R - 5, -3], obstacles, (s) => {
       const c = toWorld(s, 0, -(R + 4));
       const d = Math.hypot(c.x - SPAWN.x, c.z - SPAWN.z);
       return d >= 60 && d <= 130;
     });
+    this.stadium = withStadium ? stadium : null; // the pick still runs so the bar keeps its usual spot
     if (this.stadium) this.buildStadium(this.stadium);
     this.clearance = this.stadium
       ? {
@@ -525,11 +530,13 @@ export class Trouble {
 
     // bar: 40-130 m from the spawn, in another quadrant than the stadium
     const sq = this.stadium ? quadrant(this.stadiumC.x, this.stadiumC.z) : -1;
-    this.bar = pickSite(sites, [-6, 6, -13.5, -2.5], obstacles, (s) => {
-      const c = toWorld(s, 2.6, -3.2);
-      const d = Math.hypot(c.x - SPAWN.x, c.z - SPAWN.z);
-      return d >= 40 && d <= 130 && quadrant(c.x, c.z) !== sq;
-    });
+    this.bar = withBar
+      ? pickSite(sites, [-6, 6, -13.5, -2.5], obstacles, (s) => {
+          const c = toWorld(s, 2.6, -3.2);
+          const d = Math.hypot(c.x - SPAWN.x, c.z - SPAWN.z);
+          return d >= 40 && d <= 130 && quadrant(c.x, c.z) !== sq;
+        })
+      : null;
     if (this.bar) this.buildBar(this.bar);
     this.lastPlayer.copy(ctx.player);
   }

@@ -34,6 +34,17 @@ export interface FolkDef {
   depth: number;
   /** 'street' = beside a road, front to the pavement (shops, stands). 'green' = open ground away from the roads. */
   where: 'street' | 'green';
+  /** Cities (CITIES names) where this character never appears (e.g. no king where there is no king). */
+  notIn?: string[];
+  /**
+   * Cities (CITIES names) where this character ONLY appears (e.g. the king only in Londres). Skipped everywhere
+   * else; in these cities he is always there (added on top if the rotation did not bring him).
+   */
+  onlyIn?: string[];
+  /** true = outside the rotation: only added in its `onlyIn` cities, on top of the usual line-up (the fisherman). */
+  extra?: boolean;
+  /** 'green' stages only: true = the free spot farthest from the start, out on one side of the city. */
+  edge?: boolean;
   /** Free metres kept in front of the door (street lamps / posts). Default 2. Cabins with a door: ~2.2. */
   apron?: number;
   build(ctx: FolkCtx): FolkActor;

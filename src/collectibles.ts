@@ -75,7 +75,11 @@ export class Collectibles {
     private readonly obstacles: Obstacle[],
   ) {
     // a first trail straight ahead of the spawn point, so the goal is obvious from second one
-    for (let i = 0; i < TRAIL; i++) this.place('coin', new THREE.Vector3(SPAWN.x + 4 + i * 2, 0, SPAWN.z));
+    // (each coin checked too: in Porto/EUA something stands at the 3rd spot and the coin sat inside it)
+    for (let i = 0; i < TRAIL; i++) {
+      const x = SPAWN.x + 4 + i * 2;
+      if (this.ok(x, SPAWN.z)) this.place('coin', new THREE.Vector3(x, 0, SPAWN.z));
+    }
     for (let i = 1; i < TARGET_COINS / TRAIL; i++) this.spawnTrail();
     for (let i = 0; i < TARGET_JEWELS; i++) this.spawn('jewel');
     live = this;
@@ -131,18 +135,19 @@ export class Collectibles {
   private placedOutside = 0;
   private placedBlocked = 0;
   private placedTotal = 0;
-  outsideStats(): { outside: number; blocked: number; lying: number; placedOutside: number; placedBlocked: number; placed: number; half: number } {
+  outsideStats(): { outside: number; blocked: number; lying: number; placedOutside: number; placedBlocked: number; placed: number; half: number; badAt: string[] } {
     let outside = 0;
+    const badAt: string[] = [];
     let blocked = 0;
     let lying = 0;
     for (const it of this.items) {
       if (it.taken !== null) continue;
       lying++;
       const { x, z } = it.mesh.position;
-      if (!inPlayArea(x, z)) outside++;
-      else if (!isFree(x, z, 0.3, this.obstacles) || inNoSpawn(x, z)) blocked++;
+      const bad = !inPlayArea(x, z) ? (outside++, 'out') : !isFree(x, z, 0.3, this.obstacles) || inNoSpawn(x, z) ? (blocked++, 'in') : '';
+      if (bad) badAt.push(`${bad} ${it.kind} ${x.toFixed(1)},${z.toFixed(1)}`);
     }
-    return { outside, blocked, lying, placedOutside: this.placedOutside, placedBlocked: this.placedBlocked, placed: this.placedTotal, half: playAreaHalf() };
+    return { outside, blocked, lying, placedOutside: this.placedOutside, placedBlocked: this.placedBlocked, placed: this.placedTotal, half: playAreaHalf(), badAt };
   }
 
   private place(kind: Item['kind'], p: THREE.Vector3): void {

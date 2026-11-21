@@ -8,7 +8,7 @@ import { Npcs, type QuestionNpc } from './npcs';
 import { loadSave, writeSave } from './save';
 import { Hud, askChoice, askQuestion, cameraFlash, createHomeButton, setCompass, setFade, showArrival, showBanner, showCityName, showPhoto, showTravel } from './ui';
 import { speak, sfx, spokenLog, taunt, tone, voiceInfo } from './audio';
-import { CITIES, COINS_PER_LEVEL, cityAt } from './cities';
+import { CITIES, COINS_PER_LEVEL, cityAt, cityHas } from './cities';
 import { Monsters } from './monsters';
 import { Airport } from './airport';
 import { Flight } from './flight';
@@ -52,6 +52,7 @@ import { buildPlayground } from './playground';
 import { createServices, type ServiceTown } from './services';
 import { createLandmarks, landmarksDebug } from './landmarks';
 import { setCityLampClearer } from './places';
+import { Aurora } from './aurora';
 
 const WALK_SPEED = 6.5; // m/s
 const TURN_SPEED = 2.6; // rad/s (arrow keys)
@@ -121,11 +122,7 @@ if (DEBUG) {
     const level = (e as CustomEvent<number>).detail;
     if (typeof level !== 'number' || level < 0 || level >= CITIES.length) return;
     try {
-      save.level = level;
-      save.pos = null;
-      writeSave(save);
-      loadCity();
-      cityPill.textContent = city.name;
+      jumpToCity(level);
       showArrival(city.arrival);
     } catch (err) {
       console.error('rainbow-level failed', level, err);
@@ -181,6 +178,7 @@ let airport: Airport =
 /** Cabo Canaveral pad (only on the USA level). */
 let spaceport: Spaceport | null = null;
 let usaLandmarks: UsaLandmarks | null = null;
+let aurora: Aurora | null = null; // northern lights — Reiquiavique only (aurora.ts)
 /** Moon level: time machine (the end), food capsule at the lander, comets (moonplay.ts). */
 let moonPlay: { machine: TimeMachine; food: LanderFood; comets: Comets; dizzy: DizzyStars } | null = null;
 /** Seconds she still lies dizzy after a comet hit (Moon only; also kept in the save as flag moon:down). */
@@ -475,6 +473,34 @@ if (save.pos && isFree(save.pos.x, save.pos.z, CHARACTER_RADIUS, world.obstacles
   player.heading = save.pos.h;
 }
 
+/** Silent stand-ins for a venue a city doesn't have (Moon, or CITY_WITHOUT): the frame loop never hits null. */
+function quietVenue() {
+  return {
+    update() {},
+    dispose() {},
+    isInside: () => false,
+    interior: null,
+    things: [] as Interactable[],
+    debug: () => ({ none: true }),
+  };
+}
+function quietPool(): Pool {
+  return {
+    ...quietVenue(),
+    swimming: false,
+    lounging: false,
+    swimSpeed: 0,
+    waterWalls: [] as never[],
+    booth: null,
+    cabins: [],
+    release() {},
+    getUp() {},
+    nextStroke() {},
+  } as unknown as Pool;
+}
+const quietTrouble = (): Trouble =>
+  ({ update() {}, positions: () => [], sites: () => [], clearance: null }) as unknown as Trouble;
+
 /** Hand-made interactive situations in every city: a car to drive and someone to give a coin to. */
 function addCityExtras(): Car {
   usaLandmarks?.dispose();
@@ -494,6 +520,20 @@ function addCityExtras(): Car {
   postman = noPostman();
   livingStatue.dispose();
   livingStatue = noLivingStatue();
+  // --- aurora boreal (Reiquiavique only; disposed on every city change)
+  aurora?.dispose();
+  aurora =
+    city.name === 'Reiquiavique'
+      ? new Aurora(scene, camera, {
+          daylight: () => weather.daylight,
+          kind: () => weather.state.kind,
+          say: (lines) => {
+            gameCtx.say(lines);
+            skyGazeT = 7; // "Olha para o céu!" — the camera looks up at it for a few seconds
+          },
+          canSpeak: () => !flight && !paused,
+        })
+      : null;
   scooting = null;
   player.scooterRiding = false;
   scooter = noScooter();
@@ -524,30 +564,12 @@ function addCityExtras(): Car {
     const downLeft = gameCtx.flag('moon:down') - Date.now() / 1000;
     if (downLeft > 0) knocked = Math.min(60, downLeft); // the frame loop lays her down (main.ts may still be loading here)
     // silent stubs so the frame loop never hits null (nothing is drawn)
-    const quiet = {
-      update() {},
-      dispose() {},
-      isInside: () => false,
-      interior: null,
-      things: [] as Interactable[],
-      debug: () => ({ moon: true }),
-    };
+    const quiet = quietVenue();
     streetLights = { update() {}, litCount: () => 0, count: () => 0, clearIn: () => 0, positions: () => [] } as unknown as StreetLights;
     setCityLampClearer(null);
     fair = quiet as unknown as Fair;
     concert = quiet as unknown as Concert;
-    pool = {
-      ...quiet,
-      swimming: false,
-      lounging: false,
-      swimSpeed: 0,
-      waterWalls: [] as never[],
-      booth: null,
-      cabins: [],
-      release() {},
-      getUp() {},
-      nextStroke() {},
-    } as unknown as Pool;
+    pool = quietPool();
     house = quiet as unknown as House;
     hospital = {
       bed: { pos: new THREE.Vector3(), heading: 0 },
@@ -557,7 +579,7 @@ function addCityExtras(): Car {
       setAmbulanceLights() {},
       setClock() {},
     } as unknown as Hospital;
-    trouble = { update() {}, positions: () => [], sites: () => [], clearance: null } as unknown as Trouble;
+    trouble = quietTrouble();
     traffic = {
       update() {},
       haltNear() {},
@@ -608,23 +630,28 @@ function addCityExtras(): Car {
   }
   // Big venues FIRST (fair → stadium → concert → pool → house): their padded footprints stay in
   // obstacles while bus stops / props / shops / services pick spots, so nothing glues to a wall.
-  fair = new Fair(scene, world.obstacles, mulberry32(city.seed * 67 + 19), gameCtx, [], save.level, world);
+  fair = cityHas(city, 'fair')
+    ? new Fair(scene, world.obstacles, mulberry32(city.seed * 67 + 19), gameCtx, [], save.level, world)
+    : (quietVenue() as unknown as Fair);
   world.interactables.push(...fair.things);
   const fairBlock = fair.interior ? padZone(fair.interior) : null;
   if (fairBlock) {
     world.obstacles.push(fairBlock);
     clearLamps(fairBlock, world.obstacles);
   }
-  trouble = new Trouble(scene, world.obstacles, mulberry32(city.seed * 17 + 3), gameCtx);
+  // no stadium in some cities (CITY_WITHOUT) — the bar and its two men stay
+  trouble = new Trouble(scene, world.obstacles, mulberry32(city.seed * 17 + 3), gameCtx, cityHas(city, 'stadium'), cityHas(city, 'bar'));
   const stadiumBlock = trouble.clearance ? { ...trouble.clearance } : null;
   if (stadiumBlock) {
     world.obstacles.push(stadiumBlock);
     clearLamps(stadiumBlock, world.obstacles);
   }
   // children's concert: ticket booth + fenced venue (nothing spawns inside / beside it)
-  concert = new Concert(scene, world.obstacles, mulberry32(city.seed * 53 + 11), gameCtx, [
-    ...world.interactables.map((i) => i.position),
-  ]);
+  concert = cityHas(city, 'concert')
+    ? new Concert(scene, world.obstacles, mulberry32(city.seed * 53 + 11), gameCtx, [
+        ...world.interactables.map((i) => i.position),
+      ])
+    : (quietVenue() as unknown as Concert);
   if (concert.booth) world.interactables.push(concert.booth);
   const concertBlock = concert.interior ? padZone(concert.interior) : null;
   if (concertBlock) {
@@ -632,17 +659,19 @@ function addCityExtras(): Car {
     clearLamps(concertBlock, world.obstacles);
   }
   // swimming pool: ticket, beach cabins to change, swim among other swimmers
-  pool = new Pool(scene, world.obstacles, mulberry32(city.seed * 59 + 13), gameCtx, [
-    ...world.interactables.map((i) => i.position),
-  ], {
-    player,
-    hold(on) {
-      paused = on;
-      clearTarget();
-      input.releaseAll();
-    },
-    changed: () => holdItem(null),
-  });
+  pool = cityHas(city, 'pool')
+    ? new Pool(scene, world.obstacles, mulberry32(city.seed * 59 + 13), gameCtx, [
+        ...world.interactables.map((i) => i.position),
+      ], {
+        player,
+        hold(on) {
+          paused = on;
+          clearTarget();
+          input.releaseAll();
+        },
+        changed: () => holdItem(null),
+      })
+    : quietPool();
   if (pool.booth) world.interactables.push(pool.booth, ...pool.cabins);
   const poolBlock = pool.interior ? padZone(pool.interior) : null;
   if (poolBlock) {
@@ -664,7 +693,7 @@ function addCityExtras(): Car {
   const c = new Car(scene, world.obstacles, new THREE.Vector3(-16, 0, 7), Math.PI / 2, city.buildings[0], () => enterCar());
   world.interactables.push(c.interactable);
   // I42 kick scooter (real vehicle) — Londres (index 3) onward; park/pavement pad with setback
-  scooter = createScooter(scene, world.obstacles, world, city.seed, save.level, () => enterScooter()) ?? noScooter();
+  scooter = (cityHas(city, 'scooter') ? createScooter(scene, world.obstacles, world, city.seed, save.level, () => enterScooter()) : null) ?? noScooter();
   if (scooter.debug().on) world.interactables.push(scooter.interactable);
   world.interactables.push(
     createBeggar(scene, world.obstacles, new THREE.Vector3(-8, 0, -8), {
@@ -1287,6 +1316,9 @@ scene.add(marker);
 // --- camera rig (third person, orbit by dragging) ---
 let camYaw = player.heading; // set after the spawn/restore above
 let camPitch = 0.45;
+/** Seconds left of a gentle look up at the sky (aurora boreal); skyGaze eases 0 → 1 → 0. */
+let skyGazeT = 0;
+let skyGaze = 0;
 let camDist = 9;
 let camDistSmooth = 9;
 let lastDragTime = -Infinity;
@@ -1761,6 +1793,7 @@ function tick(time: number): void {
   services?.update(dt);
   updateHospital(dt);
   weather.update(dt);
+  aurora?.update(dt);
   streetLights.update(dt, weather.daylight, camera);
   if (knock.lengthSq() > 0.05) {
     player.move(knock.x * dt, knock.z * dt, world.obstacles);
@@ -1857,7 +1890,9 @@ function tick(time: number): void {
   const wanted = driving || scooting || onBus() ? Math.max(camDist, 12) : riding ? Math.max(camDist, 10) : camDist;
   // don't let the camera end up inside a building: walk out from her towards the camera and stop before a wall
   // inside the house the roof is hidden; camera stays normal (third-person), walls don't block while she's indoors
-  const pitch = camPitch;
+  skyGazeT = Math.max(0, skyGazeT - dt);
+  skyGaze += ((skyGazeT > 0 && !riding ? 1 : 0) - skyGaze) * Math.min(1, dt * 1.2);
+  const pitch = THREE.MathUtils.lerp(camPitch, 0.14, skyGaze);
   const dir = new THREE.Vector3(Math.sin(camYaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(camYaw) * Math.cos(pitch));
   let dist = wanted;
   const indoors = house.isInside();
@@ -1881,7 +1916,8 @@ function tick(time: number): void {
   }
   camDistSmooth += (dist - camDistSmooth) * Math.min(1, dt * (dist < camDistSmooth ? 12 : 3));
   camera.position.copy(target).addScaledVector(dir, camDistSmooth);
-  camera.lookAt(target);
+  if (skyGaze > 0.01) camera.lookAt(target.x - dir.x * 20 * skyGaze, target.y + 11 * skyGaze, target.z - dir.z * 20 * skyGaze);
+  else camera.lookAt(target);
   }
 
   if (DEBUG) {
@@ -1932,6 +1968,7 @@ function tick(time: number): void {
         services: services?.debug() ?? null,
         extras: extras.debug(),
         usa: usaLandmarks?.debug() ?? null,
+        aurora: aurora?.debug() ?? null,
         landmarks: landmarksDebug(),
         wear: save.wear,
         onBus: onBus(),
@@ -2005,7 +2042,7 @@ function applyCharacter(id: string): void {
 }
 
 /** "Novo jogo": everything back to zero (keeps the chosen character and the settings). */
-function newGame(): void {
+function newGame(announce = true): void {
   hospitalPhase = 'none';
   player.root.rotation.x = 0;
   hospital?.setAmbulanceLights(false);
@@ -2026,16 +2063,51 @@ function newGame(): void {
   loadCity();
   refreshBag();
   writeSave(save);
-  showArrival(city.arrival);
+  if (announce) showArrival(city.arrival);
+}
+
+/** City picker in the settings: only on the dev server (localhost) or with `?debug` — never in the published game. */
+const CITY_PICKER = import.meta.env.DEV || DEBUG;
+
+/** City picked in the settings on this visit to the main page: "Novo jogo" then starts there (testing). */
+let pickedLevel: number | null = null;
+/** "Novo jogo", but in the city picked for testing (if any). */
+function newGameAt(): void {
+  newGame(pickedLevel === null);
+  if (pickedLevel !== null) {
+    jumpToCity(pickedLevel);
+    showArrival(city.arrival);
+  }
+}
+
+/** Testing: go straight to a level (coins, jewels and answers stay as they are). */
+function jumpToCity(level: number): void {
+  if (level === save.level) return;
+  hospitalPhase = 'none';
+  save.hospitalUntil = 0;
+  player.root.rotation.x = 0;
+  hospital?.setAmbulanceLights(false);
+  driving = null; // the old car is thrown away with the city
+  forceOffScooter();
+  player.root.scale.setScalar(1);
+  player.root.visible = true;
+  rescuing = false;
+  buyTarget = null;
+  holdItem(null);
+  save.level = level;
+  save.pos = null;
+  writeSave(save);
+  loadCity();
 }
 
 /** Start screen on every launch: pick a character, then continue where you were or start from zero. */
 async function startScreen(): Promise<void> {
   paused = true;
   const canContinue = save.character !== null;
+  pickedLevel = null;
   const { id, mode } = await chooseCharacter(save.character ?? undefined, mainPageOptions(canContinue));
   applyCharacter(id);
-  if (mode === 'new') newGame();
+  if (mode === 'new') newGameAt();
   lastActivity = performance.now();
   paused = false;
   canvas.focus();
@@ -2057,10 +2129,11 @@ async function openMainPage(): Promise<void> {
   paused = true;
   clearTarget();
   input.releaseAll();
+  pickedLevel = null;
   const { id, mode } = await chooseCharacter(save.character ?? undefined, mainPageOptions(true));
   applyCharacter(id);
   if (mode === 'new') {
-    newGame();
+    newGameAt();
     paused = false;
   } else {
     paused = wasPaused || hospitalPhase === 'bed';
@@ -2085,6 +2158,12 @@ function mainPageOptions(canContinue: boolean) {
       weather.rainVolume = RAIN_SOUND_FACTOR[r];
       writeSave(save);
     },
+    cities: CITY_PICKER
+      ? { names: CITIES.map((c) => c.name), get: () => save.level, set: (level: number) => {
+            pickedLevel = level;
+            jumpToCity(level);
+          } }
+      : undefined,
   };
 }
 // settings (monster difficulty) live on the start page

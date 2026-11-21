@@ -12,10 +12,10 @@ Aplicar no Session End Protocol.
 
 | # | Action | Owner | Blocker |
 |---|---|---|---|
-| 1 | Terminar e testar o WIP de `cd46b39`: carta/lixo/caixa de correio · macaca + borboletas · avião de papel/ponte/penso/sopa · padaria + Muralha · Moscovo (baú + basílica) · estádio + moedas fora | agent | crédito da API |
-| 2 | Telmo joga Lua, lojas (provador), SPA, parque e feira com som; lista o que afinar | Telmo | none |
+| 1 | Respostas do Telmo: rei só em Londres? · tirar o bar de Reiquiavique? · commit + push de 2026-11-21? | Telmo | none |
+| 2 | Telmo joga o que mudou (⚙ → Cidade): Varsóvia, Moscovo, parque, aurora, carta, macaca, folk; lista o que afinar | Telmo | none |
 | 3 | Ex-líbris para Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk | Telmo decide | "depois" |
-| 4 | Medir fps num tablet médio (espelhos, visitantes, parque) | Telmo + agent | tablet |
+| 4 | Medir fps num tablet médio (espelhos, visitantes, parque, aurora) | Telmo + agent | tablet |
 | 5 | Alinhar o ROADMAP com o código (brief 2026-11-15 com ⬜ já feitos) | agent | none |
 
 ---
@@ -33,7 +33,7 @@ Aplicar no Session End Protocol.
   - ⬜ Interações: pintar parede, carta nos correios, escorrega, bola, beber na fonte, praia, animais com som, pássaros, duplo clique apanha flor, dar flor
   - ⬜ Serviços pagos: cabeleireiro (escolher penteado), sapatos, roupa, acessórios, massagem, SPA
   - ⬜ Escadas em edifícios onde os monstros não sobem · gatinho na árvore com escada (o unicórnio voa) · palco para cantar e ganhar moedas
-  - 🔄 Cidades com ex-líbris (2026-11-17): Porto Clérigos · Roma Trevi · Londres relógio+roda · Paris torre · Varsóvia×6 · Pequim muralha · Tóquio templo · Rio teleférico · EUA×4. **Sem ex-líbris:** Madrid · Vilnius · Moscovo · Cidade do México · Reiquiavique · Nuuk. Área a dobrar: por confirmar (Lua / Nuuk / não). Traçados de rua ainda partilhados
+  - 🔄 Cidades com ex-líbris (2026-11-17): Porto Clérigos · Roma Trevi · Londres relógio+roda · Paris torre · Varsóvia×6 · Pequim muralha (~128 m, 7 torres) · Tóquio templo · Rio teleférico · Moscovo São Basílio · EUA×4. **Sem ex-líbris:** Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk. Área a dobrar: por confirmar (Lua / Nuuk / não). Traçados de rua ainda partilhados
   - 🔄 **Final do jogo (código existe):** Nuuk → EUA (Estátua, Ponte, Parque Arco-Íris, Hotel das Fontes; foguetão Cabo Canaveral) → Lua (altar + joias). Joias: as que tem + 10 (2026-11-19). Área a dobrar: ignorada. Morada/arranque: cancelada
   - ⬜ Casa mais alta e maior, vista também com a câmara normal (não só de cima)
 - ✅ Seleção de personagem: 12 originais (Lia · Estrela · Bia, Nina, Inês · Zuca · Leonor · Rita · Clara · Tomás · Vega · Alice)
@@ -45,7 +45,7 @@ Aplicar no Session End Protocol.
 
 ### 🟡 Important
 - ✅ Interatividade sem UI: botão→luz, entrar/conduzir carro, dar moeda a um pobre, + 12 adereços por cidade
-- ⬜ Roupas para encontrar e trocar fora da feira. A feira já grava acessórios (`save.wear`); chapéus, capa e arco ficam no NEXT #4
+- ⬜ Roupas para encontrar e trocar fora da feira. A feira já grava acessórios (`save.wear`); chapéus, capa e arco por decidir
 - ⬜ Áudio: músicas/sons originais por personagem e cidade
 - ⬜ Desempenho ≥30 fps em tablet médio (LOD, instancing, culling)
 
@@ -78,7 +78,8 @@ Aplicar no Session End Protocol.
 - ✅ Ex-líbris polish (`ca1913c`, 2026-11-19)
 - ✅ Lua: máquina do tempo → Rainbow 2, joias +10, cápsula na nave, cometas; 227 perguntas (`192551c`, 2026-11-19)
 - ✅ Parque infantil, lojas com provador, massagem, SPA, feira 0–12 visitantes, fotógrafo, bandeiras reais, trotinete (`52ab1b0`, 2026-11-19)
-- 🔄 WIP por testar (`cd46b39`, 2026-11-20): carta, macaca, borboletas, folk, padaria, muralha, Moscovo, estádio/moedas; página inicial ✅
+- ✅ WIP de `cd46b39` terminado e testado (2026-11-21): carta/caixa de correio/caixotes, macaca + borboletas, avião de papel/ponte/penso/sopa, padaria + Muralha + gongo, Moscovo (São Basílio + baú), estádios nas cores da bandeira, moedas dentro do chão
+- ✅ Cidade (testes) nas Definições; Varsóvia (castelo, joias, escadaria do Palácio, `activeClimb`); parque 20×19 com escadas acessíveis; SPA 13×11; rei fora de Moscovo; `CITY_WITHOUT` (5 cidades); aurora boreal em Reiquiavique; joias sem spoiler da Lua (2026-11-21, por commitar)
 
 ---
 
@@ -95,6 +96,7 @@ Aplicar no Session End Protocol.
 | v1.6 | 2026-11-11 | Aeroporto e voo, ícone, Casa, 10 personagens, carro, pobre, 12 adereços |
 | v1.7 | 2026-11-11 | Cidade viva: lojas, pombos, adeptos, bar, trânsito, hospital, tempo real, gato na árvore; ecrã inicial e definições |
 | v1.8 | 2026-11-11 | Compra por clique, inventário, definições no início, dia/noite real com candeeiros |
+| v2.7 | 2026-11-21 | WIP terminado e testado; botão Cidade (testes); Varsóvia corrigida; parque, SPA, rei; cidades sem estádio/piscina/feira/concerto/trotinete; aurora boreal |
 | v2.6 | 2026-11-20 | #SEP: Lua (máquina do tempo), 227 perguntas, parque, lojas com provador, SPA, feira, bandeiras; WIP interrompido pelo limite da API |
 | v2.5 | 2026-11-17 | #SEP: polish ex-líbris (Londres/Paris/Pequim/Roma/Cultura/Rio/Estátua); Hotel das Fontes; obeliscos removidos; salão `replacesHair` já em `d10eb65` |
 | v2.4 | 2026-11-15 | Final do jogo definido pelo Telmo: EUA (Cabo Canaveral) → Lua → entregar os diamantes; propostas US/LUA/FIM no canvas |

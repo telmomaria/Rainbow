@@ -562,7 +562,7 @@ pauseStyle.textContent = `
     position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(59,42,90,.35);
     font-family: system-ui, sans-serif; animation: fadein .25s;
   }
-  .settings-box { background: #fff; border-radius: 28px; padding: 24px 28px; box-shadow: 0 10px 30px rgba(0,0,0,.25); text-align: center; }
+  .settings-box { max-height: 94vh; overflow-y: auto; background: #fff; border-radius: 28px; padding: 24px 28px; box-shadow: 0 10px 30px rgba(0,0,0,.25); text-align: center; }
   .settings-box h2 { margin: 0 0 6px; font: 900 30px/1.1 system-ui, sans-serif; color: #7c3aed; }
   .settings-box p { margin: 0 0 16px; font: 700 18px/1.2 system-ui, sans-serif; color: #7c6c99; }
   .settings-box p.settings-sub { margin-top: 22px; }
@@ -573,6 +573,12 @@ pauseStyle.textContent = `
   }
   .settings-opts button span { display: block; font-size: 34px; margin-bottom: 6px; }
   .settings-opts button.on { background: #7c3aed; color: #fff; }
+  .settings-cities { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-width: 640px; margin: 0 auto; }
+  .settings-cities button {
+    border: 0; border-radius: 14px; padding: 9px 8px; cursor: pointer; background: #f3f0ff;
+    font: 800 15px/1.1 system-ui, sans-serif; color: #3b2a5a; box-shadow: 0 3px 0 rgba(124,58,237,.18);
+  }
+  .settings-cities button.on { background: #7c3aed; color: #fff; }
   .settings-close { margin-top: 18px; border: 0; border-radius: 999px; padding: 12px 40px; background: #22c55e; color: #fff;
     font: 900 22px/1 system-ui, sans-serif; cursor: pointer; }
 `;
@@ -621,18 +627,42 @@ function optionRow<T extends string>(row: Element, opts: [T, string, string][], 
   });
 }
 
-/** Settings window (monster difficulty, rain sound). Resolves when closed. */
+/** Testing only (dev server or `?debug`): jump straight to any level. */
+export interface CityPicker {
+  names: string[];
+  get: () => number;
+  set: (level: number) => void;
+}
+
+/** Settings window (monster difficulty, rain sound; city jump when testing). Resolves when closed. */
 export function openSettings(
   get: () => Difficulty,
   set: (d: Difficulty) => void,
   rain: { get: () => RainSound; set: (r: RainSound) => void },
+  cities?: CityPicker,
 ): Promise<void> {
   const ov = document.createElement('div');
   ov.className = 'settings';
   ov.innerHTML =
     '<div class="settings-box"><h2>Definições</h2><p>Monstros</p><div class="settings-opts"></div>' +
     '<p class="settings-sub">Som da chuva</p><div class="settings-opts settings-rain"></div>' +
+    (cities ? '<p class="settings-sub">Cidade (testes)</p><div class="settings-cities"></div>' : '') +
     '<button class="settings-close">OK</button></div>';
+  if (cities) {
+    const grid = ov.querySelector('.settings-cities')!;
+    const buttons = cities.names.map((name, i) => {
+      const b = document.createElement('button');
+      b.textContent = `${i + 1}. ${name}`;
+      if (cities.get() === i) b.classList.add('on');
+      b.addEventListener('click', () => {
+        cities.set(i);
+        buttons.forEach((x) => x.classList.remove('on'));
+        b.classList.add('on');
+      });
+      grid.appendChild(b);
+      return b;
+    });
+  }
   optionRow<Difficulty>(
     ov.querySelector('.settings-opts')!,
     [

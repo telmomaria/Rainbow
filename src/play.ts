@@ -406,7 +406,7 @@ function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => nu
       g.add(ring);
     }
     const num = hopNumPlane(cell.n);
-    num.position.set(cell.x, 0.1, cell.z);
+    num.position.set(cell.x, 0.13, cell.z); // above the lit square (it pops up 0.02)
     g.add(num);
     cells.push(mesh);
   }
@@ -452,6 +452,7 @@ function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => nu
   const pebbleTo = new THREE.Vector3();
   const lastSet = new THREE.Vector3();
   let oneFoot = false;
+  let clacked = false;
   const HOP = 0.48;
   const LAND = 0.42;
   const debug = new URLSearchParams(location.search).has('debug');
@@ -498,6 +499,7 @@ function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => nu
     if (phase !== 'idle' || ctx.isPaused() || ctx.isDriving()) return false;
     ctx.hold(true);
     phase = 'throw';
+    clacked = false;
     t = 0;
     leg = 0;
     lit.clear();
@@ -515,6 +517,8 @@ function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => nu
   };
 
   const beginHop = (): void => {
+    // classic rule: the pebble's square is hopped over (on a single one that means a longer jump to the next)
+    while (leg < LANDINGS.length - 1 && landing(leg).length === 0) leg++;
     const cs = landing(leg);
     to.set(0, 0, 0);
     for (const i of cs) to.add(cellWorld(i));
@@ -560,9 +564,9 @@ function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => nu
       cells.forEach((c, i) => {
         const m = c.material as THREE.MeshStandardMaterial;
         glow[i] += ((lit.has(i) ? 1 : 0) - glow[i]) * Math.min(1, dt * 8);
-        m.emissive.copy(m.color).lerp(WHITE, glow[i] * 0.55);
+        m.emissive.copy(m.color).lerp(WHITE, glow[i] * 0.3);
         m.emissiveIntensity = 0.15 + glow[i] * 0.75;
-        c.position.y = 0.05 + glow[i] * 0.03;
+        c.position.y = 0.05 + glow[i] * 0.02;
       });
 
       if (phase === 'idle') {
@@ -585,7 +589,8 @@ function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => nu
         pebble.position.lerpVectors(pebbleFrom, pebbleTo, k);
         pebble.position.y += Math.sin(k * Math.PI) * 1.1;
         if (k >= 1) {
-          tone(180, 0, 0.06, 'square', 0.05); // clack on the ground
+          if (!clacked) tone(180, 0, 0.06, 'square', 0.05); // clack on the ground (once)
+          clacked = true;
           if (t > 1.05) beginHop();
         }
       } else if (phase === 'hop') {
@@ -621,7 +626,7 @@ function buildHopscotch(scene: THREE.Scene, obstacles: Obstacle[], rng: () => nu
               ctx.addCoins(2);
             }
           } else {
-            void speak([cs.map((i) => HOP_WORDS[i]).join(', ') + '!']);
+            void speak([cs.map((i) => HOP_WORDS[i]).join(', ') + '!'], 1.15);
             phase = 'land';
             t = 0;
           }

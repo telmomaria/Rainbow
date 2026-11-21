@@ -94,6 +94,8 @@ registerFolk({
 registerFolk({
   id: 'rei',
   ref: 'I03',
+  // the king lives only in Londres (Telmo, 2026-11-21): elsewhere the next character in the rotation takes his place
+  onlyIn: ['Londres'],
   group: 'fantasia',
   hw: 2.6,
   depth: 4.2,

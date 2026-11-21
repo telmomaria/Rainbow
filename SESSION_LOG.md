@@ -117,3 +117,19 @@
 - **Por testar:** tudo o que está no commit `cd46b39` (ver CONTEXT). Som e fps em tablet nunca validados.
 - `.tmp/`: só capturas/scripts de QA, zero `.md` a promover. Passos 3 e 8 N/A (sem LINEAGE).
 - Capacity: muito alta (muitas ondas + 10 subagentes); fecho a pedido do Telmo.
+
+## 2026-11-21 — WIP terminado, Varsóvia, cidades diferentes, aurora (por commitar)
+
+- **Feito e testado no browser:**
+  - Botão **Cidade (testes)** nas ⚙ Definições (só dev/`?debug`); `jumpToCity`/`newGameAt` em main.ts.
+  - Os 6 trabalhos WIP de `cd46b39` (carta, macaca/borboletas, folk, padaria/Muralha, Moscovo, estádio/moedas) — quase tudo já estava feito; corrigidos: macaca encravava com a pedra na casa 4/7, números escondidos, penso invisível (joelho → braço), baguetes, moeda inicial dentro de um objeto.
+  - Varsóvia: castelo rodado 180°; joias do Castelo/Barbican/Palácio visíveis; escadas soltas do Palácio substituídas por escadaria; causa da cabeça cortada = a subida parada do Castelo puxava-a para o chão enquanto subia o Palácio (`activeClimb` em `towerClimb`). Clérigos re-testado.
+  - Parque infantil 16 → 19 m de fundo (cerca a 3,45 m das escadas); SPA 10×8 → 13×11 m; rei com `notIn: ['Moscovo']`.
+  - `CITY_WITHOUT` em cities.ts (Reiquiavique estádio — o bar fica —, Moscovo piscina, Tóquio feira, Vilnius concerto, Rio trotinete).
+  - Aurora boreal em Reiquiavique (`src/aurora.ts`) + olhar para o céu ~7 s ao anunciá-la.
+  - "Guarda-a para a Lua!" → "Guarda-a bem!" (a Lua é segredo).
+- **Decisões do Telmo:** Lua é segredo até lá chegar; cidades diferentes entre si (lista acima).
+- **Perguntas em aberto:** rei só em Londres? · tirar o bar de Reiquiavique? · commit + push?
+- **Lições:** (1) os briefs dos agentes interrompidos estão nos transcripts `.jsonl` (input dos `Agent`) — deu para retomar sem perguntar; (2) 3 agentes de cada vez + "código e tsc primeiro, browser depois" chegou sem esgotar crédito; (3) no Git Bash, o node lê `/tmp` como `C:/tmp`.
+- Clérigos: a vista do topo era uma câmara aérea que mostrava a própria torre; agora a câmara fica no varandim a olhar para o centro da cidade (testado).
+- Não verificado: som, animações em movimento, toque, fps em tablet.

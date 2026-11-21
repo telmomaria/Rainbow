@@ -11,8 +11,8 @@ import { onRoad, ROADS, type Interactable, type Obstacle, type World } from './w
 
 /**
  * Fase 5 — ex-líbris por cidade (I81–I90 style): landmark diamonds (never spent — for the Moon).
- * Cities with builders: Porto, Roma, Londres, Paris, Varsóvia (six), Pequim, Tóquio, Rio de Janeiro.
- * No landmark (empty builders — no fake obelisk): Madrid, Vilnius, Moscovo, Cidade do México, Reiquiavique, Nuuk.
+ * Cities with builders: Porto, Roma, Londres, Paris, Varsóvia (six), Pequim, Tóquio, Rio de Janeiro, Moscovo (landmarks-moscovo.ts).
+ * No landmark (empty builders — no fake obelisk): Madrid, Vilnius, Cidade do México, Reiquiavique, Nuuk.
  * EUA / Lua: handled elsewhere (usa.ts / none). Missing BY_CITY keys return [] (no default monument).
  *
  * Placement runs AFTER venues (pool, concert, fair, house…) with setNoSpawnZones already set — never on top of
@@ -48,7 +48,7 @@ function diamondAt(ctx: GameCtx, key: string, at: THREE.Vector3, mesh: THREE.Obj
       mesh.visible = false;
       ctx.addDiamond();
       [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, i * 0.07, 0.22, 'triangle', 0.07));
-      ctx.say(['Uma joia do ex-líbris! Guarda-a para a Lua!']);
+      ctx.say(['Uma joia do ex-líbris! Guarda-a bem!']);
     },
   };
 }
@@ -180,6 +180,10 @@ function setVista(vista: VistaCam | null): void {
  * never a Y-only elevator. Top reward is honest: jewel + flags/fireworks; «vista» only when
  * `vista` is set (soft aerial over the city — sayTop is spoken after the camera switches).
  */
+/** The climb she is on right now. With two climbs in one city (Varsóvia), the idle one's
+ *  "stray height → back to the ground" safety net must not pull her off the other one's landing. */
+let activeClimb: object | null = null;
+
 function towerClimb(opts: {
   ctx: GameCtx;
   object: THREE.Object3D;
@@ -228,7 +232,9 @@ function towerClimb(opts: {
     ctx.walkAnim(WALK, b.x, b.z);
   };
 
+  const me = {};
   const finishGround = () => {
+    if (activeClimb === me) activeClimb = null;
     phase = 'idle';
     t = 0;
     topT = 0;
@@ -265,6 +271,7 @@ function towerClimb(opts: {
       if (phase === 'idle') {
         if (ctx.isPaused()) return false;
         phase = 'up';
+        activeClimb = me;
         t = 0;
         ctx.hold(true);
         ctx.walkAnim(WALK, climbPath[1]?.x ?? top.x, climbPath[1]?.z ?? top.z);
@@ -298,7 +305,7 @@ function towerClimb(opts: {
       }
       if (phase === 'idle') {
         prox.set(foot.x, 0, foot.z);
-        if (ctx.player.y > 0.4) {
+        if (ctx.player.y > 0.4 && activeClimb === null) {
           const dTop = Math.hypot(ctx.player.x - top.x, ctx.player.z - top.z);
           const dFoot = Math.hypot(ctx.player.x - foot.x, ctx.player.z - foot.z);
           if (dTop > 5 && dFoot > 4) ctx.player.y = 0;
@@ -529,11 +536,18 @@ const BY_CITY: Record<string, Builder> = {
       at.z + tz + Math.sin(footA) * (stairR + 0.9),
     );
     const lookout = new THREE.Vector3(at.x, balconyY + 0.2, at.z + tz);
-    // soft aerial over Porto with the tower still in frame (below cloud layer)
+    // the view FROM the top (Telmo, 2026-11-21: the old aerial looked down with the tower itself in the picture):
+    // camera just above the balcony, on the side facing the city centre, looking out over the rooftops
+    const tx = at.x;
+    const tzW = at.z + tz;
+    const toC = Math.hypot(tx, tzW) > 1 ? new THREE.Vector2(-tx, -tzW).normalize() : new THREE.Vector2(0, 1);
     const vista: VistaCam = {
-      x: at.x + 6,
-      z: at.z + 22,
-      h: 36,
+      fromX: tx + toC.x * 1.6,
+      fromZ: tzW + toC.y * 1.6,
+      h: balconyY + 2.4,
+      x: tx + toC.x * 75,
+      z: tzW + toC.y * 75,
+      lookY: 2,
     };
 
     landmarkDebug = { spots: { clerigos: at }, prefs: { clerigos: { ...PORTO_CLERIGOS } }, count: 1, foot: { x: foot.x, z: foot.z } };
@@ -548,7 +562,7 @@ const BY_CITY: Record<string, Builder> = {
         gem,
         gemKey: `gem:${ctx.city()}:clerigos`,
         sayTop: ['No cimo da Torre dos Clérigos!'],
-        sayGem: ['Uma joia do ex-líbris! Guarda-a para a Lua!'],
+        sayGem: ['Uma joia do ex-líbris! Guarda-a bem!'],
         interactAt: foot,
         radius: 5,
         vista,
@@ -1495,12 +1509,36 @@ const BY_CITY: Record<string, Builder> = {
       g.position.set(at.x, 0, at.z);
       scene.add(g);
       const brick = mat(0xb5654a);
-      const wall = new THREE.Mesh(new THREE.CylinderGeometry(7, 7.2, 3.2, 24, 1, true), brick);
+      // Walk-in fort: ring wall with a real opening at the gate (+Z), so she can go into the courtyard
+      // and see/take the jewel. (Before: closed ring + one big solid box → the jewel was unreachable
+      // and hidden behind the wall.) Wall is double-sided so it also reads from inside.
+      const GATE_HALF = 0.34; // rad either side of +Z (≈ 2.4 m opening)
+      const brickIn = new THREE.MeshStandardMaterial({ color: 0xb5654a, side: THREE.DoubleSide });
+      const wall = new THREE.Mesh(
+        new THREE.CylinderGeometry(7, 7.2, 3.2, 28, 1, true, GATE_HALF, Math.PI * 2 - GATE_HALF * 2),
+        brickIn,
+      );
       wall.position.y = 1.6;
       wall.castShadow = true;
       g.add(wall);
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
+      const yardFloor = new THREE.Mesh(new THREE.CircleGeometry(6.9, 28), mat(0xd8c3a5));
+      yardFloor.rotation.x = -Math.PI / 2;
+      yardFloor.position.y = 0.03;
+      g.add(yardFloor);
+      // swap the solid footprint for a ring of small boxes (gate left open)
+      const solid = world.obstacles.findIndex(
+        (o) => Math.abs(o.minX - (at.x - 8)) < 1e-6 && Math.abs(o.maxZ - (at.z + 8)) < 1e-6,
+      );
+      if (solid >= 0) world.obstacles.splice(solid, 1);
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * Math.PI * 2; // angle from +Z, like CylinderGeometry's theta
+        if (Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < 0.5) continue; // the gate
+        const cx = at.x + Math.sin(a) * 6.9;
+        const cz = at.z + Math.cos(a) * 6.9;
+        world.obstacles.push({ minX: cx - 1.35, maxX: cx + 1.35, minZ: cz - 1.35, maxZ: cz + 1.35, height: 4 });
+      }
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2; // 0°,60°…: no tower in the gate (+Z = 90°)
         const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 5, 10), brick);
         tower.position.set(Math.cos(a) * 6.5, 2.5, Math.sin(a) * 6.5);
         tower.castShadow = true;
@@ -1508,6 +1546,12 @@ const BY_CITY: Record<string, Builder> = {
         const tip = new THREE.Mesh(new THREE.ConeGeometry(1.3, 1.4, 8), mat(0x8b4513));
         tip.position.set(tower.position.x, 5.7, tower.position.z);
         g.add(tip);
+        const ox = at.x + tower.position.x;
+        const oz = at.z + tower.position.z;
+        world.obstacles.push({ minX: ox - 1.35, maxX: ox + 1.35, minZ: oz - 1.35, maxZ: oz + 1.35, height: 6 });
+      }
+      for (const px of [-2.2, 2.2]) {
+        world.obstacles.push({ minX: at.x + px - 0.65, maxX: at.x + px + 0.65, minZ: at.z + 6.15, maxZ: at.z + 7.45, height: 4 });
       }
       const gateL = new THREE.Mesh(new THREE.BoxGeometry(1.2, 3.5, 1.2), brick);
       gateL.position.set(-2.2, 1.75, 6.8);
@@ -1518,8 +1562,12 @@ const BY_CITY: Record<string, Builder> = {
       const arch = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.6, 1.2), brick);
       arch.position.set(0, 3.8, 6.8);
       g.add(arch);
-      const gem = gemMesh(0xffe14d, 1.3);
-      gem.position.set(0, 1.2, 0);
+      // jewel on a stone plinth in the middle of the courtyard — big enough to spot from the gate
+      const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, 0.9, 12), mat(0xadb5bd));
+      plinth.position.y = 0.45;
+      g.add(plinth);
+      const gem = gemMesh(0xffe14d, 2.4);
+      gem.position.set(0, 1.55, 0);
       g.add(gem);
       things.push(diamondAt(ctx, `gem:${city}:barbaca`, new THREE.Vector3(at.x, 0, at.z), gem));
       things.push({
@@ -1704,27 +1752,54 @@ const BY_CITY: Record<string, Builder> = {
       add(new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.6, 8), metal), 0, terraceY + 14.0, 0, false);
       add(new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), gold), 0, terraceY + 14.85, 0, false);
 
-      // visible stair on +Z — short parapets (not full-height walls → no grey “wedge”)
-      const stairN = 14;
-      const rise = terraceY / stairN;
-      const run = 0.52;
-      const stairZ0 = 9.2;
-      const climbSteps: THREE.Vector3[] = [];
-      for (let i = 0; i < stairN; i++) {
-        const y = (i + 1) * rise;
-        const z = stairZ0 + (stairN - 1 - i) * run;
-        add(new THREE.Mesh(new THREE.BoxGeometry(2.35, rise * 0.92, run * 0.95), trim), 0, y - rise * 0.5, z);
-        for (const sx of [-1.32, 1.32]) {
-          add(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.55, run * 0.95), stoneDeep), sx, y + 0.2, z, false);
-        }
-        climbSteps.push(new THREE.Vector3(at.x, y, at.z + z));
+      // Open lookout terrace on the +Z setback shelf (y 7.1, in front of the mid block) — nothing above
+      // her head there. (The old target sat inside the clock belt at the top of the shaft: a slab cut
+      // through her head and the jewel was hidden inside it.)
+      const deckY = 7.1; // top of the +Z arm's setback shelf (z 4.8 → 7.25, x ±3.1)
+      const armTopY = 5.69; // top of the +Z arm (cornice belt), z ≤ 9
+      add(new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.12, 2.6), stoneLite), 0, deckY + 0.04, 6.0, false); // pale floor
+      // low balustrade round the open sides (front edge has a gap where the stair arrives, x 1.5 → 3.1)
+      add(new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.6, 0.16), trim), -0.9, deckY + 0.4, 7.2, false);
+      for (const sx of [-3.1, 3.1]) {
+        add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.6, 2.5), trim), sx, deckY + 0.4, 6.0, false);
       }
 
-      const gem = gemMesh(0xb06bff, 1.4);
-      gem.position.set(0, terraceY + 0.95, 0);
+      // Monumental stair up the front of the +Z wing: ground → wing roof → three steps onto the terrace.
+      // Solid treads down to their base (no floating blocks); the meshes ARE the climb path.
+      const stairX = 2.3;
+      const stairW = 1.6;
+      const climbSteps: THREE.Vector3[] = [];
+      const n1 = 10;
+      const run1 = 0.75;
+      const rise1 = armTopY / n1;
+      for (let i = 0; i < n1; i++) {
+        const y = (i + 1) * rise1;
+        const z = 9.0 + (n1 - 1 - i) * run1 + run1 * 0.5;
+        add(new THREE.Mesh(new THREE.BoxGeometry(stairW, y, run1 * 0.98), stoneLite), stairX, y / 2, z);
+        // side parapet along the outer edge
+        add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.55, run1 * 0.98), trim), stairX + stairW / 2 + 0.08, y + 0.27, z, false);
+        climbSteps.push(new THREE.Vector3(at.x + stairX, y, at.z + z));
+      }
+      climbSteps.push(new THREE.Vector3(at.x + stairX, armTopY, at.z + 8.6));
+      const n2 = 3;
+      const rise2 = (deckY - armTopY) / n2;
+      for (let i = 0; i < n2; i++) {
+        const y = armTopY + (i + 1) * rise2;
+        const z = 8.25 - i * 0.45;
+        add(new THREE.Mesh(new THREE.BoxGeometry(stairW, y - armTopY, 0.44), stoneLite), stairX, armTopY + (y - armTopY) / 2, z);
+        climbSteps.push(new THREE.Vector3(at.x + stairX, y, at.z + z));
+      }
+      climbSteps.push(new THREE.Vector3(at.x + stairX, deckY, at.z + 6.7));
+
+      // jewel on a little plinth to her left, in front of the camera — never inside her or a wall
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 0.7, 10), trim), -1.6, deckY + 0.35, 6.0);
+      const gem = gemMesh(0xb06bff, 2.6);
+      gem.position.set(-1.6, deckY + 1.25, 6.0);
       g.add(gem);
-      const foot = new THREE.Vector3(at.x, 0, at.z + stairZ0 + stairN * run + 0.45);
-      const lookout = new THREE.Vector3(at.x, terraceY + 0.2, at.z);
+      const foot = new THREE.Vector3(at.x + stairX, 0, at.z + 9.0 + n1 * run1 + 0.6);
+      const lookout = new THREE.Vector3(at.x + 0.6, deckY, at.z + 6.0);
+      // over-the-shoulder shot from the front: she, the jewel and the tower all in frame
+      const vista: VistaCam = { x: at.x, z: at.z + 6.0, h: deckY + 7, fromX: at.x + 1.5, fromZ: at.z + 19, lookY: deckY + 1.4 };
       things.push(
         towerClimb({
           ctx,
@@ -1735,9 +1810,10 @@ const BY_CITY: Record<string, Builder> = {
           gem,
           gemKey: `gem:${city}:cultura`,
           sayTop: ['No terraço do Palácio!'],
-          sayGem: ['Uma joia do ex-líbris! Guarda-a para a Lua!'],
+          sayGem: ['Uma joia do ex-líbris! Guarda-a bem!'],
           interactAt: foot,
           radius: 5.5,
+          vista,
         }),
       );
     }
@@ -1892,6 +1968,14 @@ const BY_CITY: Record<string, Builder> = {
       used.castelo = at;
       const g = new THREE.Group();
       g.position.set(at.x, 0, at.z);
+      // Front (gate, clock-tower stair, forecourt) is built on local +Z. Turn it to face the town
+      // centre / the street she arrives from: at the preferred NW-corner spot (z > 0) that is −Z,
+      // i.e. a 180° turn (Telmo 2026-11-21: "está virado para trás").
+      const flip = at.z > 0;
+      g.rotation.y = flip ? Math.PI : 0;
+      /** local (lx, y, lz) → world, matching the group's rotation (footprint is symmetric: 11 × 9). */
+      const W = (lx: number, y: number, lz: number) =>
+        new THREE.Vector3(at.x + (flip ? -lx : lx), y, at.z + (flip ? -lz : lz));
       scene.add(g);
       const fw = new Fireworks(scene);
       const red = mat(0xc92a2a);
@@ -1926,6 +2010,7 @@ const BY_CITY: Record<string, Builder> = {
       }
       // battlements along the front
       for (let i = -6; i <= 6; i += 2) {
+        if (Math.hypot(i - 5.2, 4.3 - 3.6) < 2.7) continue; // keep the torreão terrace clear
         const merlon = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 0.5), red);
         merlon.position.set(i, 7.0, 4.3);
         g.add(merlon);
@@ -1937,7 +2022,7 @@ const BY_CITY: Record<string, Builder> = {
         [-6.2, -3.8],
         [6.2, -3.8],
         [-6.2, 3.8],
-        [6.2, 3.8],
+        // front-right corner = the climbable torreão below (an extra tower here stood right on her terrace)
       ] as const) {
         const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.9, 9, 12), red);
         tower.position.set(tx, 4.5, tz);
@@ -1966,8 +2051,9 @@ const BY_CITY: Record<string, Builder> = {
       const tx = 5.2;
       const tz = 3.6;
       const balconyY = 7.15; // flush with keep cornice / battlement walk — a real roof terrace
-      const keepTower = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.4, balconyY + 1.2, 14), red);
-      keepTower.position.set(tx, (balconyY + 1.2) / 2, tz);
+      // body stops under the balcony floor (it used to rise 1.2 m above it and swallow her legs)
+      const keepTower = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.4, balconyY - 0.1, 14), red);
+      keepTower.position.set(tx, (balconyY - 0.1) / 2, tz);
       keepTower.castShadow = true;
       g.add(keepTower);
       // square terrace on the keep roof, fused with the torreão (not a floating disc)
@@ -1992,17 +2078,16 @@ const BY_CITY: Record<string, Builder> = {
         rail.position.set(rx, balconyY + 0.45, rz);
         g.add(rail);
       }
-      const keepTip = new THREE.Mesh(new THREE.ConeGeometry(2.6, 3.0, 10), roofDark);
-      keepTip.position.set(tx, balconyY + 2.8, tz);
-      g.add(keepTip);
-      const tipPole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 6), gold);
-      tipPole.position.set(tx, balconyY + 4.6, tz);
+      // open-air terrace (no cone roof over it — its rim sat at head height); tall flagpole at the back edge
+      const poleZ = tz - 2.25;
+      const tipPole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 4.4, 6), gold);
+      tipPole.position.set(tx, balconyY + 2.2, poleZ);
       g.add(tipPole);
       const tipFlag = new THREE.Mesh(
         new THREE.PlaneGeometry(1.4, 0.85),
         new THREE.MeshStandardMaterial({ map: flagTexture('Varsóvia'), side: THREE.DoubleSide }), // Polish flag
       );
-      tipFlag.position.set(tx + 0.7, balconyY + 4.8, tz);
+      tipFlag.position.set(tx + 0.7, balconyY + 4.0, poleZ);
       g.add(tipFlag);
       flags.push(tipFlag);
 
@@ -2024,10 +2109,10 @@ const BY_CITY: Record<string, Builder> = {
           side.position.set(xLocal + sx, sideH / 2, zLocal);
           g.add(side);
         }
-        climbSteps.push(new THREE.Vector3(at.x + xLocal, y, at.z + zLocal));
+        climbSteps.push(W(xLocal, y, zLocal));
       }
-      // last tread onto the balcony centre
-      climbSteps.push(new THREE.Vector3(at.x + tx, balconyY + 0.2, at.z + tz + 1.2));
+      // last tread onto the balcony
+      climbSteps.push(W(tx, balconyY, tz + 1.4));
 
       // gate with crest
       const gate = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.6, 0.35), mat(0x5c4033));
@@ -2037,12 +2122,20 @@ const BY_CITY: Record<string, Builder> = {
       crest.position.set(0, 4.2, 4.85);
       g.add(crest);
 
-      const gem = gemMesh(0xffe14d, 1.55);
-      gem.position.set(tx, balconyY + 0.85, tz);
+      // jewel on the keep-roof terrace beside her (it used to sit exactly where she stands → hidden inside her)
+      const gemPlinth = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 0.6, 10), gold);
+      gemPlinth.position.set(tx - 2.6, balconyY + 0.3, tz - 0.2);
+      g.add(gemPlinth);
+      const gem = gemMesh(0xffe14d, 2.5);
+      gem.position.set(tx - 2.6, balconyY + 1.15, tz - 0.2);
       g.add(gem);
 
-      const foot = new THREE.Vector3(at.x + tx, 0, at.z + tz + 2.6 + stairN * run + 0.5);
-      const lookout = new THREE.Vector3(at.x + tx, balconyY + 0.2, at.z + tz);
+      const foot = W(tx, 0, tz + 2.6 + stairN * run + 0.5);
+      const lookout = W(tx, balconyY, tz + 0.3);
+      // front three-quarter shot of the terrace: she, the jewel and the flags in frame
+      const topFront = W(tx - 1.2, 0, tz + 12);
+      const topAt = W(tx - 1.2, 0, tz);
+      const vista: VistaCam = { x: topAt.x, z: topAt.z, h: balconyY + 6.5, fromX: topFront.x, fromZ: topFront.z, lookY: balconyY + 1.2 };
       things.push(
         towerClimb({
           ctx,
@@ -2055,9 +2148,10 @@ const BY_CITY: Record<string, Builder> = {
           fireworks: fw,
           flags,
           sayTop: ['No torreão do castelo!'],
-          sayGem: ['Uma joia do ex-líbris! Guarda-a para a Lua!'],
+          sayGem: ['Uma joia do ex-líbris! Guarda-a bem!'],
           interactAt: foot,
           radius: 5.5,
+          vista,
         }),
       );
     }
@@ -3028,6 +3122,7 @@ function boxish(g: THREE.Object3D, m: THREE.Material, sx: number, sy: number, sz
  */
 export function createLandmarks(scene: THREE.Scene, obstacles: Obstacle[], seed: number, ctx: GameCtx, world: World): Interactable[] {
   clearLandmarkRide(); // drop mid-ride hold if city rebuilds
+  activeClimb = null;
   landmarkDebug = null;
   lastPlaceSpot = null;
   if (ctx.city() === 'Estados Unidos' || ctx.city() === 'Lua') return []; // USA has usa.ts; Moon has none

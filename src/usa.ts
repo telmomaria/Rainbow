@@ -90,7 +90,7 @@ function diamondPickup(ctx: GameCtx, key: string, at: THREE.Vector3, mesh: THREE
       mesh.visible = false;
       ctx.addDiamond();
       [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, i * 0.07, 0.22, 'triangle', 0.07));
-      ctx.say(['Uma joia especial! Guarda-a para a Lua!']);
+      ctx.say(['Uma joia especial! Guarda-a bem!']);
     },
   };
 }
