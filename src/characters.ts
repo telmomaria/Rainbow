@@ -1168,3 +1168,108 @@ export function buildRobe(id: string): CharacterModel {
   stripHeadGear(head); // no space helmet / knight helmet with a bathrobe
   return b;
 }
+
+// ---------------------------------------------------------------------------
+// Spacesuit (the Moon, Telmo 2026-11-21): put on inside the rocket at Cabo Canaveral, worn the whole time on the Moon.
+// Same head and hair inside a round glass helmet; white puffy suit, backpack, gloves and boots. No agency logos or
+// flags. Vega (astronauta) already wears hers; the unicorn gets a bubble helmet and a backpack.
+// ---------------------------------------------------------------------------
+
+const SUIT = 0xf4f6fb;
+const SUIT_SHADE = 0xdfe4ee;
+const SUIT_TRIM = 0x9aa5b8;
+
+function helmetGlass(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: 0xcfe8ff,
+    roughness: 0.05,
+    metalness: 0.1,
+    transparent: true,
+    opacity: 0.24,
+    depthWrite: false,
+  });
+}
+
+/** The character in a spacesuit. */
+export function buildSpacesuit(id: string): CharacterModel {
+  const orig = characterById(id).build() as CharacterModel & Partial<Biped>;
+  if (id === 'astronauta') return orig; // her own suit already has the bubble helmet
+  if (!orig.head || orig.skin === undefined || !orig.headR) {
+    // unicorn etc.: a glass bubble around the head (the horn sits inside it) + a backpack on the back
+    const head = (orig as CharacterModel & { head?: THREE.Object3D }).head;
+    if (head) {
+      const bubble = new THREE.Mesh(new THREE.SphereGeometry(0.56, 28, 20), helmetGlass());
+      bubble.position.set(0, 0.08, -0.08);
+      bubble.renderOrder = 2;
+      head.add(bubble);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.05, 8, 28), new THREE.MeshStandardMaterial({ color: SUIT_TRIM, metalness: 0.4, roughness: 0.35 }));
+      ring.position.set(0, -0.3, 0.12);
+      ring.rotation.x = Math.PI / 2 - 0.5;
+      head.add(ring);
+    }
+    const shell = new THREE.MeshStandardMaterial({ color: SUIT_SHADE, roughness: 0.6 });
+    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.34, 0.5), shell);
+    pack.position.set(0, 1.42, 0.12);
+    pack.castShadow = true;
+    orig.body.add(pack);
+    for (const side of [-1, 1]) {
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.5, 10), new THREE.MeshStandardMaterial({ color: 0xb8c2cc, roughness: 0.4 }));
+      tank.rotation.x = Math.PI / 2;
+      tank.position.set(side * 0.16, 1.62, 0.12);
+      orig.body.add(tank);
+    }
+    // a white quilt over the back, like the suit's fabric
+    const quilt = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.07, 0.8), new THREE.MeshStandardMaterial({ color: SUIT, roughness: 0.8 }));
+    quilt.position.set(0, 1.28, 0.08);
+    orig.body.add(quilt);
+    return orig;
+  }
+  const b = biped({
+    skin: orig.skin,
+    top: SUIT,
+    sleeve: SUIT,
+    legs: SUIT,
+    shoes: 0x8a94a8,
+    hips: SUIT_SHADE,
+    legR: 0.1,
+    boots: { color: SUIT_SHADE, h: 0.26 },
+    headR: orig.headR,
+  });
+  const k = b.kit;
+  // puffy: wider torso and hips, knee and elbow rings
+  k.put(b.body, k.cyl(0.25, 0.29, 0.62, 16), SUIT, [0, 1.06, 0]);
+  k.put(b.body, k.cyl(0.28, 0.29, 0.22, 16), SUIT_SHADE, [0, 0.77, 0]);
+  k.put(b.body, k.torus(0.28, 0.035), SUIT_TRIM, [0, 0.88, 0], [Math.PI / 2, 0, 0]);
+  for (const leg of b.legs) {
+    k.put(leg.pivot, k.box(0.22, 0.08, 0.32), 0x8a94a8, [0, -HIP + 0.04, -0.04]); // wide soles
+    k.put(leg.pivot, k.cyl(0.12, 0.12, 0.07, 14), SUIT_SHADE, [0, -0.36, 0]);
+  }
+  for (const arm of [b.armL, b.armR]) {
+    k.put(arm, k.cyl(0.085, 0.08, 0.5), SUIT, [0, -0.25, 0]);
+    k.put(arm, k.cyl(0.09, 0.09, 0.06, 12), SUIT_SHADE, [0, -0.28, 0]);
+    k.put(arm, k.sph(0.105, 14, 10), SUIT_SHADE, HAND); // chunky gloves
+  }
+  // chest control box with three coloured buttons (no logos)
+  k.put(b.body, k.box(0.22, 0.14, 0.05), SUIT_SHADE, [0, 1.04, -0.27]);
+  [0xff5a5a, 0x6bd96b, 0x4db8ff].forEach((c, i) => k.put(b.body, k.sph(0.026, 8, 6), k.mat(c, 0.6), [-0.06 + i * 0.06, 1.04, -0.3]));
+  // life-support backpack with two tanks
+  k.put(b.body, k.box(0.44, 0.56, 0.2), 0xe6e9f0, [0, 1.08, 0.33]);
+  k.put(b.body, k.box(0.45, 0.05, 0.21), SUIT_TRIM, [0, 1.25, 0.33]);
+  for (const side of [-1, 1]) k.put(b.body, k.cyl(0.055, 0.055, 0.4, 10), 0xb8c2cc, [side * 0.14, 1.06, 0.45]);
+  // neck ring the helmet locks onto
+  k.put(b.body, k.torus(0.24, 0.055), k.mat(0xb8c2cc, 0, 0.35, 0.6), [0, 1.37, 0], [Math.PI / 2, 0, 0]);
+  // keep her own head (face, hair) on the new body, inside a round glass helmet
+  b.body.remove(b.head);
+  const head = orig.head;
+  head.removeFromParent();
+  head.position.copy(b.head.position);
+  b.body.add(head);
+  b.head = head;
+  stripHeadGear(head); // no knight helmet / visor inside the space helmet
+  const bubble = new THREE.Mesh(k.sph(orig.headR * 1.4, 28, 20), helmetGlass());
+  bubble.position.set(0, 0.04, 0);
+  bubble.renderOrder = 2;
+  head.add(bubble);
+  k.put(head, k.torus(orig.headR * 1.2, 0.045), k.mat(SUIT_SHADE, 0, 0.4, 0.3), [0, -orig.headR * 0.62, 0], [Math.PI / 2, 0, 0]);
+  return b;
+}

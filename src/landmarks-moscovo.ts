@@ -222,6 +222,283 @@ function tower(
   return domeG;
 }
 
+/* ------------------------------------------------------------------ museum tank (exhibit) */
+
+/**
+ * Plaza-frame placement of the exhibit tank: front-left corner of the plaza, clear of the cathedral (front face at
+ * z = CZ + BASE = 3), the steps (|x| < 3), the jewel (x = 0) and the plaza edges. fw/fd = half size of the fenced bed.
+ */
+const TANK = { x: -10, z: 9, fw: 3.8, fd: 2.6 };
+
+/**
+ * A parked, historic-looking tank as a peaceful open-air museum piece: olive hull, tracks with road wheels, round
+ * turret and a long barrel tilted up to the sky, on a low stone plinth inside a flower bed with a low chain fence.
+ * No markings, no stars, no text. Touch = the turret turns slowly once and a white dove lands on the barrel.
+ */
+function buildExhibitTank(): { group: THREE.Group; touch(): void; update(dt: number): void } {
+  const group = new THREE.Group();
+  const olive = mat(0x5b6b3a);
+  const oliveDark = mat(0x47552d);
+  const trackM = mat(0x34352f);
+  const wheelM = mat(0x55583f);
+  const stone = mat(0xbdb5a6);
+  const stoneTop = mat(0xd3ccbf);
+  const box = (w: number, h: number, d: number, m: THREE.Material, px: number, py: number, pz: number, parent: THREE.Object3D = group): THREE.Mesh => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    mesh.position.set(px, py, pz);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
+
+  // flower bed (grass) inside the fence + low stone plinth
+  const bed = new THREE.Mesh(new THREE.PlaneGeometry(TANK.fw * 2, TANK.fd * 2), mat(0x5c9e3c));
+  bed.rotation.x = -Math.PI / 2;
+  bed.position.y = 0.035;
+  bed.receiveShadow = true;
+  group.add(bed);
+  const PH = 0.55; // plinth height
+  box(6.0, PH, 3.4, stone, 0, PH / 2, 0);
+  box(6.2, 0.1, 3.6, stoneTop, 0, PH + 0.05, 0);
+  const y0 = PH + 0.1;
+
+  // tracks (one each side) with road wheels and mudguards
+  for (const s of [-1, 1]) {
+    box(4.8, 0.75, 0.55, trackM, 0, y0 + 0.4, s * 1.2);
+    for (let i = 0; i < 5; i++) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.12, 12), wheelM);
+      w.rotation.x = Math.PI / 2;
+      w.position.set(-1.8 + i * 0.9, y0 + 0.36, s * 1.5);
+      w.castShadow = true;
+      group.add(w);
+    }
+    // front/back sprockets (smaller, a bit higher)
+    for (const ex of [-2.35, 2.35]) {
+      const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.13, 10), wheelM);
+      sp.rotation.x = Math.PI / 2;
+      sp.position.set(ex, y0 + 0.5, s * 1.5);
+      group.add(sp);
+    }
+    box(4.9, 0.08, 0.7, oliveDark, 0, y0 + 0.82, s * 1.22);
+  }
+  // hull: body between the tracks, sloped front plate, deck
+  box(4.4, 0.6, 1.9, olive, 0, y0 + 0.55, 0);
+  box(4.6, 0.32, 2.5, olive, 0.1, y0 + 1.0, 0);
+  const glacis = box(0.9, 0.08, 2.5, oliveDark, -2.55, y0 + 0.82, 0);
+  glacis.rotation.z = 0.55;
+  // little details: headlights, toolbox, spare track links (kept chunky and toy-like)
+  for (const s of [-0.75, 0.75]) {
+    const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.1, 8), mat(0xe8e2c8));
+    lamp.rotation.z = Math.PI / 2;
+    lamp.position.set(-2.32, y0 + 1.12, s);
+    group.add(lamp);
+  }
+  box(0.9, 0.22, 0.35, oliveDark, 1.6, y0 + 1.27, 0.9);
+  box(0.5, 0.18, 0.5, oliveDark, 2.1, y0 + 1.25, -0.6);
+
+  // turret (turns) + barrel tilted up to the sky (points along −X)
+  const turret = new THREE.Group();
+  turret.position.set(0.35, y0 + 1.16, 0);
+  group.add(turret);
+  const tBody = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 1.05, 0.62, 10), olive);
+  tBody.position.y = 0.31;
+  tBody.castShadow = true;
+  turret.add(tBody);
+  const hatch = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.34, 0.14, 10), oliveDark);
+  hatch.position.set(0.3, 0.69, 0.2);
+  turret.add(hatch);
+  box(0.4, 0.42, 0.62, oliveDark, -0.95, 0.3, 0, turret); // mantlet
+  const ELEV = 0.2;
+  const BL = 2.9;
+  const barrel = new THREE.Group();
+  barrel.position.set(-1.1, 0.32, 0);
+  barrel.rotation.z = -ELEV; // −X points slightly up
+  turret.add(barrel);
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.1, BL, 10), oliveDark);
+  tube.rotation.z = Math.PI / 2;
+  tube.position.x = -BL / 2;
+  tube.castShadow = true;
+  barrel.add(tube);
+  const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.32, 10), oliveDark);
+  muzzle.rotation.z = Math.PI / 2;
+  muzzle.position.x = -BL + 0.1;
+  barrel.add(muzzle);
+
+  // low chain fence: short stone posts + sagging dark chains
+  const postM = mat(0xcfc7b8);
+  const chainM = mat(0x2f2f2f);
+  const corners: [number, number][] = [
+    [-TANK.fw, -TANK.fd],
+    [TANK.fw, -TANK.fd],
+    [TANK.fw, TANK.fd],
+    [-TANK.fw, TANK.fd],
+  ];
+  for (let c = 0; c < 4; c++) {
+    const [ax, az] = corners[c];
+    const [bx, bz] = corners[(c + 1) % 4];
+    const len = Math.hypot(bx - ax, bz - az);
+    const n = Math.max(2, Math.round(len / 1.9));
+    for (let i = 0; i < n; i++) {
+      const px = ax + ((bx - ax) * i) / n;
+      const pz = az + ((bz - az) * i) / n;
+      box(0.16, 0.6, 0.16, postM, px, 0.3, pz);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), postM);
+      cap.position.set(px, 0.64, pz);
+      group.add(cap);
+      // chain to the next post: two straight pieces that dip in the middle
+      const qx = ax + ((bx - ax) * (i + 1)) / n;
+      const qz = az + ((bz - az) * (i + 1)) / n;
+      const mx = (px + qx) / 2;
+      const mz = (pz + qz) / 2;
+      for (const [sx, sz, ex, ez] of [
+        [px, pz, mx, mz],
+        [mx, mz, qx, qz],
+      ] as const) {
+        const seg = Math.hypot(ex - sx, ez - sz);
+        const sy = sx === px && sz === pz ? 0.52 : 0.4;
+        const eyy = sx === px && sz === pz ? 0.4 : 0.52;
+        const link = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(seg, eyy - sy), 0.035, 0.035), chainM);
+        link.position.set((sx + ex) / 2, (sy + eyy) / 2, (sz + ez) / 2);
+        link.rotation.order = 'YZX';
+        link.rotation.y = -Math.atan2(ez - sz, ex - sx);
+        link.rotation.z = Math.atan2(eyy - sy, seg);
+        group.add(link);
+      }
+    }
+  }
+
+  // flowers all round the plinth (between the plinth and the fence)
+  const petals = [0xff6b9a, 0xffd43b, 0xffffff, 0xff8787, 0xb197fc].map((c) => mat(c));
+  const stemM = mat(0x2b8a3e);
+  const flowerGeo = new THREE.SphereGeometry(0.12, 7, 5);
+  const stemGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.28, 4);
+  let fi = 0;
+  const flower = (fx: number, fz: number): void => {
+    const st = new THREE.Mesh(stemGeo, stemM);
+    st.position.set(fx, 0.14, fz);
+    group.add(st);
+    const f = new THREE.Mesh(flowerGeo, petals[fi++ % petals.length]);
+    f.position.set(fx, 0.3, fz);
+    f.scale.y = 0.7;
+    group.add(f);
+  };
+  for (let fx = -3.35; fx <= 3.36; fx += 0.42) {
+    flower(fx, -2.15 + (fi % 2) * 0.12);
+    flower(fx + 0.2, 2.15 - (fi % 2) * 0.12);
+  }
+  for (let fz = -1.6; fz <= 1.61; fz += 0.42) {
+    flower(-3.4 + (fi % 2) * 0.1, fz);
+    flower(3.4 - (fi % 2) * 0.1, fz);
+  }
+
+  // the dove (hidden until the tank is touched)
+  const dove = new THREE.Group();
+  const doveM = mat(0xf4f4f4);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), doveM);
+  body.scale.set(1.5, 0.9, 0.9);
+  dove.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), doveM);
+  head.position.set(-0.17, 0.1, 0);
+  dove.add(head);
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.08, 6), mat(0xf59f00));
+  beak.rotation.z = Math.PI / 2;
+  beak.position.set(-0.27, 0.09, 0);
+  dove.add(beak);
+  for (const s of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.015, 5, 4), mat(0x111111));
+    eye.position.set(-0.21, 0.13, s * 0.05);
+    dove.add(eye);
+  }
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.12), doveM);
+  tail.position.set(0.22, 0.03, 0);
+  dove.add(tail);
+  const wings: THREE.Group[] = [];
+  for (const s of [-1, 1]) {
+    const wp = new THREE.Group();
+    wp.position.set(0, 0.06, s * 0.08);
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.025, 0.26), doveM);
+    wing.position.z = s * 0.13;
+    wp.add(wing);
+    dove.add(wp);
+    wings.push(wp);
+  }
+  dove.visible = false;
+  group.add(dove);
+  // perch: ~2/3 along the barrel (turret back at yaw 0 by then), in the tank frame
+  const perchD = 2.0;
+  const perch = new THREE.Vector3(
+    turret.position.x + barrel.position.x - Math.cos(ELEV) * perchD,
+    turret.position.y + barrel.position.y + Math.sin(ELEV) * perchD + 0.15,
+    0,
+  );
+  const skyFrom = new THREE.Vector3(-9, 9, 5);
+  const skyTo = new THREE.Vector3(-8, 10, -7);
+
+  const TURN = 7; // s for one slow full turn
+  const LAND_AT = 5; // dove starts gliding in
+  const GLIDE = 2.6;
+  const STAY = 6;
+  let clock = -1; // < 0 = idle
+  let flap = 0;
+  return {
+    group,
+    touch() {
+      if (clock >= 0) return;
+      clock = 0;
+      tone(220, 0, 0.5, 'sine', 0.035); // soft «hmm» of the old motor, nothing warlike
+    },
+    update(dt) {
+      if (clock < 0) return;
+      clock += dt;
+      flap += dt;
+      // turret: ease-in-out, one full turn
+      const k = Math.min(1, clock / TURN);
+      turret.rotation.y = (k * k * (3 - 2 * k)) * Math.PI * 2;
+      // dove: glide in → perch → fly away
+      const tIn = clock - LAND_AT;
+      const tOut = tIn - GLIDE - STAY;
+      if (tIn < 0) return;
+      dove.visible = true;
+      if (tIn < GLIDE) {
+        const u = tIn / GLIDE;
+        const e = 1 - (1 - u) * (1 - u);
+        dove.position.lerpVectors(skyFrom, perch, e);
+        dove.position.y += Math.sin(u * Math.PI) * 1.2;
+        dove.rotation.y = Math.atan2(skyFrom.z - perch.z, perch.x - skyFrom.x) + Math.PI;
+        wings.forEach((w, i) => {
+          w.scale.z = 1;
+          w.rotation.x = Math.sin(flap * 22) * 0.9 * (i ? 1 : -1);
+        });
+      } else if (tOut < 0) {
+        dove.position.copy(perch);
+        dove.rotation.y = 0;
+        head.rotation.z = Math.sin(flap * 2.5) * 0.25;
+        wings.forEach((w) => {
+          w.rotation.x = 0;
+          w.scale.z = 0.35; // folded
+        });
+        if (tIn - dt < GLIDE) {
+          // landed: two little coos/chirps
+          [1800, 2200, 1900].forEach((f, i) => tone(f, i * 0.12, 0.09, 'sine', 0.03));
+        }
+      } else if (tOut < 3) {
+        const u = tOut / 3;
+        dove.position.lerpVectors(perch, skyTo, u * u);
+        dove.rotation.y = Math.atan2(perch.z - skyTo.z, skyTo.x - perch.x) + Math.PI;
+        wings.forEach((w, i) => {
+          w.scale.z = 1;
+          w.rotation.x = Math.sin(flap * 22) * 0.9 * (i ? 1 : -1);
+        });
+      } else {
+        dove.visible = false;
+        clock = -1;
+        turret.rotation.y = 0;
+      }
+    },
+  };
+}
+
 /* ------------------------------------------------------------------ placement */
 
 const rectHitsRoad = (minX: number, maxX: number, minZ: number, maxZ: number, m: number): boolean =>
@@ -479,6 +756,12 @@ export function buildMoscovo(
   // solids: the base (towers stand inside it); the bells' little beam sits above head height
   solid(-BASE - 0.2, BASE + 0.2, CZ - BASE - 0.2, CZ + BASE + 0.2);
 
+  // museum tank on the plaza (front-left corner): a parked exhibit on a stone plinth, chain fence + flowers
+  const tank = buildExhibitTank();
+  tank.group.position.set(TANK.x, 0, TANK.z);
+  root.add(tank.group);
+  solid(TANK.x - TANK.fw, TANK.x + TANK.fw, TANK.z - TANK.fd, TANK.z + TANK.fd);
+
   // the landmark jewel: on the plaza, in front of the door
   const gem = gemMesh(0xff5c8a, 1.3);
   const gemLocal = { x: 0, z: HD - 4.5 };
@@ -522,7 +805,24 @@ export function buildMoscovo(
     },
   });
 
+  // touch the tank (fence front) = the turret turns slowly once and a dove lands on the barrel
+  things.push({
+    object: tank.group,
+    position: W(TANK.x, TANK.z + TANK.fd + 0.7),
+    radius: 1.6,
+    interact() {
+      tank.touch();
+    },
+    update(dt) {
+      tank.update(dt);
+    },
+  });
+
   kit.setDebug({
+    tank: (() => {
+      const d = W(TANK.x, TANK.z);
+      return [+d.x.toFixed(1), +d.z.toFixed(1)];
+    })(),
     spots: { basilica: { x: +x.toFixed(1), z: +z.toFixed(1) }, main: { x: +x.toFixed(1), z: +z.toFixed(1) } },
     yaw: +yaw.toFixed(2),
     removedBuildings: plot.removed,

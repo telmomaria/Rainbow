@@ -6,7 +6,9 @@ const RADIUS = 0.6;
 const HIT_DIST = 1.15;
 const SEE_DIST = 14;
 const WANDER_SPEED = 1.8;
-const CHASE_SPEED = 4.6; // slower than the character (6.5) so she can always run away
+export const CHASE_SPEED = 4.6; // slower than the character (6.5) so she can always run away
+/** Martians: she walks slower on the Moon (3.5 m/s, in big hops — main.ts MOON_WALK_SPEED), so they are slower too. */
+export const MARTIAN_CHASE_SPEED = 2.6;
 const MAX_MONSTERS = 8; // before the difficulty factor (hard doubles it)
 
 const TAUNTS = [
@@ -153,7 +155,7 @@ export class Monsters {
       if (m.state === 'chase') {
         vx = dx / dist;
         vz = dz / dist;
-        speed = this.martian ? CHASE_SPEED * 1.05 : CHASE_SPEED;
+        speed = this.martian ? MARTIAN_CHASE_SPEED : CHASE_SPEED;
       } else if (m.state === 'retreat') {
         vx = -dx / dist;
         vz = -dz / dist;
@@ -187,7 +189,9 @@ export class Monsters {
       m.body.scale.set(1 + (1 - hop) * 0.08, 1 - (1 - hop) * 0.08, 1 + (1 - hop) * 0.08);
 
       // rooftops / stairs: she is above them — they don't climb (I69)
-      if (m.state === 'chase' && dist < HIT_DIST && !ev.hit && player.y < 1.5) {
+      // (measured from the ground under her: Moon hills, and her low-gravity hops ~1 m, still count as the ground)
+      const feetUp = player.y - (this.heightAt?.(player.x, player.z) ?? 0);
+      if (m.state === 'chase' && dist < HIT_DIST && !ev.hit && feetUp < 1.5) {
         this.setState(m, 'retreat');
         if (m === this.lastHitter && this.streak >= 2) continue; // third time in a row: it just backs off
         this.streak = m === this.lastHitter ? this.streak + 1 : 1;
@@ -223,7 +227,7 @@ export class Monsters {
   private spawn(player: THREE.Vector3): void {
     // on the open mare, spawn nearer so the green chase is easy to notice
     const near = this.martian ? 14 : 25;
-    const range = this.martian ? 40 : 60;
+    const range = this.martian ? 30 : 60; // the Moon is ±60 m since 2026-11-21
     let p = randomFreeSpot(this.obstacles, { center: player, range, radius: RADIUS, avoid: player, minDist: near });
     for (let i = 0; i < 10 && this.blocked?.(p.x, p.z); i++) {
       p = randomFreeSpot(this.obstacles, { center: player, range, radius: RADIUS, avoid: player, minDist: Math.max(10, near - 5) });

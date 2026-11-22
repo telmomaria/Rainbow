@@ -646,3 +646,63 @@ export class DizzyStars {
     this.group.removeFromParent();
   }
 }
+
+/** Little ring of grey dust that puffs up where she lands each Moon hop and settles slowly (low gravity). */
+export class HopDust {
+  private readonly puffs: { points: THREE.Points; vel: Float32Array; life: number }[] = [];
+
+  constructor(private readonly scene: THREE.Scene) {}
+
+  puff(at: THREE.Vector3, n = 26): void {
+    const pos = new Float32Array(n * 3);
+    const vel = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
+      const r = 0.15 + Math.random() * 0.2;
+      pos[i * 3] = at.x + Math.cos(a) * r;
+      pos[i * 3 + 1] = at.y + 0.05;
+      pos[i * 3 + 2] = at.z + Math.sin(a) * r;
+      const v = 0.9 + Math.random() * 0.9;
+      vel[i * 3] = Math.cos(a) * v;
+      vel[i * 3 + 1] = 0.5 + Math.random() * 0.8;
+      vel[i * 3 + 2] = Math.sin(a) * v;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const points = new THREE.Points(
+      geo,
+      new THREE.PointsMaterial({ color: 0xc9c2b2, size: 0.16, transparent: true, opacity: 0.85, depthWrite: false }),
+    );
+    this.scene.add(points);
+    this.puffs.push({ points, vel, life: 1.4 });
+  }
+
+  update(dt: number): void {
+    for (let i = this.puffs.length - 1; i >= 0; i--) {
+      const p = this.puffs[i];
+      p.life -= dt;
+      const attr = p.points.geometry.attributes.position as THREE.BufferAttribute;
+      const arr = attr.array as Float32Array;
+      for (let j = 0; j < arr.length; j += 3) {
+        arr[j] += p.vel[j] * dt;
+        arr[j + 1] += p.vel[j + 1] * dt;
+        arr[j + 2] += p.vel[j + 2] * dt;
+        p.vel[j] *= 1 - dt * 1.5;
+        p.vel[j + 2] *= 1 - dt * 1.5;
+        p.vel[j + 1] -= 1.0 * dt;
+      }
+      attr.needsUpdate = true;
+      (p.points.material as THREE.PointsMaterial).opacity = Math.max(0, Math.min(0.85, p.life / 1.4));
+      if (p.life <= 0) {
+        p.points.removeFromParent();
+        p.points.geometry.dispose();
+        this.puffs.splice(i, 1);
+      }
+    }
+  }
+
+  dispose(): void {
+    for (const p of this.puffs) p.points.removeFromParent();
+    this.puffs.length = 0;
+  }
+}

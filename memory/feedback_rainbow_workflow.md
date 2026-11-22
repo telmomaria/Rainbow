@@ -38,3 +38,12 @@ Para retomar agentes interrompidos, os briefs originais estão nos transcripts `
 Ele quer **a documentação coerente** (CLAUDE.md, CONTEXT, ROADMAP, SESSION_LOG) depois de cada lote de alterações — não
 só no #SEP. Nos briefs de QA, exigir capturas da câmara do jogo em vários momentos (início/meio/fim) — um agente
 deu os escorregas como feitos só pelos números do `?debug` e o Telmo viu que ela nem saía do chão. E guarda segredos de jogo (ex.: a Lua ser o último nível): nunca os pôr em falas antes do tempo.
+
+Sessão 2026-11-21/22 (2.º lote, 7 agentes em ondas de 3–4, sem esgotar crédito): quando um agente diz "talvez seja a
+máquina lenta" e não prova, verificar logo — era um erro real escondido (a Lua não arrancava com "Continuar").
+**How to apply:** para apanhar erros que a consola do patchright não mostra, gravar `window.onerror`/`unhandledrejection`
+num `dataset` do DOM com `addInitScript` (o `page.evaluate` corre num mundo isolado). Com o ficheiro grande ocupado por
+um agente, dar ao outro um ficheiro novo (Rio → `landmarks-rio.ts`). Ele responde às perguntas de decisão em poucas
+palavras ("sim, substitui", "4,7 m/s") — aplicar à letra e não estender a outros casos sem perguntar (ex.: 4,7 só nas cidades).
+Som em headless: intercetar `speechSynthesis.speak` e `AudioContext.createOscillator/createBufferSource` com `addInitScript`
+e gravar num `dataset` do DOM — prova que o jogo fala/toca, mas o Telmo é quem confirma volume e voz a ouvir.

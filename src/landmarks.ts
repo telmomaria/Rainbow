@@ -5,13 +5,14 @@ import { tone } from './audio';
 import { FIREWORK_COLORS, Fireworks } from './fireworks';
 import type { GameCtx } from './gamectx';
 import { buildMoscovo } from './landmarks-moscovo';
+import { buildRio } from './landmarks-rio';
 import { gemMesh, mat, openSpot } from './places';
 import { inNoSpawn } from './spawn';
-import { onRoad, ROADS, type Interactable, type Obstacle, type World } from './world';
+import { onRoad, ROADS, SPAWN, type Interactable, type Obstacle, type World } from './world';
 
 /**
  * Fase 5 — ex-líbris por cidade (I81–I90 style): landmark diamonds (never spent — for the Moon).
- * Cities with builders: Porto, Roma, Londres, Paris, Varsóvia (six), Pequim, Tóquio, Rio de Janeiro, Moscovo (landmarks-moscovo.ts).
+ * Cities with builders: Porto, Roma, Londres, Paris, Varsóvia (six), Pequim, Tóquio, Rio de Janeiro (landmarks-rio.ts), Moscovo (landmarks-moscovo.ts).
  * No landmark (empty builders — no fake obelisk): Madrid, Vilnius, Cidade do México, Reiquiavique, Nuuk.
  * EUA / Lua: handled elsewhere (usa.ts / none). Missing BY_CITY keys return [] (no default monument).
  *
@@ -170,7 +171,8 @@ function takeSpot(
 }
 
 /** Soft aerial / lookout camera (main.ts listens for `rainbow-aerial`). Cleared on descend / city change. */
-type VistaCam = { x: number; z: number; h: number; fromX?: number; fromZ?: number; lookY?: number };
+/** `turn` = drag / ←→ turn the shot (tower tops; main.ts). */
+type VistaCam = { x: number; z: number; h: number; fromX?: number; fromZ?: number; lookY?: number; turn?: boolean };
 function setVista(vista: VistaCam | null): void {
   window.dispatchEvent(new CustomEvent('rainbow-aerial', { detail: vista }));
 }
@@ -184,7 +186,7 @@ function setVista(vista: VistaCam | null): void {
  *  "stray height → back to the ground" safety net must not pull her off the other one's landing. */
 let activeClimb: object | null = null;
 
-function towerClimb(opts: {
+export function towerClimb(opts: {
   ctx: GameCtx;
   object: THREE.Object3D;
   foot: THREE.Vector3;
@@ -213,6 +215,7 @@ function towerClimb(opts: {
   let t = 0;
   let topT = 0;
   let gemHint = false;
+  let stepArmed = false; // on the landing: she stood still since arriving / taking the jewel
   const STEP_T = 0.32; // one tread — slow enough to see the legs swing
   const WALK = opts.walkSpeed ?? 3.2;
   const gemTaken = () => (gemKey ? ctx.flag(gemKey) > 0 : true);
@@ -257,6 +260,16 @@ function towerClimb(opts: {
 
   if (gem && gemKey && gemTaken()) gem.visible = false;
 
+  const startDown = () => {
+    phase = 'down';
+    t = 0;
+    if (opts.vista) setVista(null);
+    prox.set(foot.x, 0, foot.z);
+    ctx.hold(true);
+    ctx.walkAnim(WALK, downPath[1]?.x ?? foot.x, downPath[1]?.z ?? foot.z);
+    tone(392, 0, 0.1, 'triangle', 0.04);
+  };
+
   // proximity point moves with her: foot on the ground, terrace while she's up (or Enter/click can't reach her)
   const prox = (opts.interactAt ?? foot).clone();
 
@@ -280,13 +293,7 @@ function towerClimb(opts: {
       }
       // on the landing: first tap takes the jewel; next tap walks down
       if (!gemTaken() && takeGem()) return true;
-      phase = 'down';
-      t = 0;
-      if (opts.vista) setVista(null);
-      prox.set(foot.x, 0, foot.z);
-      ctx.hold(true);
-      ctx.walkAnim(WALK, downPath[1]?.x ?? foot.x, downPath[1]?.z ?? foot.z);
-      tone(392, 0, 0.1, 'triangle', 0.04);
+      startDown();
       return true;
     },
     update(dt) {
@@ -314,6 +321,22 @@ function towerClimb(opts: {
       }
       if (phase === 'top') {
         prox.set(top.x, 0, top.z);
+        // she tried to walk off the landing (↑/↓, or a tap on the ground below): first the jewel beside her,
+        // then down the stairs (Telmo, 2026-11-21: "sem descer"). ←/→ only turn her/the view — no step.
+        // A step counts once she has stood still for a frame since arriving / taking the jewel (so a key still held
+        // doesn't do both at once), or after 1.2 s of trying (a tap on the ground keeps her "walking").
+        const moved = Math.hypot(ctx.player.x - top.x, ctx.player.z - top.z) > 0.02;
+        if (!moved) stepArmed = true;
+        else if ((stepArmed || topT > 1.2) && !ctx.isPaused()) {
+          ctx.player.set(top.x, top.y, top.z);
+          stepArmed = false;
+          if (!gemTaken() && takeGem()) {
+            topT = 0;
+            return;
+          }
+          startDown();
+          return;
+        }
         ctx.player.set(top.x, top.y, top.z);
         ctx.walkAnim(0);
         topT += dt;
@@ -330,6 +353,7 @@ function towerClimb(opts: {
       if (t < dur) return;
       if (phase === 'up') {
         phase = 'top';
+        stepArmed = false;
         topT = 0;
         gemHint = false;
         prox.set(top.x, 0, top.z);
@@ -337,7 +361,7 @@ function towerClimb(opts: {
         ctx.walkAnim(0);
         ctx.hold(false);
         // vista first so sayTop is honest («vista» only when the camera shows the city)
-        if (opts.vista) setVista(opts.vista);
+        if (opts.vista) setVista({ ...opts.vista, turn: true });
         ctx.say(opts.sayTop);
         tone(660, 0, 0.14, 'triangle', 0.055);
         tone(880, 0.12, 0.16, 'triangle', 0.04);
@@ -363,8 +387,50 @@ function towerClimb(opts: {
 
 type Builder = (scene: THREE.Scene, obstacles: Obstacle[], rng: () => number, ctx: GameCtx, world: World) => Interactable[];
 
-/** Soft preference for Porto Clérigos — far SW corner, off SPAWN / airport / roadside venues. */
-const PORTO_CLERIGOS = { x: -110, z: -115 } as const;
+/**
+ * Porto Clérigos — near the city centre (Telmo, 2026-11-22: from the old far-SW corner the top showed the
+ * edge of the ground). Fallback preference only; pickClerigosSpot() chooses the real plot.
+ */
+const PORTO_CLERIGOS = { x: -32, z: -19 } as const;
+
+/**
+ * Plot ≤ 55 m from the centre for the Clérigos (closest first, a street nearby), stair side facing that street
+ * (f = 1: plot south of the street, stairs on +Z; f = −1: plot north of it, tower turned 180°).
+ * Placeholder buildings don't count (claimSpot clears them); every real thing (venues, shops, props,
+ * lamps…) does. Kept ≥ 24 m from SPAWN so it never covers the start.
+ */
+function pickClerigosSpot(
+  world: World,
+  obstacles: Obstacle[],
+  hw: number,
+  hd: number,
+): { x: number; z: number; f: 1 | -1 } | null {
+  const solid = obstacles.filter((o) => !world.buildings.has(o));
+  const cands: { x: number; z: number; f: 1 | -1; score: number }[] = [];
+  for (let x = -54; x <= 54; x += 2) {
+    for (let z = -54; z <= 54; z += 1.5) {
+      const d = Math.hypot(x, z);
+      if (d > 55) continue;
+      if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 24) continue;
+      // the nearest street along X: the stairs (+Z when f = 1) turn towards it
+      let best = Infinity;
+      let f: 1 | -1 = 1;
+      for (const rz of ROADS.zs) {
+        const gap = Math.abs(rz - z) - hd - ROADS.width / 2; // free strip between footprint and road edge
+        if (gap < 0) continue;
+        if (gap < best) {
+          best = gap;
+          f = rz > z ? 1 : -1;
+        }
+      }
+      if (best > 30) continue;
+      cands.push({ x, z, f, score: d + best * 0.8 });
+    }
+  }
+  cands.sort((a, b) => a.score - b.score);
+  for (const c of cands) if (footprintFree(solid, c, hw, hd)) return { x: c.x, z: c.z, f: c.f };
+  return null;
+}
 
 const BY_CITY: Record<string, Builder> = {
   /**
@@ -373,9 +439,13 @@ const BY_CITY: Record<string, Builder> = {
    */
   Porto(scene, obstacles, rng, ctx, world) {
     // footprint hugs the tower (stairs wrap close); margin ≥4 m via takeSpot/clearArea
-    const at = takeSpot(world, obstacles, rng, 7, 8, PORTO_CLERIGOS, 30);
+    const near = pickClerigosSpot(world, obstacles, 7, 8);
+    const at = near ?? { ...resolveSpot(obstacles, rng, 7, 8, PORTO_CLERIGOS), f: 1 as const };
+    claimSpot(world, at, 7, 8, 30);
+    const f = at.f; // 1 = stairs on +Z; −1 = tower turned 180° (stairs on −Z)
     const g = new THREE.Group();
     g.position.set(at.x, 0, at.z);
+    g.rotation.y = f === 1 ? 0 : Math.PI;
     scene.add(g);
 
     const granite = mat(0xd8d4cc); // light Porto granite
@@ -521,9 +591,9 @@ const BY_CITY: Record<string, Builder> = {
       riser.position.set(sx * 0.92, y - balconyY / stairN / 2, tz + Math.sin(a) * stairR * 0.92);
       riser.rotation.y = -a + Math.PI / 2;
       g.add(riser);
-      climbSteps.push(new THREE.Vector3(at.x + sx, y + 0.16, at.z + sz));
+      climbSteps.push(new THREE.Vector3(at.x + f * sx, y + 0.16, at.z + f * sz));
     }
-    climbSteps.push(new THREE.Vector3(at.x, balconyY + 0.2, at.z + tz + 1.5));
+    climbSteps.push(new THREE.Vector3(at.x, balconyY + 0.2, at.z + f * (tz + 1.5)));
 
     const gem = gemMesh(0x3bc9ff, 1.5);
     gem.position.set(0, balconyY + 0.9, tz);
@@ -531,15 +601,15 @@ const BY_CITY: Record<string, Builder> = {
 
     const footA = Math.PI / 2;
     const foot = new THREE.Vector3(
-      at.x + Math.cos(footA) * (stairR + 0.9),
+      at.x + f * Math.cos(footA) * (stairR + 0.9),
       0,
-      at.z + tz + Math.sin(footA) * (stairR + 0.9),
+      at.z + f * (tz + Math.sin(footA) * (stairR + 0.9)),
     );
-    const lookout = new THREE.Vector3(at.x, balconyY + 0.2, at.z + tz);
+    const lookout = new THREE.Vector3(at.x, balconyY + 0.2, at.z + f * tz);
     // the view FROM the top (Telmo, 2026-11-21: the old aerial looked down with the tower itself in the picture):
     // camera just above the balcony, on the side facing the city centre, looking out over the rooftops
     const tx = at.x;
-    const tzW = at.z + tz;
+    const tzW = at.z + f * tz;
     const toC = Math.hypot(tx, tzW) > 1 ? new THREE.Vector2(-tx, -tzW).normalize() : new THREE.Vector2(0, 1);
     const vista: VistaCam = {
       fromX: tx + toC.x * 1.6,
@@ -550,7 +620,7 @@ const BY_CITY: Record<string, Builder> = {
       lookY: 2,
     };
 
-    landmarkDebug = { spots: { clerigos: at }, prefs: { clerigos: { ...PORTO_CLERIGOS } }, count: 1, foot: { x: foot.x, z: foot.z } };
+    landmarkDebug = { spots: { clerigos: { x: at.x, z: at.z } }, facing: f, prefs: { clerigos: { ...PORTO_CLERIGOS } }, count: 1, foot: { x: foot.x, z: foot.z } };
 
     return [
       towerClimb({
@@ -2588,409 +2658,16 @@ const BY_CITY: Record<string, Builder> = {
     return things;
   },
 
-  /**
-   * Rio — Pão de Açúcar: two rounded granite peaks (Urca + taller Sugarloaf), stations, cable cars,
-   * plaza at the base. Pay 2 coins to ride the teleférico between stations (~6 s).
-   */
+  /** Pão de Açúcar + bondinho + Cristo Redentor no Corcovado — src/landmarks-rio.ts. */
   'Rio de Janeiro'(scene, obstacles, rng, ctx, world) {
-    const HW = 14;
-    const HD = 9;
-    const at = takeSpot(world, obstacles, rng, HW, HD, null, 12);
-    lastPlaceSpot = { x: at.x, z: at.z };
-
-    const g = new THREE.Group();
-    g.position.set(at.x, 0, at.z);
-    g.userData.landmark = 'pao';
-    scene.add(g);
-
-    const granite = mat(0x868e96);
-    const graniteDeep = mat(0x495057);
-    const graniteLite = mat(0xadb5bd);
-    const cream = mat(0xfff3bf);
-    const yellow = mat(0xffd43b);
-    const red = mat(0xe03131);
-    const steel = mat(0x343a40);
-    const glass = mat(0x1c7ed6);
-    const plazaMat = mat(0xe9ecef);
-
-    // —— two granite peaks: smooth loaf mounds (Urca lower + taller Sugarloaf) ——
-    const addLoaf = (x: number, z: number, rx: number, h: number, rz: number, col: THREE.Material) => {
-      // one elongated sphere = rounded granite (no snowman tiers)
-      const body = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 14), col);
-      body.scale.set(rx, h * 0.52, rz);
-      body.position.set(x, h * 0.48, z);
-      body.castShadow = true;
-      body.receiveShadow = true;
-      g.add(body);
-      // wider skirt buried in grass
-      const skirt = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), graniteDeep);
-      skirt.scale.set(rx * 1.22, h * 0.2, rz * 1.15);
-      skirt.position.set(x, h * 0.1, z);
-      skirt.receiveShadow = true;
-      g.add(skirt);
-      // soft rounded top
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), graniteLite);
-      cap.scale.set(rx * 0.55, h * 0.14, rz * 0.5);
-      cap.position.set(x, h * 0.92, z);
-      cap.castShadow = true;
-      g.add(cap);
-    };
-    addLoaf(-5.5, -1.2, 3.8, 7.0, 3.2, granite); // Urca
-    addLoaf(6.5, -0.8, 4.0, 12.2, 3.4, graniteDeep); // Pão de Açúcar
-
-    // light rocky ledges (sparse — silhouette, not clutter)
-    for (const [lx, ly, lz, sx, sy, sz] of [
-      [4.2, 4.8, -2.0, 1.3, 0.9, 1.1],
-      [8.8, 4.2, 0.5, 1.1, 0.8, 1.0],
-      [-3.6, 2.8, -2.4, 1.0, 0.7, 0.9],
-    ] as const) {
-      const knob = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), granite);
-      knob.scale.set(sx, sy, sz);
-      knob.position.set(lx, ly, lz);
-      knob.castShadow = true;
-      g.add(knob);
-    }
-
-    // —— plaza + ground station (approachable) ——
-    const plaza = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.18, 5.5), plazaMat);
-    plaza.position.set(-8.5, 0.09, 4.2);
-    plaza.receiveShadow = true;
-    g.add(plaza);
-    // station booth
-    boxish(g, cream, 3.2, 2.2, 2.4, -9.2, 1.2, 3.6);
-    boxish(g, red, 3.4, 0.25, 2.6, -9.2, 2.4, 3.6);
-    boxish(g, yellow, 1.4, 1.0, 0.08, -9.2, 1.35, 4.82); // ticket window face
-    // pylons at ground station
-    for (const sx of [-1.4, 1.4] as const) {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 4.2, 8), steel);
-      pole.position.set(-9.2 + sx, 2.1, 2.2);
-      g.add(pole);
-    }
-    const groundBeam = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.18, 0.18), steel);
-    groundBeam.position.set(-9.2, 4.15, 2.2);
-    g.add(groundBeam);
-
-    // Urca mid station (small platform on lower peak)
-    const urcaY = 5.9;
-    boxish(g, cream, 2.6, 0.22, 2.2, -5.5, urcaY, -1.2);
-    boxish(g, red, 2.8, 0.12, 2.4, -5.5, urcaY + 1.35, -1.2);
-    for (const sx of [-1.0, 1.0] as const) {
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.4, 6), steel);
-      leg.position.set(-5.5 + sx, urcaY + 0.7, -1.2);
-      g.add(leg);
-    }
-
-    // Sugarloaf summit station + deck
-    const summitY = 11.35;
-    boxish(g, cream, 3.4, 0.25, 2.8, 6.5, summitY, -0.8);
-    boxish(g, red, 3.6, 0.14, 3.0, 6.5, summitY + 1.55, -0.8);
-    for (const sx of [-1.2, 1.2] as const) {
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 1.6, 6), steel);
-      leg.position.set(6.5 + sx, summitY + 0.85, -0.8);
-      g.add(leg);
-    }
-    // rail around summit deck
-    for (const [rx, rz, sx, sz] of [
-      [6.5, 0.55, 3.2, 0.1],
-      [6.5, -2.15, 3.2, 0.1],
-      [4.95, -0.8, 0.1, 2.6],
-      [8.05, -0.8, 0.1, 2.6],
-    ] as const) {
-      boxish(g, steel, sx, 0.45, sz, rx, summitY + 0.45, rz);
-    }
-
-    // —— cable (two parallel wires, slight sag) from ground → Urca → summit ——
-    const cablePts = [
-      new THREE.Vector3(-9.2, 4.2, 2.2),
-      new THREE.Vector3(-5.5, urcaY + 1.5, -1.2),
-      new THREE.Vector3(6.5, summitY + 1.7, -0.8),
-    ];
-    const addCableRun = (zOff: number) => {
-      for (let i = 0; i < cablePts.length - 1; i++) {
-        const a = cablePts[i].clone();
-        const b = cablePts[i + 1].clone();
-        a.z += zOff;
-        b.z += zOff;
-        const mid = a.clone().add(b).multiplyScalar(0.5);
-        mid.y -= 0.35; // soft sag
-        const segs = [a, mid, b];
-        for (let s = 0; s < segs.length - 1; s++) {
-          const p0 = segs[s];
-          const p1 = segs[s + 1];
-          const len = p0.distanceTo(p1);
-          const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, len, 5), steel);
-          cyl.position.copy(p0).add(p1).multiplyScalar(0.5);
-          cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p1.clone().sub(p0).normalize());
-          g.add(cyl);
-        }
-      }
-    };
-    addCableRun(-0.28);
-    addCableRun(0.28);
-
-    /** Cabin that looks like a bondinho (hang + windows + frame — not a floating yellow box). */
-    const makeCabin = (): THREE.Group => {
-      const c = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(1.65, 1.2, 1.1), yellow);
-      body.position.y = -0.7;
-      body.castShadow = true;
-      c.add(body);
-      // corner posts
-      for (const sx of [-0.78, 0.78] as const) {
-        for (const sz of [-0.52, 0.52] as const) {
-          const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.25, 0.08), red);
-          post.position.set(sx, -0.7, sz);
-          c.add(post);
-        }
-      }
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.14, 1.25), red);
-      roof.position.y = -0.02;
-      c.add(roof);
-      const floor = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.1, 1.15), cream);
-      floor.position.y = -1.32;
-      c.add(floor);
-      for (const side of [-1, 1] as const) {
-        const win = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.5, 0.05), glass);
-        win.position.set(side * 0.38, -0.55, 0.56);
-        c.add(win);
-        const winB = win.clone();
-        winB.position.z = -0.56;
-        c.add(winB);
-      }
-      // end windows
-      for (const sx of [-0.84, 0.84] as const) {
-        const end = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.45, 0.5), glass);
-        end.position.set(sx, -0.55, 0);
-        c.add(end);
-      }
-      const hang = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), steel);
-      hang.position.y = 0.35;
-      c.add(hang);
-      const clamp = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.22), steel);
-      clamp.position.y = 0.68;
-      c.add(clamp);
-      return c;
-    };
-
-    // ride path: ground station → summit (Urca is a visual waypoint on the cable)
-    const pathA = new THREE.Vector3(-9.2, 3.55, 2.2); // cabin hang point at ground
-    const pathB = new THREE.Vector3(6.5, summitY + 0.95, -0.8);
-    /** Feet / seat height inside cabin (group origin = hang clamp above the roof). */
-    const CABIN_SEAT = 1.45;
-    const cabinAlong = (u: number, out: THREE.Vector3) => {
-      const t = THREE.MathUtils.clamp(u, 0, 1);
-      // slight arc via Urca mid-height
-      const mid = new THREE.Vector3(-5.5, urcaY + 0.9, -1.2);
-      const omt = 1 - t;
-      out.set(
-        omt * omt * pathA.x + 2 * omt * t * mid.x + t * t * pathB.x,
-        omt * omt * pathA.y + 2 * omt * t * mid.y + t * t * pathB.y,
-        omt * omt * pathA.z + 2 * omt * t * mid.z + t * t * pathB.z,
-      );
-    };
-
-    const cabin = makeCabin();
-    cabin.position.copy(pathA);
-    g.add(cabin);
-    // decorative second cabin parked near Urca (not rideable alone — same line feel)
-    const cabin2 = makeCabin();
-    cabinAlong(0.42, cabin2.position);
-    cabin2.scale.setScalar(0.92);
-    g.add(cabin2);
-
-    // optional street musicians near plaza (sparse)
-    for (let i = 0; i < 2; i++) {
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 1.05, 10), mat(i === 0 ? 0xe03131 : 0x1971c2));
-      m.position.set(-6.2 + i * 1.1, 0.52, 5.6);
-      g.add(m);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), mat(0xffe0c2));
-      head.position.set(m.position.x, 1.25, m.position.z);
-      g.add(head);
-    }
-
-    // gem on summit deck
-    const gem = gemMesh(0xff3b7f, 1.3);
-    gem.position.set(6.5, summitY + 0.9, -0.8);
-    g.add(gem);
-
-    // collision: rocks + station footprint (plaza front kept open)
-    obstacles.push({
-      minX: at.x - 12,
-      maxX: at.x + 11,
-      minZ: at.z - 5.5,
-      maxZ: at.z + 1.5,
-      height: 4,
+    return buildRio(scene, obstacles, rng, ctx, world, {
+      diamondAt,
+      setDebug: (d) => (landmarkDebug = d),
+      setRideDispose: (fn) => {
+        clearLandmarkRide();
+        landmarkRideDispose = fn;
+      },
     });
-
-    // walkable platforms: ground plaza edge + summit deck
-    const h0 = world.heightAt;
-    world.heightAt = (x, z) => {
-      const lx = x - at.x;
-      const lz = z - at.z;
-      // summit deck
-      if (Math.abs(lx - 6.5) < 1.7 && Math.abs(lz + 0.8) < 1.4) return summitY + 0.2;
-      // Urca platform
-      if (Math.abs(lx + 5.5) < 1.3 && Math.abs(lz + 1.2) < 1.1) return urcaY + 0.15;
-      return h0?.(x, z) ?? 0;
-    };
-
-    const groundW = new THREE.Vector3(at.x - 9.2, 0, at.z + 4.5);
-    const summitW = new THREE.Vector3(at.x + 6.5, summitY + 0.2, at.z - 0.8);
-    const PRICE = 2;
-    const RIDE_DUR = 6.2;
-    let busy = false;
-    let rideT = 0;
-    let fromU = 0; // 0 = ground, 1 = summit
-    let toU = 1;
-    let cabinU = 0;
-    let shakeT = 0;
-    const cabinPos = new THREE.Vector3();
-    const prox = groundW.clone();
-
-    const placeCabin = (u: number) => {
-      cabinAlong(u, cabinPos);
-      cabin.position.copy(cabinPos);
-      // face along travel direction
-      const look = new THREE.Vector3();
-      cabinAlong(Math.min(1, u + 0.02), look);
-      const dx = look.x - cabinPos.x;
-      const dz = look.z - cabinPos.z;
-      if (dx * dx + dz * dz > 1e-6) cabin.rotation.y = Math.atan2(dx, dz);
-    };
-    placeCabin(0);
-
-    const endRide = (atTop: boolean) => {
-      busy = false;
-      rideT = 0;
-      cabinU = atTop ? 1 : 0;
-      placeCabin(cabinU);
-      ctx.walkAnim(0);
-      if (atTop) {
-        ctx.player.set(summitW.x, summitW.y, summitW.z);
-        prox.copy(summitW).setY(0);
-      } else {
-        ctx.player.set(groundW.x, 0, groundW.z);
-        prox.copy(groundW);
-      }
-      ctx.hold(false);
-      ctx.say(atTop ? ['Chegámos ao cimo!'] : ['De volta à estação!']);
-      tone(660, 0, 0.12, 'triangle', 0.05);
-      tone(880, 0.1, 0.14, 'triangle', 0.04);
-    };
-
-    const disposeRide = () => {
-      if (busy) {
-        busy = false;
-        ctx.hold(false);
-        ctx.walkAnim(0);
-        ctx.player.set(groundW.x, 0, groundW.z);
-      }
-    };
-    clearLandmarkRide();
-    landmarkRideDispose = disposeRide;
-
-    landmarkDebug = {
-      spots: {
-        main: { x: at.x, z: at.z },
-        pao: { x: at.x, z: at.z },
-        station: { x: groundW.x, z: groundW.z },
-        summit: { x: summitW.x, z: summitW.z },
-      },
-      count: 1,
-      price: PRICE,
-    };
-
-    const things: Interactable[] = [
-      diamondAt(ctx, `gem:${ctx.city()}:pao`, new THREE.Vector3(summitW.x, 0, summitW.z), gem),
-      {
-        object: g,
-        position: prox,
-        radius: 4.5,
-        requiresClick: true,
-        interact() {
-          if (ctx.isDriving() || ctx.isPaused()) return false;
-          if (busy) return false;
-          // which station is she nearer?
-          const dG = Math.hypot(ctx.player.x - groundW.x, ctx.player.z - groundW.z);
-          const dS = Math.hypot(ctx.player.x - summitW.x, ctx.player.z - summitW.z);
-          const goingUp = dG <= dS;
-          if (ctx.coins() < PRICE) {
-            shakeT = 0.9;
-            tone(150, 0, 0.3, 'sine', 0.1);
-            tone(130, 0.32, 0.4, 'sine', 0.1);
-            ctx.say([`Precisas de ${PRICE} moedas!`]);
-            return false;
-          }
-          ctx.addCoins(-PRICE);
-          tone(1047, 0, 0.08, 'square', 0.045);
-          tone(1568, 0.08, 0.1, 'triangle', 0.05);
-          busy = true;
-          rideT = 0;
-          fromU = goingUp ? 0 : 1;
-          toU = goingUp ? 1 : 0;
-          cabinU = fromU;
-          placeCabin(cabinU);
-          ctx.hold(true);
-          ctx.say(goingUp ? ['Teleférico! Vamos ao cimo!'] : ['Teleférico! Vamos a descer!']);
-          // seat her inside the cabin (hang origin is above the roof)
-          cabinAlong(cabinU, cabinPos);
-          ctx.player.set(at.x + cabinPos.x, cabinPos.y - CABIN_SEAT, at.z + cabinPos.z);
-          return true;
-        },
-        update(dt) {
-          if (shakeT > 0) {
-            shakeT = Math.max(0, shakeT - dt);
-            cabin.rotation.z = Math.sin(shakeT * 28) * 0.12 * (shakeT / 0.9);
-          } else {
-            cabin.rotation.z = 0;
-          }
-          // idle gem spin
-          if (gem.visible) {
-            gem.rotation.y += dt * 1.6;
-            const matl = (gem as THREE.Mesh).material as THREE.MeshStandardMaterial;
-            if (matl?.emissiveIntensity !== undefined) {
-              matl.emissiveIntensity = 0.45 + Math.sin(performance.now() * 0.008) * 0.3;
-            }
-          }
-          // keep interact point at the station she's near / cabin side
-          if (!busy) {
-            const dG = Math.hypot(ctx.player.x - groundW.x, ctx.player.z - groundW.z);
-            const dS = Math.hypot(ctx.player.x - summitW.x, ctx.player.z - summitW.z);
-            if (dS < dG && dS < 8) prox.set(summitW.x, 0, summitW.z);
-            else prox.copy(groundW);
-            // soft park cabin at the nearer end
-            const want = cabinU > 0.5 ? 1 : 0;
-            cabinU = THREE.MathUtils.lerp(cabinU, want, Math.min(1, dt * 2));
-            placeCabin(cabinU);
-            return;
-          }
-          rideT += dt;
-          const k = Math.min(1, rideT / RIDE_DUR);
-          // ease in-out
-          const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-          cabinU = THREE.MathUtils.lerp(fromU, toU, e);
-          placeCabin(cabinU);
-          ctx.player.set(at.x + cabinPos.x, cabinPos.y - CABIN_SEAT, at.z + cabinPos.z);
-          // face travel
-          const ahead = new THREE.Vector3();
-          cabinAlong(Math.min(1, cabinU + (toU > fromU ? 0.03 : -0.03)), ahead);
-          ctx.walkAnim(0, at.x + ahead.x, at.z + ahead.z);
-          if (k >= 1) endRide(toU >= 0.5);
-        },
-      },
-      {
-        object: g,
-        position: new THREE.Vector3(at.x - 6.2, 0, at.z + 5.6),
-        radius: 2.4,
-        interact() {
-          [262, 294, 330, 349, 392].forEach((f, i) => tone(f, i * 0.18, 0.2, 'triangle', 0.05));
-          ctx.say(['Samba! Dança com os músicos!']);
-        },
-      },
-    ];
-    // expose dispose on the ride interactable for city teardown
-    (things[1] as Interactable & { dispose?: () => void }).dispose = disposeRide;
-    return things;
   },
 
   Tóquio(scene, obstacles, rng, ctx) {

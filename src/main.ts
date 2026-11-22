@@ -16,7 +16,7 @@ import { Launch } from './launch';
 import { Spaceport } from './spaceport';
 import { UsaLandmarks } from './usa';
 import { LANDER, createMoonWorld, inDeepCrater, moonHeight, seedMoonLoot } from './moon';
-import { Comets, DizzyStars, LanderFood, TimeMachine } from './moonplay';
+import { Comets, DizzyStars, HopDust, LanderFood, TimeMachine } from './moonplay';
 import { ENERGY_MAX } from './life';
 import { Car } from './car';
 import { createScooter, noScooter, type Scooter } from './scooter';
@@ -53,17 +53,35 @@ import { createServices, type ServiceTown } from './services';
 import { createLandmarks, landmarksDebug } from './landmarks';
 import { setCityLampClearer } from './places';
 import { Aurora } from './aurora';
+import { SnowPlay } from './snowplay';
 
 const WALK_SPEED = 6.5; // m/s
+/** On the Moon she walks slower, in big slow hops (Telmo 2026-11-21); martians chase at 2.6 (monsters.ts). */
+const MOON_WALK_SPEED = 3.5; // m/s
+/** No energy in a city: a touch faster than the creatures (CHASE_SPEED 4.6) so she can still get away (Telmo, 2026-11-22). */
+const TIRED_WALK_SPEED = 4.7; // m/s
+/** No energy on the Moon: a touch faster than the martians (MARTIAN_CHASE_SPEED 2.6) — Telmo, 2026-11-22. */
+const TIRED_MOON_SPEED = 2.7; // m/s
+const MOON_HOP_S = 1.0; // one hop (= one step) lasts this long
+const MOON_HOP_H = 1.0; // m, top of each hop
 const TURN_SPEED = 2.6; // rad/s (arrow keys)
 const ARRIVE_DIST = 0.6;
 /** `?debug` exposes state on <body data-debug> and accepts teleports, for automated browser checks. */
 const DEBUG = new URLSearchParams(location.search).has('debug');
 /** Soft aerial camera (tower lookouts + debug). null = normal third-person.
  *  Optional `fromX`/`fromZ`/`lookY` = put the camera at (fromX,h,fromZ) looking at (x,lookY,z). */
-let aerial: { x: number; z: number; h: number; fromX?: number; fromZ?: number; lookY?: number } | null = null;
+type AerialCam = { x: number; z: number; h: number; fromX?: number; fromZ?: number; lookY?: number; turn?: boolean };
+let aerial: AerialCam | null = null;
+/** `turn` lookouts (tower tops): drag / ←→ turn the shot. camYaw when the shot started (NaN = not started yet). */
+let aerialYaw0 = NaN;
+/** camYaw before a `turn` lookout took over: given back when it ends (walking down looks as it did walking up). */
+let yawBeforeAerial = NaN;
 window.addEventListener('rainbow-aerial', (e) => {
-  aerial = (e as CustomEvent<null | { x: number; z: number; h: number; fromX?: number; fromZ?: number; lookY?: number }>).detail;
+  const was = aerial;
+  aerial = (e as CustomEvent<AerialCam | null>).detail;
+  if (was?.turn && !Number.isNaN(aerialYaw0) && !Number.isNaN(yawBeforeAerial)) camYaw = yawBeforeAerial;
+  aerialYaw0 = NaN;
+  yawBeforeAerial = NaN;
 });
 if (DEBUG) {
   window.addEventListener('rainbow-teleport', (e) => {
@@ -154,6 +172,7 @@ if (save.wear.neck === 'srv-colar-sapato') {
 }
 if (save.wear.face === SUNGLASSES_KIND) save.bag[SUNGLASSES_KIND] = 1;
 player.setWear(save.wear);
+player.setSpacesuit(city.kind === 'moon'); // the spacesuit is worn the whole time on the Moon (also after a reload)
 scene.add(player.root);
 const input = new Input(canvas);
 canvas.focus();
@@ -179,8 +198,12 @@ let airport: Airport =
 let spaceport: Spaceport | null = null;
 let usaLandmarks: UsaLandmarks | null = null;
 let aurora: Aurora | null = null; // northern lights — Reiquiavique only (aurora.ts)
+let snowPlay: SnowPlay | null = null; // snow field with children — Nuuk only (snowplay.ts)
 /** Moon level: time machine (the end), food capsule at the lander, comets (moonplay.ts). */
-let moonPlay: { machine: TimeMachine; food: LanderFood; comets: Comets; dizzy: DizzyStars } | null = null;
+let moonPlay: { machine: TimeMachine; food: LanderFood; comets: Comets; dizzy: DizzyStars; dust: HopDust } | null = null;
+/** Progress 0..1 through her current Moon hop (−1 = feet on the ground) and the camera's smoothed height. */
+let hopU = -1;
+let camHopY: number | null = null;
 /** Seconds she still lies dizzy after a comet hit (Moon only; also kept in the save as flag moon:down). */
 let knocked = 0;
 let catTree: CatTree; // assigned by addCityExtras()
@@ -242,6 +265,7 @@ const gameCtx: GameCtx = {
     refreshBag();
   },
   carried: () => carriedKind,
+  stowCarried: () => holdItem(null),
   isDriving: () => !!driving || !!scooting || onBus(),
   isPaused: () => paused,
   give(kind) {
@@ -453,7 +477,7 @@ function spawnActors(): void {
     // LUA2/LUA4: no question characters or street cat — only coins and martians
     collectibles.heightAt = moonHeight;
     collectibles.floatAmp = 0.35; // LUA5: coins float a little more
-    seedMoonLoot(collectibles); // crater rims, hilltops, path to the altar
+    seedMoonLoot(collectibles, world.obstacles); // crater rims, hilltops, path to the altar
     npcs = { list: [], update: () => null, dismiss() {} } as unknown as Npcs;
     monsters = new Monsters(scene, world.obstacles, { martian: true, heightAt: moonHeight, blocked: inDeepCrater });
     monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
@@ -498,8 +522,11 @@ function quietPool(): Pool {
     nextStroke() {},
   } as unknown as Pool;
 }
-const quietTrouble = (): Trouble =>
-  ({ update() {}, positions: () => [], sites: () => [], clearance: null }) as unknown as Trouble;
+// a function declaration (hoisted): addCityExtras() runs at boot above this line, and on a Moon boot it needs this
+// (a `const` here crashed "Continuar" on the Moon: "Cannot access 'quietTrouble' before initialization")
+function quietTrouble(): Trouble {
+  return { update() {}, positions: () => [], sites: () => [], clearance: null } as unknown as Trouble;
+}
 
 /** Hand-made interactive situations in every city: a car to drive and someone to give a coin to. */
 function addCityExtras(): Car {
@@ -520,6 +547,8 @@ function addCityExtras(): Car {
   postman = noPostman();
   livingStatue.dispose();
   livingStatue = noLivingStatue();
+  snowPlay?.dispose();
+  snowPlay = null;
   // --- aurora boreal (Reiquiavique only; disposed on every city change)
   aurora?.dispose();
   aurora =
@@ -558,7 +587,7 @@ function addCityExtras(): Car {
     });
     const food = new LanderFood(scene, gameCtx, () => save.energy >= ENERGY_MAX);
     const comets = new Comets(scene, gameCtx, knockDown);
-    moonPlay = { machine, food, comets, dizzy: new DizzyStars(scene) };
+    moonPlay = { machine, food, comets, dizzy: new DizzyStars(scene), dust: new HopDust(scene) };
     world.interactables.push(...machine.things, ...food.things);
     // a comet hit survives a reload (she keeps lying for what is left of the minute)
     const downLeft = gameCtx.flag('moon:down') - Date.now() / 1000;
@@ -688,6 +717,11 @@ function addCityExtras(): Car {
     world.obstacles.push(houseBlock);
     clearLamps(houseBlock, world.obstacles);
   }
+  // Nuuk: snow field (snowmen, ice holes, children throwing snowballs) instead of the fair
+  if (city.name === 'Nuuk') {
+    snowPlay = SnowPlay.create(scene, world.obstacles, mulberry32(city.seed * 71 + 23), gameCtx, player, world);
+    if (snowPlay) world.interactables.push(...snowPlay.things);
+  }
   // bus stops along the bus lines — after venues so they keep clear of stadium / fair / pool walls
   const busStops = createBusStops(scene, world.obstacles, mulberry32(city.seed * 67 + 19));
   const c = new Car(scene, world.obstacles, new THREE.Vector3(-16, 0, 7), Math.PI / 2, city.buildings[0], () => enterCar());
@@ -760,6 +794,7 @@ function addCityExtras(): Car {
     pool.interior && padZone(pool.interior),
     house.interior && padZone(house.interior, 4),
     fair.interior && padZone(fair.interior),
+    snowPlay?.zone ?? null,
     trouble.clearance,
     ...(services?.zones() ?? []), // walk-in try-on shops (tryon.ts)
   ].filter((z): z is Obstacle => !!z);
@@ -815,6 +850,7 @@ function loadCity(): void {
   aerial = null; // clear tower lookout camera if she left mid-climb
   scene.clear();
   city = cityAt(save.level);
+  player.setSpacesuit(city.kind === 'moon'); // on for the Moon, back to her clothes anywhere else (Novo jogo, ⚙ Cidade)
   world = city.kind === 'moon' ? createMoonWorld(scene, city) : createWorld(scene, city);
   scene.add(player.root, marker);
   player.position.set(SPAWN.x, 0, SPAWN.z);
@@ -914,9 +950,11 @@ createHomeButton(() => {
     leavePool();
     // LUA2: on the Moon, Casa brings her back to the lander
     if (city.kind === 'moon') {
-      player.position.set(LANDER.x, moonHeight(LANDER.x, LANDER.z), LANDER.z);
-      player.heading = LANDER.h;
-      camYaw = LANDER.h;
+      // beside the lander, not on its centre (that is inside its 3.2 m obstacle box: she sank in it, camera in the hull)
+      const hx = LANDER.x + 5.5;
+      player.position.set(hx, moonHeight(hx, LANDER.z), LANDER.z);
+      player.heading = LANDER.h + Math.PI; // facing the lander, so the camera behind her is in the open (not inside the hull)
+      camYaw = LANDER.h + Math.PI;
     } else {
       player.position.set(SPAWN.x, 0, SPAWN.z);
       player.heading = SPAWN.h;
@@ -963,6 +1001,11 @@ function getOffSwing(): void {
 // Enter next to a shop counter buys too (keyboard players)
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || paused || driving || scooting || flight || onBus() || riding) return;
+  if (snowPlay?.enter()) {
+    e.preventDefault(); // snowball in her hand: Enter throws it straight ahead
+    e.stopImmediatePropagation();
+    return;
+  }
   if (extras.enter()) {
     e.preventDefault(); // Enter next to a flower bed / fruit tree = pick
     return;
@@ -1391,6 +1434,7 @@ function handleTap(x: number, y: number): void {
     return;
   }
   // double tap = pick (flower, fruit); tap on a person with a present in her hand = give it (extras.ts)
+  if (!driving && !scooting && snowPlay?.tap(raycaster)) return; // snowball in her hand: the tap throws it
   if (!driving && extras.tap(raycaster, x, y)) return;
   // Objects and characters first: tapping one walks the character up to it (touching it uses it).
   const targets: { object: THREE.Object3D; position: THREE.Vector3; it?: Interactable; person?: boolean }[] = [
@@ -1473,6 +1517,7 @@ function disposeMoonPlay(): void {
   moonPlay.food.dispose();
   moonPlay.comets.dispose();
   moonPlay.dizzy.dispose();
+  moonPlay.dust.dispose();
   moonPlay = null;
 }
 
@@ -1524,7 +1569,13 @@ function isDescendant(obj: THREE.Object3D, root: THREE.Object3D): boolean {
 }
 
 /** Swimming is slower and only the pool edges stop her. */
-const moveSpeed = () => (pool?.swimming ? pool.swimSpeed : WALK_SPEED) * extras.life.speedFactor(); // no energy = slow
+const moveSpeed = (): number => {
+  if (pool?.swimming) return pool.swimSpeed * extras.life.speedFactor();
+  const moon = city.kind === 'moon';
+  // no energy = slow, but always a touch faster than the creatures (cities 4.7 vs 4.6; Moon 2.7 vs 2.6)
+  if (extras.life.speedFactor() < 1) return moon ? TIRED_MOON_SPEED : TIRED_WALK_SPEED;
+  return moon ? MOON_WALK_SPEED : WALK_SPEED;
+};
 const moveObstacles = () => (pool?.swimming ? pool.waterWalls : world.obstacles);
 
 const timer = new THREE.Timer();
@@ -1667,6 +1718,25 @@ function tick(time: number): void {
   if (!flight && !riding && !scooting && !pool.swimming && player.lyingY === null && scriptedWalk <= 0 && world.heightAt) {
     player.position.y = world.heightAt(player.position.x, player.position.z);
   }
+  // Moon: every step is a big slow hop (low gravity); she lands with a puff of dust. Standing still = feet down.
+  if (city.kind === 'moon' && !paused && !flight && player.lyingY === null && scriptedWalk <= 0) {
+    if (hopU < 0 && speed > 0.01) {
+      hopU = 0;
+      player.hopSide = player.hopSide === 1 ? -1 : 1;
+    }
+    if (hopU >= 0) {
+      hopU += dt / MOON_HOP_S;
+      if (hopU >= 1) {
+        moonPlay?.dust.puff(player.position);
+        tone(70 + Math.random() * 20, 0, 0.14, 'sine', 0.05); // soft thud
+        hopU = speed > 0.01 ? hopU - 1 : -1;
+        player.hopSide = player.hopSide === 1 ? -1 : 1;
+      }
+    }
+  } else hopU = -1;
+  player.hop = hopU >= 0 ? hopU : null;
+  if (hopU >= 0) player.position.y += MOON_HOP_H * 4 * hopU * (1 - hopU);
+  moonPlay?.dust.update(dt);
   if (riding) {
     const p = riding.seat.pose(riding.i);
     player.heading = p.heading;
@@ -1803,6 +1873,7 @@ function tick(time: number): void {
   updateHospital(dt);
   weather.update(dt);
   aurora?.update(dt);
+  snowPlay?.update(dt);
   streetLights.update(dt, weather.daylight, camera);
   if (knock.lengthSq() > 0.05) {
     player.move(knock.x * dt, knock.z * dt, world.obstacles);
@@ -1877,7 +1948,29 @@ function tick(time: number): void {
     camYaw += diff * Math.min(1, dt * 2.5);
   }
   if (aerial) {
-    if (aerial.fromX !== undefined && aerial.fromZ !== undefined) {
+    if (aerial.turn && aerial.fromX !== undefined && aerial.fromZ !== undefined) {
+      // tower-top lookout: dragging / ←→ turn the shot (Telmo, 2026-11-21: "não posso girar a vista").
+      // The shot starts as authored; camYaw (drag + arrows, as on the ground) then rotates it about a pivot:
+      // her own spot when the camera stands beside her (view from the top), else the point it looks at (orbit).
+      if (Number.isNaN(aerialYaw0)) {
+        yawBeforeAerial = camYaw;
+        camYaw = Math.atan2(aerial.fromX - aerial.x, aerial.fromZ - aerial.z);
+        player.heading = camYaw; // face the view, so the follow-behind doesn't swing it back
+        aerialYaw0 = camYaw;
+      }
+      const dFrom = Math.hypot(aerial.fromX - player.position.x, aerial.fromZ - player.position.z);
+      const dLook = Math.hypot(aerial.x - player.position.x, aerial.z - player.position.z);
+      const px = dFrom < dLook ? player.position.x : aerial.x;
+      const pz = dFrom < dLook ? player.position.z : aerial.z;
+      const d = camYaw - aerialYaw0;
+      const c = Math.cos(d);
+      const s = Math.sin(d);
+      const rot = (x: number, z: number): [number, number] => [px + (x - px) * c + (z - pz) * s, pz - (x - px) * s + (z - pz) * c];
+      const [cx, cz] = rot(aerial.fromX, aerial.fromZ);
+      const [lx, lz] = rot(aerial.x, aerial.z);
+      camera.position.set(cx, aerial.h, cz);
+      camera.lookAt(lx, aerial.lookY ?? 1.0, lz);
+    } else if (aerial.fromX !== undefined && aerial.fromZ !== undefined) {
       camera.position.set(aerial.fromX, aerial.h, aerial.fromZ);
       camera.lookAt(aerial.x, aerial.lookY ?? 1.0, aerial.z);
     } else {
@@ -1895,6 +1988,12 @@ function tick(time: number): void {
     if (flight.done) endFlight();
   } else {
   const target = player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
+  // Moon hops: the camera rises only a quarter of each hop and glides (no shaking)
+  if (city.kind === 'moon') {
+    const want = target.y - (hopU >= 0 ? MOON_HOP_H * 4 * hopU * (1 - hopU) * 0.75 : 0);
+    camHopY = camHopY === null ? want : camHopY + (want - camHopY) * Math.min(1, dt * 4);
+    target.y = camHopY;
+  } else camHopY = null;
   // on a ride (fair, playground, swing…) keep a wide shot: no zoom-in (Telmo, 2026-11-19)
   const wanted = driving || scooting || onBus() ? Math.max(camDist, 12) : riding ? Math.max(camDist, 10) : camDist;
   // don't let the camera end up inside a building: walk out from her towards the camera and stop before a wall
@@ -1940,6 +2039,9 @@ function tick(time: number): void {
         lyingY: player.lyingY,
         prone: player.prone,
         h: +player.heading.toFixed(2),
+        suit: player.spacesuit,
+        hop: +hopU.toFixed(2),
+        moonItems: city.kind === 'moon' ? collectibles.outsideStats() : null,
         legs: player.legPitches().map((v) => +v.toFixed(3)),
         walkAnim: +scriptedWalk.toFixed(2),
         camYaw: +camYaw.toFixed(2),
@@ -1978,6 +2080,7 @@ function tick(time: number): void {
         extras: extras.debug(),
         usa: usaLandmarks?.debug() ?? null,
         aurora: aurora?.debug() ?? null,
+        snow: snowPlay?.debug() ?? null,
         landmarks: landmarksDebug(),
         wear: save.wear,
         onBus: onBus(),

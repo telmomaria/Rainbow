@@ -12,11 +12,10 @@ Aplicar no Session End Protocol.
 
 | # | Action | Owner | Blocker |
 |---|---|---|---|
-| 1 | Commit + push do último lote (escorregas, rei só em Londres, Reiquiavique sem bar + pescador) | Telmo aprova | none |
-| 2 | Telmo joga o que mudou (⚙ → Cidade): Varsóvia, Moscovo, parque, aurora, carta, macaca, folk; lista o que afinar | Telmo | none |
-| 3 | Ex-líbris para Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk | Telmo decide | "depois" |
-| 4 | Medir fps num tablet médio (espelhos, visitantes, parque, aurora) | Telmo + agent | tablet |
-| 5 | Alinhar o ROADMAP com o código (brief 2026-11-15 com ⬜ já feitos) | agent | none |
+| 1 | Telmo joga o que mudou (⚙ → Cidade): Clérigos, Rio (bondinho, Cristo), aviador, Nuuk (neve), tanque, Estátua, Hotel das Fontes, Lua (fato + saltos); lista o que afinar | Telmo | none |
+| 2 | Ex-líbris para Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk | Telmo decide | "depois" |
+| 3 | Medir fps num tablet médio (espelhos, visitantes, parque, aurora) | Telmo + agent | tablet |
+| 4 | Alinhar o ROADMAP com o código (brief 2026-11-15 com ⬜ já feitos) | agent | none |
 
 ---
 
@@ -80,7 +79,8 @@ Aplicar no Session End Protocol.
 - ✅ Parque infantil, lojas com provador, massagem, SPA, feira 0–12 visitantes, fotógrafo, bandeiras reais, trotinete (`52ab1b0`, 2026-11-19)
 - ✅ WIP de `cd46b39` terminado e testado (2026-11-21): carta/caixa de correio/caixotes, macaca + borboletas, avião de papel/ponte/penso/sopa, padaria + Muralha + gongo, Moscovo (São Basílio + baú), estádios nas cores da bandeira, moedas dentro do chão
 - ✅ Cidade (testes) nas Definições; Varsóvia (castelo, joias, escadaria do Palácio, `activeClimb`); parque 20×19 com escadas acessíveis; SPA 13×11; rei fora de Moscovo; `CITY_WITHOUT` (5 cidades); aurora boreal em Reiquiavique; joias sem spoiler da Lua (2026-11-21, `2dcf258`)
-- ✅ Escorregas do parque a sério (subir, sentar, deslizar, câmara de lado); rei só em Londres; Reiquiavique sem bar + pescador (2026-11-21, por commitar)
+- ✅ Escorregas do parque a sério (subir, sentar, deslizar, câmara de lado); rei só em Londres; Reiquiavique sem bar + pescador (2026-11-21, `705615f`)
+- ✅ Torres: rodar a vista e descer no topo; Rio (Pão de Açúcar, bondinho, Cristo Redentor); aviador (ela lança o avião); Nuuk sem feira + zona de neve; tanque em Moscovo; Estátua da Liberdade (escadas, subida, tocha); passeio do Hotel das Fontes; bandeiras verificadas; matriz por cidade  + Lua (fato, ±60 m, saltos, "Continuar" corrigido), sem energia 4,7 m/s (2026-11-22, sem commit)
 
 ---
 
@@ -97,6 +97,7 @@ Aplicar no Session End Protocol.
 | v1.6 | 2026-11-11 | Aeroporto e voo, ícone, Casa, 10 personagens, carro, pobre, 12 adereços |
 | v1.7 | 2026-11-11 | Cidade viva: lojas, pombos, adeptos, bar, trânsito, hospital, tempo real, gato na árvore; ecrã inicial e definições |
 | v1.8 | 2026-11-11 | Compra por clique, inventário, definições no início, dia/noite real com candeeiros |
+| v2.8 | 2026-11-22 | #SEP: Clérigos (vista + descer), Rio novo com Cristo, aviador, neve em Nuuk, tanque, Estátua + Hotel das Fontes, Lua (fato, ±60 m, saltos; "Continuar" corrigido), sem energia 4,7 m/s, bandeiras, matriz por cidade; Lua sem energia 2,7, Casa na Lua corrigida, Pão de Açúcar só desce com toque, Clérigos ao centro (em curso) |
 | v2.7 | 2026-11-21 | WIP terminado e testado; botão Cidade (testes); Varsóvia corrigida; parque, SPA, rei; cidades sem estádio/piscina/feira/concerto/trotinete; aurora boreal |
 | v2.6 | 2026-11-20 | #SEP: Lua (máquina do tempo), 227 perguntas, parque, lojas com provador, SPA, feira, bandeiras; WIP interrompido pelo limite da API |
 | v2.5 | 2026-11-17 | #SEP: polish ex-líbris (Londres/Paris/Pequim/Roma/Cultura/Rio/Estátua); Hotel das Fontes; obeliscos removidos; salão `replacesHair` já em `d10eb65` |

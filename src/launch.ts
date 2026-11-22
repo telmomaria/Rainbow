@@ -82,6 +82,7 @@ export class Launch {
         enter: () => {
           port.setHatchOpen(false);
           port.setArmAway(0);
+          p.setSpacesuit(true); // inside the rocket she puts on the spacesuit; she steps out on the Moon wearing it
         },
         run: (t) => {
           port.setArmAway(ease(t));

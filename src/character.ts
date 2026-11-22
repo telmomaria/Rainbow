@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {
   buildRobe,
   buildShopOutfit,
+  buildSpacesuit,
   buildSwimsuit,
   characterById,
   isShopOutfit,
@@ -77,9 +78,25 @@ export class Character {
     this.rebuild();
   }
 
+  /** Spacesuit + glass helmet: worn the whole time on the Moon (put on inside the rocket). Wins over everything. */
+  spacesuit = false;
+  setSpacesuit(on: boolean): void {
+    if (on === this.spacesuit) return;
+    this.spacesuit = on;
+    this.rebuild();
+  }
+
+  /**
+   * Low-gravity hop on the Moon (main.ts lifts her; this only poses the legs): progress 0..1 through the current
+   * hop, or null when she isn't hopping. hopSide alternates the leading leg each hop.
+   */
+  hop: number | null = null;
+  hopSide: 1 | -1 = 1;
+
   private rebuild(): void {
     this.root.remove(this.model.model);
-    if (this.swimwear) this.model = buildSwimsuit(this.id);
+    if (this.spacesuit) this.model = buildSpacesuit(this.id);
+    else if (this.swimwear) this.model = buildSwimsuit(this.id);
     else if (this.robe) this.model = buildRobe(this.id);
     else {
       const bodyKind = this.wearing.body;
@@ -109,7 +126,7 @@ export class Character {
     const bodyChanged = nextBody !== this.bodyOutfit;
     this.wearing = clean;
     this.bodyOutfit = nextBody;
-    if (bodyChanged && !this.swimwear) this.rebuild();
+    if (bodyChanged && !this.swimwear && !this.spacesuit) this.rebuild();
     else this.applyWear();
   }
   /** What is on her right now (slot → kind), including a shop try-on that is not saved. */
@@ -153,6 +170,8 @@ export class Character {
     }
     for (const [slot, kind] of Object.entries(this.wearing)) {
       if (slot === 'body') continue; // baked into the rebuilt torso
+      // in the spacesuit only what fits inside the helmet stays (face paint, a salon hairstyle)
+      if (this.spacesuit && slot !== 'face' && !(slot === 'head' && hideStockHair)) continue;
       const def = wearableDef(kind);
       if (!def || def.slot !== slot) continue;
       if (slot === 'feet') {
@@ -376,7 +395,13 @@ export class Character {
       this.prone = false;
       resetLimbs(this.model.arms ?? [], legs);
     }
-    if (speed > 0.01) {
+    if (this.hop !== null) {
+      // a slow Moon hop: legs open in the air (leading leg forward), knees "bend" (body dips) at take-off/landing
+      const air = Math.sin(this.hop * Math.PI);
+      const swing = air * 0.55 * this.hopSide;
+      for (const l of legs) l.pivot.rotation.x = l.phase === 0 ? swing : -swing;
+      body.position.y = this.bodyBaseY - (1 - air) * 0.07;
+    } else if (speed > 0.01) {
       this.walkPhase += dt * speed * 3;
       const swing = Math.sin(this.walkPhase) * 0.6;
       for (const l of legs) l.pivot.rotation.x = l.phase === 0 ? swing : -swing;

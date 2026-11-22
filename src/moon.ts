@@ -1,37 +1,56 @@
 import * as THREE from 'three';
 import { mat } from './places';
 import type { Obstacle, World } from './world';
-import { setPlayArea } from './spawn';
+import { inPlayArea, isFree, setPlayArea } from './spawn';
 
-/** Half-extent of the walkable Moon (m). */
-export const MOON_HALF = 90;
+/**
+ * Half-extent of the walkable Moon (m). 90 until 2026-11-21; Telmo asked for a smaller Moon (she walks slower there,
+ * in big slow hops), so the layout below was drawn for 90 m and is scaled by LAYOUT (craters, hills, rocks, loot).
+ */
+export const MOON_HALF = 60;
+/** Scale from the original 90 m layout to the current size (positions). */
+const LAYOUT = MOON_HALF / 90;
+/** Radii shrink a bit less than positions, so craters/hills keep their character. */
+const RADIUS_K = 0.8;
 /** Lander / "Casa" point (LUA2: the home button brings her back here). */
 export const LANDER = { x: -8, z: -6, h: -Math.PI / 2 } as const;
-/** Altar centre. */
+/** Altar centre (the buried time machine). Kept where it was: still ≥25 m inside the smaller border. */
 export const ALTAR = { x: 35, z: 5 } as const;
 
-/** Craters: [cx, cz, radius, depth]. */
-const CRATERS: [number, number, number, number][] = [
-  [25, -20, 15, 3.6],
-  [-35, 30, 12, 3.0],
-  [50, 40, 17, 4.0],
-  [-20, -45, 11, 2.8],
-  [5, 55, 13, 3.2],
-  [-55, -15, 10, 2.4],
-  [42, -48, 9, 2.2],
-  [-48, 55, 8, 2.0],
-];
+type Bump = [number, number, number, number];
 
-/** Soft hill centres: [cx, cz, radius, height]. */
-const HILLS: [number, number, number, number][] = [
-  [-60, -55, 32, 7.5],
-  [65, -30, 26, 6.2],
-  [-15, 70, 30, 7.0],
-  [70, 55, 24, 5.8],
-  [-70, 10, 22, 5.2],
-  [10, -70, 28, 6.4],
-  [20, 25, 18, 3.8],
-];
+/** Craters: [cx, cz, radius, depth] (drawn for the 90 m Moon, scaled to MOON_HALF). */
+const CRATERS: Bump[] = (
+  [
+    [25, -20, 15, 3.6],
+    [-35, 30, 12, 3.0],
+    [50, 40, 17, 4.0],
+    [-20, -45, 11, 2.8],
+    [5, 55, 13, 3.2],
+    [-55, -15, 10, 2.4],
+    [42, -48, 9, 2.2],
+    [-48, 55, 8, 2.0],
+  ] as Bump[]
+).map(([x, z, r, d]): Bump => [x * LAYOUT, z * LAYOUT, r * RADIUS_K, d]);
+
+/** Soft hill centres: [cx, cz, radius, height] (scaled like the craters). */
+const HILLS: Bump[] = (
+  [
+    [-60, -55, 32, 7.5],
+    [65, -30, 26, 6.2],
+    [-15, 70, 30, 7.0],
+    [70, 55, 24, 5.8],
+    [-70, 10, 22, 5.2],
+    [10, -70, 28, 6.4],
+    [20, 25, 18, 3.8],
+  ] as Bump[]
+).map(([x, z, r, h]): Bump => [x * LAYOUT, z * LAYOUT, r * RADIUS_K, h]);
+
+/** A point on crater i's rim, at angle a (radians). */
+function rim(i: number, a: number): { x: number; z: number } {
+  const [cx, cz, r] = CRATERS[i];
+  return { x: cx + Math.cos(a) * r * 0.8, z: cz + Math.sin(a) * r * 0.8 };
+}
 
 /** Interesting loot spots (crater rims, hilltops, altar approach). */
 export const MOON_LOOT: { x: number; z: number; kind: 'coin' | 'jewel' }[] = [
@@ -42,16 +61,16 @@ export const MOON_LOOT: { x: number; z: number; kind: 'coin' | 'jewel' }[] = [
   { x: 24, z: 3, kind: 'coin' },
   { x: 30, z: 4, kind: 'jewel' },
   // crater rims
-  { x: 25 + 12, z: -20, kind: 'coin' },
-  { x: 25 - 10, z: -20 + 8, kind: 'coin' },
-  { x: -35 + 9, z: 30, kind: 'jewel' },
-  { x: 50, z: 40 + 13, kind: 'coin' },
-  { x: -20, z: -45 + 8, kind: 'coin' },
-  { x: 5 + 9, z: 55, kind: 'coin' },
+  { ...rim(0, 0), kind: 'coin' },
+  { ...rim(0, Math.PI * 0.8), kind: 'coin' },
+  { ...rim(1, 0), kind: 'jewel' },
+  { ...rim(2, Math.PI * 0.5), kind: 'coin' },
+  { ...rim(3, Math.PI * 0.5), kind: 'coin' },
+  { ...rim(4, 0), kind: 'coin' },
   // hilltops
-  { x: -60, z: -55, kind: 'jewel' },
-  { x: 65, z: -30, kind: 'coin' },
-  { x: -15, z: 70, kind: 'coin' },
+  { x: HILLS[0][0], z: HILLS[0][1], kind: 'jewel' },
+  { x: HILLS[1][0], z: HILLS[1][1], kind: 'coin' },
+  { x: HILLS[2][0], z: HILLS[2][1], kind: 'coin' },
 ];
 
 const ROCK_COLORS = [0x6c7078, 0x868e96, 0x5c5f66, 0x9a9080, 0x7a756c, 0xa8a29a, 0x4a4d54];
@@ -155,7 +174,8 @@ function regolithColor(x: number, z: number, h: number): THREE.Color {
 
 export function buildMoonGround(scene: THREE.Scene): THREE.Mesh {
   const seg = 140;
-  const geo = new THREE.PlaneGeometry(MOON_HALF * 2.5, MOON_HALF * 2.5, seg, seg);
+  // the ground runs 30 m past the walkable border so the horizon mountains stand on it
+  const geo = new THREE.PlaneGeometry((MOON_HALF + 30) * 2, (MOON_HALF + 30) * 2, seg, seg);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position as THREE.BufferAttribute;
   const colors = new Float32Array(pos.count * 3);
@@ -303,16 +323,19 @@ function buildSpire(rng: () => number, h: number): THREE.Group {
 function scatterRocks(scene: THREE.Scene, obstacles: Obstacle[]): void {
   const rng = moonRng(67 * 1009);
   // landmark boulder clusters near crater rims + a few ridge spires
-  const landmarks: { x: number; z: number; n: number; spire?: boolean }[] = [
-    { x: 25 + 11, z: -20 + 2, n: 4 },
-    { x: -35 - 8, z: 30 + 4, n: 3 },
-    { x: 50 - 12, z: 40 - 3, n: 5 },
-    { x: -20 + 7, z: -45 - 5, n: 3 },
-    { x: -60 + 6, z: -55 + 4, n: 2, spire: true },
-    { x: 65 - 5, z: -30 + 6, n: 3, spire: true },
-    { x: 12, z: 18, n: 2 }, // between lander and altar
-    { x: -48, z: -8, n: 3, spire: true },
-  ];
+  type Spot = { x: number; z: number; n: number; spire?: boolean };
+  const landmarks: Spot[] = (
+    [
+      { x: 25 + 11, z: -20 + 2, n: 4 },
+      { x: -35 - 8, z: 30 + 4, n: 3 },
+      { x: 50 - 12, z: 40 - 3, n: 5 },
+      { x: -20 + 7, z: -45 - 5, n: 3 },
+      { x: -60 + 6, z: -55 + 4, n: 2, spire: true },
+      { x: 65 - 5, z: -30 + 6, n: 3, spire: true },
+      { x: 12 / LAYOUT, z: 18 / LAYOUT, n: 2 }, // between lander and altar (stays at its old spot)
+      { x: -48, z: -8, n: 3, spire: true },
+    ] as Spot[]
+  ).map((l) => ({ ...l, x: l.x * LAYOUT, z: l.z * LAYOUT }));
 
   for (const spot of landmarks) {
     for (let i = 0; i < spot.n; i++) {
@@ -338,7 +361,7 @@ function scatterRocks(scene: THREE.Scene, obstacles: Obstacle[]): void {
   }
 
   // scatter of medium + small rocks across the mare
-  for (let i = 0; i < 55; i++) {
+  for (let i = 0; i < 34; i++) { // 55 on the old 90 m Moon
     const x = (rng() - 0.5) * MOON_HALF * 1.7;
     const z = (rng() - 0.5) * MOON_HALF * 1.7;
     if (Math.hypot(x, z) < 14) continue;
@@ -485,10 +508,10 @@ export function createMoonWorld(scene: THREE.Scene, city: import('./cities').Cit
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 220;
-  sun.shadow.camera.left = -110;
-  sun.shadow.camera.right = 110;
-  sun.shadow.camera.top = 110;
-  sun.shadow.camera.bottom = -110;
+  sun.shadow.camera.left = -(MOON_HALF + 20);
+  sun.shadow.camera.right = MOON_HALF + 20;
+  sun.shadow.camera.top = MOON_HALF + 20;
+  sun.shadow.camera.bottom = -(MOON_HALF + 20);
   scene.add(sun);
   // cool bounce from Earthshine
   const earthShine = new THREE.DirectionalLight(0x74c0fc, 0.28);
@@ -526,6 +549,25 @@ export function createMoonWorld(scene: THREE.Scene, city: import('./cities').Cit
 }
 
 /** Drop extra coins/jewels on crater rims and the path to the altar (after Collectibles is created). */
-export function seedMoonLoot(collectibles: { placeAt: (kind: 'coin' | 'jewel', x: number, z: number) => void }): void {
-  for (const spot of MOON_LOOT) collectibles.placeAt(spot.kind, spot.x, spot.z);
+export function seedMoonLoot(
+  collectibles: { placeAt: (kind: 'coin' | 'jewel', x: number, z: number) => void },
+  obstacles: Obstacle[],
+): void {
+  for (const spot of MOON_LOOT) {
+    // a boulder may sit on the authored spot: step around it (rings of 1.5 m) until the spot is clear
+    let { x, z } = spot;
+    for (let ring = 1; ring <= 4 && !(isFree(x, z, 0.8, obstacles) && inPlayArea(x, z, 0.8)); ring++) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const nx = spot.x + Math.cos(a) * ring * 1.5;
+        const nz = spot.z + Math.sin(a) * ring * 1.5;
+        if (isFree(nx, nz, 0.8, obstacles) && inPlayArea(nx, nz, 0.8)) {
+          x = nx;
+          z = nz;
+          break;
+        }
+      }
+    }
+    collectibles.placeAt(spot.kind, x, z);
+  }
 }

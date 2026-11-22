@@ -3,6 +3,7 @@ import { tone } from './audio';
 import { Fireworks, FIREWORK_COLORS } from './fireworks';
 import type { GameCtx } from './gamectx';
 import { gemMesh, mat } from './places';
+import { towerClimb } from './landmarks';
 import type { Interactable, Obstacle, World } from './world';
 
 /**
@@ -122,7 +123,10 @@ export class UsaLandmarks {
   /** Estátua da Liberdade: pedestal em degraus + figura verde coerente (coroa, tocha e tábua ligadas). */
   private buildStatue(scene: THREE.Scene, world: World): void {
     const at = USA_SPOTS.statue;
-    claim(world, at, 10, 12, 5);
+    // clear the whole island, but only the pedestal + the stairs block her (the foot of the stairs must be reachable)
+    world.clearArea({ minX: at.x - 10, maxX: at.x + 10, minZ: at.z - 12, maxZ: at.z + 12 }, 2.5);
+    world.obstacles.push({ minX: at.x - 4.1, maxX: at.x + 4.1, minZ: at.z - 4.1, maxZ: at.z + 4.1, height: 5.3 });
+    world.obstacles.push({ minX: at.x - 1.9, maxX: at.x + 1.9, minZ: at.z + 4, maxZ: at.z + 10.5, height: 5.3 });
     const g = new THREE.Group();
     g.position.set(at.x, 0, at.z);
     g.userData.landmark = 'statue';
@@ -137,17 +141,25 @@ export class UsaLandmarks {
     addBox(g, stoneDark, 8.0, 1.0, 8.0, 0, 0.75, 0);
     addBox(g, stone, 6.6, 2.2, 6.6, 0, 2.35, 0);
     addBox(g, stoneDark, 5.2, 1.8, 5.2, 0, 4.35, 0);
-    // front stairs with side walls (reads as a stairway, not a floating plank)
-    for (let i = 0; i < 6; i++) {
-      const y = 0.22 + i * 0.38;
-      const z = 4.1 + i * 0.75;
-      addBox(g, stone, 3.5 - i * 0.1, 0.38, 1.2, 0, y, z);
-      addBox(g, stoneDark, 0.2, 0.55 + i * 0.08, 1.15, -1.7, y + 0.3, z);
-      addBox(g, stoneDark, 0.2, 0.55 + i * 0.08, 1.15, 1.7, y + 0.3, z);
+    // front stairs: lowest tread out on the grass (+z, the side she arrives from), top tread level with the terrace
+    // (y 5.25) at the pedestal's edge. Solid treads from the ground + stepped side walls.
+    const TERRACE_Y = 5.25;
+    const STEPS = 12;
+    const RUN = 0.65;
+    const STAIR_OUT = 10.4; // outer edge of the lowest tread
+    const climbSteps: THREE.Vector3[] = [];
+    for (let i = 0; i < STEPS; i++) {
+      const yTop = ((i + 1) / STEPS) * TERRACE_Y;
+      const zc = STAIR_OUT - i * RUN - RUN / 2;
+      addBox(g, stone, 3.2, yTop, RUN, 0, yTop / 2, zc);
+      addBox(g, stoneDark, 0.25, yTop + 0.55, RUN, -1.72, (yTop + 0.55) / 2, zc);
+      addBox(g, stoneDark, 0.25, yTop + 0.55, RUN, 1.72, (yTop + 0.55) / 2, zc);
+      climbSteps.push(new THREE.Vector3(at.x, yTop, at.z + zc));
     }
-    // terrace railing
+    // terrace railing (gap in the front rail where the stairs arrive)
     for (const dx of [-2.3, 2.3]) addBox(g, stoneDark, 0.18, 0.75, 4.4, dx, 5.7, 0);
-    for (const dz of [-2.3, 2.3]) addBox(g, stoneDark, 4.4, 0.75, 0.18, 0, 5.7, dz);
+    addBox(g, stoneDark, 4.4, 0.75, 0.18, 0, 5.7, -2.3);
+    for (const dx of [-1.95, 1.95]) addBox(g, stoneDark, 0.7, 0.75, 0.18, dx, 5.7, 2.3);
 
     // —— figura verde (hierarquia: corpo → braços → tocha/tábua → cabeça → coroa) ——
     const copper = mat(0x40c057);
@@ -187,10 +199,10 @@ export class UsaLandmarks {
       addBox(tablet, mat(0x82c91e), 0.05, 0.08, 0.95, 0.11, ly, 0);
     }
 
-    // right arm raised — torch is a continuous child of the arm
+    // right arm raised high (almost vertical, a little out to the side) — torch is a continuous child of the arm
     const rightArm = new THREE.Group();
     rightArm.position.set(1.1, 6.6, 0.1);
-    rightArm.rotation.z = -1.1;
+    rightArm.rotation.z = -0.28;
     figure.add(rightArm);
     addCyl(rightArm, copper, 0.28, 0.34, 3.8, 0, 1.9, 0, 8);
     addCyl(rightArm, copper, 0.4, 0.42, 0.55, 0, 3.9, 0, 8); // fist
@@ -231,99 +243,33 @@ export class UsaLandmarks {
       spike.rotation.z = -Math.cos(a) * 0.35;
     }
 
-    // diamond on the terrace
+    // jewel on a little pedestal on the terrace, beside where she stands
+    addBox(g, stone, 0.6, 0.5, 0.6, 1.4, TERRACE_Y + 0.25, 1.9);
     const gem = gemMesh(0x3bc9ff, 1.4);
-    gem.position.set(0, 5.7, 2.0);
+    gem.position.set(1.4, TERRACE_Y + 0.95, 1.9);
     g.add(gem);
-    this.things.push(diamondPickup(this.ctx, 'gem:usa:liberdade', new THREE.Vector3(at.x, 0, at.z + 2), gem));
 
-    // climb the pedestal stairs to the crown platform (walk cycle — not a Y teleport)
-    const ctx = this.ctx;
-    const crownY = 5.25 + 8.05 + 0.55; // terrace + head + crown band ≈ 13.85
-    const foot = new THREE.Vector3(at.x, 0, at.z + 6);
-    const top = new THREE.Vector3(at.x, crownY, at.z);
-    const path: THREE.Vector3[] = [foot.clone()];
-    for (let i = 1; i <= 8; i++) path.push(new THREE.Vector3(at.x, (i / 8) * crownY, at.z + 6 - i * 0.7));
-    path.push(top.clone());
-    // (climb is animated on click — no floating step planks on the figure)
-    type Phase = 'idle' | 'up' | 'top' | 'down';
-    let phase: Phase = 'idle';
-    let t = 0;
-    const STEP_T = 0.3;
-    const WALK = 3.2;
-    const prox = foot.clone();
-    const place = (pts: THREE.Vector3[], u: number) => {
-      const max = pts.length - 1;
-      const f = THREE.MathUtils.clamp(u, 0, max);
-      const i = Math.min(max - 1, Math.floor(f));
-      const k = f - i;
-      const a = pts[i];
-      const b = pts[i + 1];
-      ctx.player.set(
-        THREE.MathUtils.lerp(a.x, b.x, k),
-        THREE.MathUtils.lerp(a.y, b.y, k),
-        THREE.MathUtils.lerp(a.z, b.z, k),
-      );
-      ctx.walkAnim(WALK, b.x, b.z);
-    };
-    this.things.push({
-      object: g,
-      position: prox,
-      radius: 4.5,
-      requiresClick: true,
-      interact() {
-        if (ctx.isDriving()) return false;
-        if (phase === 'up' || phase === 'down') return false;
-        if (phase === 'idle') {
-          if (ctx.isPaused()) return false;
-          phase = 'up';
-          t = 0;
-          ctx.hold(true);
-          ctx.walkAnim(WALK, path[1].x, path[1].z);
-          return true;
-        }
-        phase = 'down';
-        t = 0;
-        prox.copy(foot);
-        ctx.hold(true);
-        ctx.walkAnim(WALK, path[path.length - 2].x, path[path.length - 2].z);
-        return true;
-      },
-      update(dt) {
-        if (phase === 'idle') {
-          prox.copy(foot);
-          if (ctx.player.y > 0.4 && Math.hypot(ctx.player.x - top.x, ctx.player.z - top.z) > 5) ctx.player.y = 0;
-          return;
-        }
-        if (phase === 'top') {
-          prox.set(top.x, 0, top.z);
-          ctx.player.set(top.x, top.y, top.z);
-          ctx.walkAnim(0);
-          return;
-        }
-        t += dt;
-        const pts = phase === 'up' ? path : path.slice().reverse();
-        const dur = (pts.length - 1) * STEP_T;
-        place(pts, t / STEP_T);
-        if (t < dur) return;
-        if (phase === 'up') {
-          phase = 'top';
-          prox.set(top.x, 0, top.z);
-          ctx.player.set(top.x, top.y, top.z);
-          ctx.walkAnim(0);
-          ctx.hold(false);
-          ctx.say(['Na coroa da estátua!']);
-          tone(660, 0, 0.12, 'triangle', 0.05);
-        } else {
-          phase = 'idle';
-          t = 0;
-          prox.copy(foot);
-          ctx.walkAnim(0);
-          ctx.player.set(foot.x, 0, foot.z);
-          ctx.hold(false);
-        }
-      },
-    });
+    // climb the front stairs to the terrace at the statue's feet (same as the other ex-líbris: towerClimb —
+    // on the terrace drag / ←→ turns the view, trying to walk = jewel first, then down the stairs)
+    const foot = new THREE.Vector3(at.x, 0, at.z + STAIR_OUT + 0.9);
+    const top = new THREE.Vector3(at.x - 1.4, TERRACE_Y, at.z + 1.9);
+    climbSteps.push(new THREE.Vector3(at.x, TERRACE_Y, at.z + 2.1));
+    this.things.push(
+      towerClimb({
+        ctx: this.ctx,
+        object: g,
+        foot,
+        top,
+        steps: climbSteps,
+        gem,
+        gemKey: 'gem:usa:liberdade',
+        sayTop: ['Aos pés da Estátua da Liberdade!'],
+        sayGem: ['Uma joia especial! Guarda-a bem!'],
+        interactAt: foot,
+        radius: 5,
+        vista: { fromX: top.x, fromZ: top.z + 0.6, h: TERRACE_Y + 2.6, x: at.x, z: at.z + 75, lookY: 2 },
+      }),
+    );
   }
 
   /** Ponte do Pacífico: torres em A laranja, cabos em catenária, tabuleiro atravessável. */
@@ -532,7 +478,14 @@ export class UsaLandmarks {
    */
   private buildPalace(scene: THREE.Scene, world: World): void {
     const at = USA_SPOTS.palace;
-    claim(world, at, 30, 28);
+    // clear the whole site, but only the hotel, the lobby and the lake block her — the plaza and the wide
+    // promenade in front of the lake stay walkable (one big block used to wall the lake off)
+    world.clearArea({ minX: at.x - 30, maxX: at.x + 30, minZ: at.z - 28, maxZ: at.z + 28 }, 2.5);
+    const block = (minX: number, maxX: number, minZ: number, maxZ: number) =>
+      world.obstacles.push({ minX: at.x + minX, maxX: at.x + maxX, minZ: at.z + minZ, maxZ: at.z + maxZ });
+    block(-12, 12, -15.5, -5); // curved tower
+    block(-4.8, 4.8, -3.6, 1.6); // lobby + canopy posts
+    block(-16.8, 16.8, 4.3, 19.7); // lake + rim
     const g = new THREE.Group();
     g.position.set(at.x, 0, at.z);
     g.userData.landmark = 'hotel-das-fontes';
@@ -640,6 +593,8 @@ export class UsaLandmarks {
     // rim walks
     addBox(g, stone, lakeW + 1.6, 0.4, 0.7, 0, 0.35, lakeZ - lakeD / 2 - 0.2);
     addBox(g, stone, lakeW + 1.6, 0.4, 0.7, 0, 0.35, lakeZ + lakeD / 2 + 0.2);
+    // promenade in front of the lake (flat, ~5 m wide): she walks along it to watch the fountains
+    addBox(g, stone, lakeW + 6, 0.06, 5, 0, 0.03, lakeZ + lakeD / 2 + 0.7 + 2.5);
 
     // dancing fountain jets — rows + outward arcs (choreographed in update)
     type JetSpec = { x: number; z: number; h: number; tiltX?: number; tiltZ?: number; soft?: boolean };

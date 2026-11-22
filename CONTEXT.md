@@ -1,6 +1,6 @@
 # CONTEXT — Rainbow
 
-> Substituído a 2026-11-21 (#SEP). Uma só janela: sem LINEAGE.
+> Substituído a 2026-11-22 (#SEP). Uma só janela: sem LINEAGE.
 > Ler com [ROADMAP.md](ROADMAP.md) · [CLAUDE.md](CLAUDE.md) · [memory/MEMORY.md](memory/MEMORY.md).
 
 ## O que é
@@ -10,9 +10,18 @@ por movimento. Aos 100 moedas → cidade seguinte. **Mundo gerado** (sem OSM). *
 Porto → … → Nuuk → Estados Unidos → Lua. Fim: máquina do tempo na Lua (joias trazidas + 10) → "Rainbow 2".
 **Segredo:** nada no jogo diz que o último nível é a Lua antes de lá chegar.
 
-## What works (`origin/main` = `2dcf258` + último lote por commitar — ver ROADMAP NEXT #1)
+## What works (HEAD `705615f` = `origin/main`; o lote abaixo ainda não tem commit)
 
-- **Testado no browser a 2026-11-21:**
+- **2.º lote de 2026-11-21/22 (testado no browser com capturas, sem commit):**
+  - Sem energia: 4,7 m/s nas cidades (bichos 4,6), 2,7 m/s na Lua (marcianos 2,6). Casa na Lua: ao lado da nave (antes ficava dentro). Pão de Açúcar: no cimo só desce com toque/Enter.
+  - Torres (`towerClimb`, exportada): no topo arrastar/←→ roda a vista; tentar andar = descer (1.º passo apanha a joia).
+  - Rio em `src/landmarks-rio.ts`: Urca + Pão de Açúcar em "bala", bondinho (entrar a andar/tocar/Enter; sobe 2, desce grátis), Cristo Redentor no Corcovado.
+  - Aviador: é ela que lança o avião de papel (tocar no avião/aviador ou Enter), sem espera para repetir.
+  - Nuuk sem feira + zona de neve (`src/snowplay.ts`): bonecos, buracos no gelo com peixe, 6 crianças, ela atira bolas (a bola substitui o que tem na mão; `stowCarried` no GameCtx).
+  - Moscovo: tanque em exibição (tocar = torre roda + pomba). EUA: Estátua com escadas certas, subida e tocha para cima; passeio em frente ao lago do Hotel das Fontes.
+  - Bandeiras verificadas (Reino Unido corrigido). Matriz por cidade: [docs/matriz-cidades.md](docs/matriz-cidades.md).
+  - Lua: fato de astronauta desde o foguetão, Lua ±60 m, andar aos saltos (3,5 m/s; marcianos 2,6). Corrigido: "Continuar" na Lua deixava o ecrã vazio (`quietTrouble` usado antes de existir — bug antigo).
+- **Testado no browser a 2026-11-21 (1.º lote):**
   - WIP de `cd46b39` terminado: carta lida + caixa de correio + caixotes azuis; macaca 1–10 + borboletas novas;
     avião de papel, ponte, penso (no braço), sopa; padaria nova + Muralha ~128 m com 7 torres + gongo; Moscovo com
     Catedral de São Basílio + baú (chave = joia, +15); estádios nas cores da bandeira; moedas sempre dentro do chão.
@@ -22,7 +31,7 @@ Porto → … → Nuuk → Estados Unidos → Lua. Fim: máquina do tempo na Lua
   - Parque infantil 20×19 m: escadas e rede acessíveis; ela sobe, senta-se e desce os 2 escorregas a deslizar, com câmara própria de lado; tubo transparente.
   - SPA 13×11 m (Vilnius, Moscovo, Nuuk); rei só em Londres (`onlyIn`).
   - Reiquiavique: sem estádio nem bar; pescador num lago com pontão (`src/folk/pescador.ts`) — pesca sozinho, mostra o peixe, ela pode tentar (+1).
-  - `CITY_WITHOUT`: Reiquiavique sem estádio nem bar, Moscovo sem piscina, Tóquio sem feira, Vilnius sem concerto, Rio sem trotinete.
+  - `CITY_WITHOUT`: Reiquiavique sem estádio nem bar, Moscovo sem piscina, Tóquio e Nuuk sem feira, Vilnius sem concerto, Rio sem trotinete.
   - Aurora boreal em Reiquiavique (`src/aurora.ts`), à noite; a câmara olha para o céu ~7 s quando a narradora a anuncia.
   - Joias dizem "Guarda-a bem!" (antes "Guarda-a para a Lua!").
 - Antes (2026-11-19/20): Lua, 227 perguntas, lojas com provador, SPA, massagem, feira com visitantes, fotógrafo, bandeiras, trotinete.
@@ -30,18 +39,18 @@ Porto → … → Nuuk → Estados Unidos → Lua. Fim: máquina do tempo na Lua
 
 ## What's broken / blocked
 
-- **Por commitar:** escorregas, rei só em Londres, Reiquiavique sem bar + pescador (testados; o `2dcf258` tinha-os a meio).
 - Sem ex-líbris: Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk.
 - Nas cidades nada impede a personagem de sair do chão a andar (não há parede na borda).
 - Som real, animações em movimento, toque e fps em tablet nunca validados.
 
 ## Top pending
 
-1. Commit + push do último lote (aguarda o Telmo).
-2. Telmo joga o que mudou (usar ⚙ → Cidade) e diz o que afinar.
+0. Commit + push de tudo desde `705615f` (aguarda o Telmo). Antes: confirmar o resultado da Torre dos Clérigos mais ao centro (agente em curso no fecho).
+1. Telmo joga o que mudou (usar ⚙ → Cidade) e diz o que afinar. Ouvir o som a sério (volume, voz).
+   Possível duplicado: massagem/médico de `services.ts` + massagista/médico folk na mesma cidade (por confirmar).
+2. Medir fps num tablet médio (parque, aurora, espelhos, visitantes).
 3. Ex-líbris das cidades vazias (Telmo: "depois").
-4. Medir fps num tablet médio.
-5. Alinhar o resto do ROADMAP com o código (brief de 2026-11-15).
+4. Alinhar o resto do ROADMAP com o código (brief de 2026-11-15).
 
 ## Quick references
 

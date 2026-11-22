@@ -144,3 +144,33 @@
 - **Lições:** (1) um agente deu os escorregas como "a funcionar" só pelos números do debug — o ecrã mostrava outra coisa; exigir sempre capturas da câmara do jogo em vários momentos; (2) várias "redes de segurança" por frame (puxar para o chão) lutam entre si — Varsóvia e o parque partiram pelo mesmo padrão; (3) commit com agentes a trabalhar mistura trabalho a meio — evitar ou marcar `wip:`.
 - `.tmp/`: só capturas/scripts de QA, zero `.md` a promover. Passos 3 e 8 N/A (sem LINEAGE).
 - Capacity: alta (≈14 agentes em ondas de 2–3; nenhum parou por crédito).
+
+## 2026-11-21/22 — 2.º lote: Clérigos, Rio, aviador, Nuuk, tanque, EUA, Lua (por commitar)
+
+- **Feito e testado no browser (capturas vistas):**
+  - Torres (`towerClimb`, agora exportada): no topo arrastar/←→ roda a vista (`rainbow-aerial` com `turn`); tentar andar = descer (1.º passo apanha a joia). Causa: a câmara do topo era fixa e só o Enter descia.
+  - Rio passou para `src/landmarks-rio.ts`: Urca baixa + Pão de Açúcar alto em "bala"; bondinho (entrar a andar / tocar / Enter; sobe 2 moedas, desce grátis); Cristo Redentor no Corcovado.
+  - Aviador: é ela que lança o avião (o greetSpot apanhava o clique antes do aviador; o avião estava dentro do anel de afastamento).
+  - Nuuk: sem feira (`CITY_WITHOUT`) + zona de neve `src/snowplay.ts` (bonecos, buracos no gelo com peixe, 6 crianças, ela atira bolas; a bola substitui o que tem na mão — `stowCarried` no GameCtx).
+  - Moscovo: tanque em exibição (`landmarks-moscovo.ts`). EUA (`usa.ts`): escadas da Estátua certas + subida por `towerClimb` + tocha para cima; Hotel das Fontes com passeio em frente ao lago (o recinto era um único obstáculo).
+  - Lua: fato espacial desde o foguetão (`launch.ts`, `characters.ts`, `character.ts`), Lua ±60 m (`MOON_HALF`), andar aos saltos 3,5 m/s, marcianos 2,6 m/s.
+  - **Bug antigo corrigido:** "Continuar" com o jogo gravado na Lua deixava o ecrã azul — `quietTrouble` era `const` usada por `addCityExtras()` antes de existir (TDZ). Agora é `function`.
+  - Sem energia: 4,7 m/s nas cidades (bichos 4,6), 2,6 m/s na Lua (`TIRED_WALK_SPEED`).
+  - Bandeiras verificadas uma a uma (Reino Unido: diagonais desencontradas). `docs/matriz-cidades.md` criada (ex-líbris · atividades · objetos por cidade).
+- **Decisões do Telmo:** Nuuk sem feira, com neve; a bola de neve substitui o que tem na mão; zona de neve fica onde está; sem energia = 4,7 m/s nas cidades; atualizar o CLAUDE.md.
+- **Perguntas em aberto:** Lua sem energia 2,6 = marcianos (subir para 2,7?) · cimo do Pão de Açúcar: encostar na cabine já desce · Clérigos perto da borda do mapa · massagem/médico possivelmente duplicados · commit + push.
+- **Lições:** (1) o `page.evaluate` do patchright corre num mundo isolado — para apanhar erros escondidos, gravar `window.onerror` num `dataset` do DOM via `addInitScript`; assim se encontrou o erro da Lua que não aparecia na consola; (2) um agente que diz "talvez seja a máquina lenta" sem prova — verificar logo (a página normal carregava em 8 s); (3) 3–4 agentes de cada vez, um ficheiro novo por agente quando o ficheiro grande está ocupado (Rio → `landmarks-rio.ts`), sem conflitos.
+- Não verificado: unicórnio de fato, botão Casa na Lua, toque em tablet, som, fps.
+- `.tmp/`: só capturas/scripts de QA (121 MB, ignorado pelo git), zero `.md` a promover. Passos 3 e 8 N/A (sem LINEAGE).
+
+## 2026-11-22 — #SEP (fecho, depois das respostas do Telmo)
+
+- **Feito e testado no browser:**
+  - Lua sem energia 2,7 m/s (marcianos 2,6) — `TIRED_MOON_SPEED`; cidades 4,7 (bichos 4,6).
+  - Pão de Açúcar: no cimo só desce com toque na cabine / Enter (até 6 m); encostar já não desce (`landmarks-rio.ts`, `TOP_TAP_R`).
+  - Unicórnio de fato na Lua: capacete-bolha, mochila, manta (captura vista).
+  - **Bug antigo corrigido:** botão Casa na Lua punha-a no centro da nave (dentro do obstáculo; câmara no casco). Agora fica 5,5 m ao lado, virada para a nave.
+  - Som: verificado por intercetar `speechSynthesis.speak` e osciladores (o browser de testes não tem áudio) — narradora Helia pt-PT, som dos saltos, sons da UI. Volume/voz real só o Telmo confirma.
+- **Em curso no fecho:** Torre dos Clérigos mais ao centro do Porto (agente a trabalhar em `src/landmarks.ts`; por verificar).
+- **Decisões do Telmo:** Lua sem energia 2,7; Pão de Açúcar só desce com toque/Enter; Clérigos mais ao centro.
+- **Lição:** o "som" testa-se em headless intercetando as chamadas (speech + AudioContext) num `dataset` do DOM; não substitui ouvir.

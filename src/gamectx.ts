@@ -22,6 +22,8 @@ export interface GameCtx {
   /** Something the character holds in her hand, shown in the world (null = empty hands). */
   setCarried(item: THREE.Object3D | null, kind?: string): void;
   carried(): string | null;
+  /** Put what's in her hand back in the bag (not used up — still counted in the inventory). */
+  stowCarried(): void;
   /** True while she's in the car (most pedestrian situations should ignore her then). */
   isDriving(): boolean;
   /** True while the game is paused (question on screen, flying, hospital...): freeze your actors. */

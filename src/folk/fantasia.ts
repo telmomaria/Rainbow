@@ -282,10 +282,14 @@ registerFolk({
 });
 
 /**
- * I07 — Aviador: paper plane. Walking up to the plane (or tapping the pilot) = he throws it: it climbs over the
- * pavement, glides down in a big spiral with a white trail and lands beside the stage. She runs to it (contact
- * picks it up: it rides in her hand) and brings it back to him = he catches it, cheers and gives a coin.
- * (Until 2026-11-19 a tap on a tiny plane did a 1.8 s hop and nothing else — "não acontece nada".)
+ * I07 — Aviador: paper plane. SHE throws it: tapping the plane or the pilot (or Enter beside him) = he hands it
+ * to her, she swings her arm back and throws; it climbs over the pavement, glides down in a big spiral with a
+ * white trail and lands beside the stage. She runs to it (contact picks it up: it rides in her hand) and brings it
+ * back to him = he catches it, cheers and gives a coin (once every 90 s) — and she can throw it again at once.
+ * (Until 2026-11-19 a tap on a tiny plane did a 1.8 s hop and nothing else — "não acontece nada". Until
+ * 2026-11-21 only walking into his hand threw it — he threw it, not she — and the edge-triggered contact, the
+ * greeting spot catching taps on him first and the plane's spot sitting inside his body made "Queres lançar
+ * outra vez?" do nothing.)
  */
 registerFolk({
   id: 'aviador',
@@ -299,6 +303,7 @@ registerFolk({
     box(g, mat(0x74c0fc), 1.6, 0.08, 1.2, 0, 0.04, -2);
     const pilot = new Puppet(ctx, { shirt: 0x2b8a3e, pants: 0x343a40, hair: 0x5c3d2e, cap: 0x2b8a3e }, 0, -1.8);
     const plane = paperPlane();
+    plane.rotation.order = 'YXZ'; // heading first, then the nose pitch (in her hand, on the ground)
     const HAND = new THREE.Vector3(0.45, 1.25, -1.3); // stage-local, in front of his right hand
     const homePlane = (): void => {
       g.add(plane);
@@ -322,13 +327,24 @@ registerFolk({
     if (!sides.length) sides.push({ s: 1, c: new THREE.Vector2(0.6, 1.2 + R) }); // lands in front of the stage
     let side = sides[0];
 
-    let mode: 'hand' | 'fly' | 'land' | 'carry' = 'hand';
+    // hand = his · aim = passing to her + her throw (AIM_ALL s) · fly · land = on the ground · carry = she brings it back
+    let mode: 'hand' | 'aim' | 'fly' | 'land' | 'carry' = 'hand';
     let t = 0;
     let clock = 0;
     let lastThrow = -99;
     let landedFor = 0;
     const landAt = new THREE.Vector3(); // world
-    const pickPos = ctx.at(HAND.x, HAND.z); // the plane Interactable's position: moved to where it lies
+    // The plane Interactable's position. In his hand: a spot in FRONT of the stage (his hand is inside his body's
+    // keep-clear ring, she could never reach it); on the ground: where it lies.
+    const HAND_SPOT = { x: 0.4, z: 0.5 };
+    const pickPos = ctx.at(HAND_SPOT.x, HAND_SPOT.z);
+    const from = HAND.clone(); // stage-local start of the flight (her hand at the release)
+    const AIM_GIVE = 0.45; // his hand → hers
+    const AIM_BACK = 0.85; // her arm swings back over her head
+    const AIM_ALL = 1.05; // …and forward: release
+    let arm: THREE.Object3D | null = null;
+    let armX0 = 0;
+    const armTip = new THREE.Vector3();
     const FLY_UP = 1.0;
     const FLY_ALL = 4.8;
     const TURNS = 1.5; // starts on the road side of the centre, ends on the stage side (on the pavement)
@@ -340,14 +356,15 @@ registerFolk({
       const topX = c.x;
       const topZ = c.y + R;
       if (tt < FLY_UP) {
-        // quadratic bezier: his hand → up over the front → spiral entry
+        // quadratic bezier: her hand → up over the front → spiral entry
         const k = tt / FLY_UP;
         const a = 1 - k;
-        const mx = (HAND.x + topX) / 2;
+        const mx = (from.x + topX) / 2;
+        const mz = Math.max(1.5, (from.z + topZ) / 2);
         out.set(
-          a * a * HAND.x + 2 * a * k * mx + k * k * topX,
-          a * a * HAND.y + 2 * a * k * 4.8 + k * k * 4.2,
-          a * a * HAND.z + 2 * a * k * 1.5 + k * k * topZ,
+          a * a * from.x + 2 * a * k * mx + k * k * topX,
+          a * a * from.y + 2 * a * k * 4.8 + k * k * 4.2,
+          a * a * from.z + 2 * a * k * mz + k * k * topZ,
         );
         return out;
       }
@@ -358,14 +375,63 @@ registerFolk({
       return out;
     };
 
+    /** Her throwing arm (the one on her right, +X): Character keeps the model private, so read it defensively. */
+    const findArm = (): THREE.Object3D | null => {
+      const model = (ctx.player as unknown as { model?: { arms?: THREE.Object3D[] } }).model;
+      const arms = model?.arms ?? [];
+      if (!arms.length) return null;
+      const a = arms.reduce((b, c) => (c.position.x > b.position.x ? c : b));
+      // the hand = lowest point of the arm, in the shoulder pivot's frame
+      const bb = new THREE.Box3();
+      a.updateMatrixWorld(true);
+      const inv = a.matrixWorld.clone().invert();
+      const m = new THREE.Matrix4();
+      a.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+        bb.union(mesh.geometry.boundingBox!.clone().applyMatrix4(m.multiplyMatrices(inv, mesh.matrixWorld)));
+      });
+      if (bb.isEmpty()) armTip.set(0, -0.45, 0);
+      else armTip.set((bb.min.x + bb.max.x) / 2, bb.min.y + 0.04, (bb.min.z + bb.max.z) / 2);
+      return a;
+    };
+    /** World point of her hand right now (characters without arms — the unicorn — hold it in front of the chest). */
+    const herHand = (out: THREE.Vector3, k: number): THREE.Vector3 => {
+      if (arm) return arm.localToWorld(out.copy(armTip));
+      // no arm: the plane itself goes back a little and then forward
+      return ctx.player.root.localToWorld(out.set(0.25, 1.15 + k * 0.25, -0.35 + k * 0.3));
+    };
+    const restArm = (): void => {
+      if (arm) arm.rotation.x = armX0;
+      arm = null;
+    };
+
     const throwPlane = (): boolean => {
-      if (mode !== 'hand' || !ctx.free() || clock - lastThrow < 1.5) return false;
+      if (mode !== 'hand' || !ctx.free() || clock - lastThrow < 1.2) return false;
       side = sides[Math.floor(ctx.rng() * sides.length)] ?? sides[0];
-      mode = 'fly';
+      mode = 'aim';
       t = 0;
       lastThrow = clock;
-      pilot.work('reach', 0.7);
+      // she turns towards where it will fly (the top of the spiral)
+      const p = ctx.game.player;
+      const top = ctx.at(side.c.x, side.c.y + R);
+      ctx.player.heading = Math.atan2(-(top.x - p.x), -(top.z - p.z));
+      arm = findArm();
+      armX0 = arm?.rotation.x ?? 0;
+      pilot.lookAt(new THREE.Vector3(p.x, 0, p.z));
+      pilot.work('reach', AIM_GIVE + 0.2);
       ctx.scene.attach(plane);
+      tone(587, 0, 0.1, 'triangle', 0.04);
+      ctx.say(['Toma! Lança-o!']);
+      return true;
+    };
+    /** Her arm comes forward: the plane leaves her hand. */
+    const release = (): void => {
+      mode = 'fly';
+      t = 0;
+      herHand(tmp, 1);
+      from.copy(ctx.root.worldToLocal(tmp.clone()));
       const end = pathAt(FLY_ALL, tmp);
       landAt.copy(ctx.at(end.x, end.z, 0.06));
       pickPos.set(landAt.x, 0, landAt.z);
@@ -373,8 +439,8 @@ registerFolk({
       tone(660, 0, 0.12, 'triangle', 0.05);
       tone(990, 0.08, 0.22, 'sine', 0.04);
       ctx.say(['Lá vai ele!']);
-      return true;
     };
+    let armBack = 0; // after the release her arm eases back down (seconds left)
     const pickUp = (): void => {
       if (mode !== 'land' || !ctx.free()) return;
       mode = 'carry';
@@ -384,9 +450,10 @@ registerFolk({
       pilot.wave(1.2);
     };
     const backHome = (): void => {
+      if (mode === 'aim') restArm();
       mode = 'hand';
       homePlane();
-      pickPos.copy(ctx.at(HAND.x, HAND.z));
+      pickPos.copy(ctx.at(HAND_SPOT.x, HAND_SPOT.z));
     };
     const giveBack = (): void => {
       backHome();
@@ -404,15 +471,24 @@ registerFolk({
     const planeThing: Interactable = {
       object: plane,
       position: pickPos,
-      radius: 1.3,
-      // walking up to it (or tapping it): in his hand = he throws it; on the ground = she picks it up
+      get radius() {
+        return mode === 'hand' ? 2.2 : 1.3;
+      },
+      // in his hand, tapping it from where she stands hands it to her at once (further away: she walks up first);
+      // on the ground she has to go and get it
+      get reach() {
+        return mode === 'hand' ? 4 : undefined;
+      },
+      requiresClick: true, // tap / Enter (not edge-triggered: tapping again always works)
+      // in his hand = he gives it to her and she throws it; on the ground = she picks it up (contact does it too)
       interact: () => (mode === 'hand' ? throwPlane() : mode === 'land' ? (pickUp(), true) : false),
     };
     return {
+      // the click spots come BEFORE the greeting: a tap on him is matched to the first thing that owns his body
       things: [
-        greetSpot(ctx, pilot, 0, -1.8, 'Toca no meu avião de papel e ele voa!'),
-        personClick(ctx, pilot, 0, -1.8, () => (mode === 'carry' ? (giveBack(), true) : throwPlane())),
+        personClick(ctx, pilot, 0, -1.8, () => (mode === 'carry' ? (giveBack(), true) : throwPlane()), 3.3, 3.3), // > the 2.8 m hand-back ring and no tap-from-afar: she walks up, so Enter right after "Outra vez?" works
         planeThing,
+        greetSpot(ctx, pilot, 0, -1.8, 'Queres lançar o meu avião de papel? Toca nele!'),
       ],
       people: [giftable(pilot, 0, -1.8, ctx)],
       update(dt) {
@@ -421,6 +497,43 @@ registerFolk({
         if (ctx.game.isPaused()) return;
         clock += dt;
         const p = ctx.game.player;
+        if (armBack > 0 && arm) {
+          armBack = Math.max(0, armBack - dt);
+          arm.rotation.x = armX0 + (arm.rotation.x - armX0) * Math.max(0, 1 - dt * 10);
+          if (armBack === 0) restArm();
+        }
+        if (mode === 'aim') {
+          if (!ctx.free() || ctx.game.isDriving()) {
+            backHome(); // got on something / a question popped up: he keeps it
+            return;
+          }
+          t += dt;
+          const h = ctx.player.heading;
+          if (t < AIM_GIVE) {
+            // he holds it out, she reaches for it: it slides from his hand to hers
+            const k = t / AIM_GIVE;
+            if (arm) arm.rotation.x = armX0 + 1.1 * k;
+            herHand(tmp2, 0);
+            plane.position.copy(ctx.at(HAND.x, HAND.z, HAND.y)).lerp(tmp2, k * k * (3 - 2 * k));
+          } else if (t < AIM_BACK) {
+            // arm swings up and back over her head
+            const k = (t - AIM_GIVE) / (AIM_BACK - AIM_GIVE);
+            if (arm) arm.rotation.x = armX0 + 1.1 + (Math.PI + 0.45 - 1.1) * k * k * (3 - 2 * k);
+            plane.position.copy(herHand(tmp2, -k));
+          } else {
+            // …and forward, fast
+            const k = Math.min(1, (t - AIM_BACK) / (AIM_ALL - AIM_BACK));
+            if (arm) arm.rotation.x = armX0 + Math.PI + 0.45 - (Math.PI + 0.45 - 1.4) * k;
+            plane.position.copy(herHand(tmp2, k));
+          }
+          plane.rotation.set(t > AIM_GIVE ? -0.35 : 0, h + Math.PI, 0); // nose to where she looks, a bit up
+          if (t >= AIM_ALL) {
+            release();
+            armBack = 0.4;
+            ctx.player.heading = h;
+          }
+          return;
+        }
         if (mode === 'fly') {
           t += dt;
           const now = pathAt(Math.min(t, FLY_ALL), tmp);
@@ -460,6 +573,7 @@ registerFolk({
         }
       },
       dispose: () => {
+        if (arm) arm.rotation.x = armX0; // disposed mid-throw: her arm back down
         plane.removeFromParent();
         trail.clear();
       },

@@ -104,14 +104,32 @@ const FLAGS: Record<string, Draw> = {
     c.moveTo(w, 0);
     c.lineTo(0, h);
     c.stroke();
+    // red diagonals are counterchanged (offset like a pinwheel): in each quadrant the red sits 1/30 of the height
+    // off the centre line — below it in the top hoist quadrant, above it in the top fly quadrant, and so on
     c.strokeStyle = '#c8102e';
     c.lineWidth = h * 0.066;
-    c.beginPath();
-    c.moveTo(0, 0);
-    c.lineTo(w, h);
-    c.moveTo(w, 0);
-    c.lineTo(0, h);
-    c.stroke();
+    const off = h / 30;
+    for (const [qx, qy] of [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ]) {
+      const cx = qx * w;
+      const cy = qy * h;
+      const len = Math.hypot(w, h) / 2;
+      const nx = (cy - h / 2) / len; // n = (dy, -dx) for the arm d from the centre to this corner
+      const ny = -(cx - w / 2) / len;
+      c.save();
+      c.beginPath();
+      c.rect(qx * (w / 2), qy * (h / 2), w / 2, h / 2);
+      c.clip();
+      c.beginPath();
+      c.moveTo(w / 2 + nx * off, h / 2 + ny * off);
+      c.lineTo(cx + (cx - w / 2) * 0.1 + nx * off, cy + (cy - h / 2) * 0.1 + ny * off); // past the corner: no gap
+      c.stroke();
+      c.restore();
+    }
     c.restore();
     c.fillStyle = '#ffffff';
     c.fillRect(w / 2 - h * 0.17, 0, h * 0.34, h);
