@@ -4,12 +4,14 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 1234 --strictPort",
+    "dev": "vite --port 1234 --strictPort --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 1234 --strictPort",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ips": "node --env-file-if-exists=.env scripts/ips.mjs"
   },
   "dependencies": {
+    "@vercel/blob": "^2.9.0",
     "three": "^0.187.0"
   },
   "devDependencies": {

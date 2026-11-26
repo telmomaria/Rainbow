@@ -55,6 +55,9 @@ import { setCityLampClearer } from './places';
 import { Aurora } from './aurora';
 import { SnowPlay } from './snowplay';
 
+// Regista a visita (IP) na Vercel — api/visit.js. Em dev quem regista é o vite.config.js.
+if (!import.meta.env.DEV) fetch('/api/visit', { method: 'POST', keepalive: true }).catch(() => {});
+
 const WALK_SPEED = 6.5; // m/s
 /** On the Moon she walks slower, in big slow hops (Telmo 2026-11-21); martians chase at 2.6 (monsters.ts). */
 const MOON_WALK_SPEED = 3.5; // m/s
