@@ -12,6 +12,7 @@ de cidade em cidade. Ver [CONTEXT.md](CONTEXT.md) e [ROADMAP.md](ROADMAP.md).
   devem ser iguais nem ter todas as mesmas coisas. Área a dobrar: abandonada (Telmo, 2026-11-19). Sem ex-líbris ainda: Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk (ver ROADMAP).
 - **Voz:** Web Speech API (`speechSynthesis`, voz `pt-PT`). Fallback a definir se a voz pt-PT faltar no dispositivo.
 - **Persistência:** `localStorage` (progresso, moedas, roupa, posição). Sem contas, sem dados pessoais. Sem morada de início.
+- **Registo de IPs (Telmo, 2026-11-26):** `vite.config.js` escreve em `ip.txt` (data · IP · página · browser) cada abertura da página no `npm run dev`/`preview`. Só no servidor local; `ip.txt` está no .gitignore. Rever antes de divulgar o jogo.
 
 ## Tags — global
 Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in `-SKILLS_GLOBAL/SKILLS/`
