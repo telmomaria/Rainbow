@@ -16,6 +16,7 @@ Aplicar no Session End Protocol.
 | 2 | Ex-líbris para Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk | Telmo decide | "depois" |
 | 3 | Medir fps num tablet médio (espelhos, visitantes, parque, aurora) | Telmo + agent | tablet |
 | 4 | Alinhar o ROADMAP com o código (brief 2026-11-15 com ⬜ já feitos) | agent | none |
+| 5 | Rever o registo de IPs antes de divulgar o jogo | Telmo | divulgação |
 
 ---
 
@@ -50,7 +51,7 @@ Aplicar no Session End Protocol.
 
 ### 🟢 Nice-to-have
 - ⬜ Mais bancos de perguntas / dificuldade adaptativa
-- ⬜ Deploy estático (GitHub Pages)
+- ✅ Deploy estático (Vercel: https://rainbow-alpha-liard.vercel.app/, a cada push) + registo de visitas (`npm run ips`, 2026-11-26)
 - ⬜ Limites conhecidos, sem data: autocarro não usa as pontas das ruas; bilhete do concerto não fica preso à sessão; espectadores atravessam-se
 
 ---
@@ -97,6 +98,7 @@ Aplicar no Session End Protocol.
 | v1.6 | 2026-11-11 | Aeroporto e voo, ícone, Casa, 10 personagens, carro, pobre, 12 adereços |
 | v1.7 | 2026-11-11 | Cidade viva: lojas, pombos, adeptos, bar, trânsito, hospital, tempo real, gato na árvore; ecrã inicial e definições |
 | v1.8 | 2026-11-11 | Compra por clique, inventário, definições no início, dia/noite real com candeeiros |
+| v2.9 | 2026-11-26 | #SEP: registo de IPs (dev + Vercel Blob, `npm run ips`), dev com --host; deploy na Vercel registado |
 | v2.8 | 2026-11-22 | #SEP: Clérigos (vista + descer), Rio novo com Cristo, aviador, neve em Nuuk, tanque, Estátua + Hotel das Fontes, Lua (fato, ±60 m, saltos; "Continuar" corrigido), sem energia 4,7 m/s, bandeiras, matriz por cidade; Lua sem energia 2,7, Casa na Lua corrigida, Pão de Açúcar só desce com toque, Clérigos ao centro (em curso) |
 | v2.7 | 2026-11-21 | WIP terminado e testado; botão Cidade (testes); Varsóvia corrigida; parque, SPA, rei; cidades sem estádio/piscina/feira/concerto/trotinete; aurora boreal |
 | v2.6 | 2026-11-20 | #SEP: Lua (máquina do tempo), 227 perguntas, parque, lojas com provador, SPA, feira, bandeiras; WIP interrompido pelo limite da API |

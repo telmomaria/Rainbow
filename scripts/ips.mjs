@@ -25,5 +25,22 @@ do {
   cursor = page.hasMore ? page.cursor : undefined;
 } while (cursor);
 
-writeFileSync(IP_FILE, [...lines].sort().join('\n') + '\n');
-console.log(`ip.txt: ${lines.size} linhas (${lines.size - before} novas).`);
+const sorted = [...lines].sort();
+writeFileSync(IP_FILE, sorted.join('\n') + '\n');
+
+// Mostra as visitas no terminal: hora de Lisboa · IP · sítio · aparelho.
+const device = (ua) =>
+  /curl/i.test(ua) ? 'curl (teste)' :
+  /Headless|bot|crawler|spider/i.test(ua) ? 'robô' :
+  /iPad/.test(ua) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' :
+  /Windows/.test(ua) ? 'Windows' : /Mac OS/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : ua.slice(0, 30);
+const fmt = new Intl.DateTimeFormat('pt-PT', { timeZone: 'Europe/Lisbon', dateStyle: 'short', timeStyle: 'short' });
+for (const l of sorted) {
+  const p = l.split('\t');
+  const local = p[1] && /^[\d:.a-f]+$/i.test(p[1]) && (p[1].startsWith('127.') || p[1] === '::1' || p[1].startsWith('192.168.'));
+  const when = Number.isNaN(Date.parse(p[0])) ? p[0] : fmt.format(new Date(p[0]));
+  // Linhas do servidor local (vite.config.js): data · IP · página · browser. Da Vercel: data · IP · país · cidade · browser.
+  const place = p.length >= 5 ? [p[3], p[2]].filter(Boolean).join(', ') : local ? 'rede local' : '(local)';
+  console.log(`${when.padEnd(17)}  ${(p[1] ?? '').padEnd(39)}  ${place.padEnd(24)}  ${device(p.at(-1) ?? '')}`);
+}
+console.log(`\n${sorted.length} visitas (${lines.size - before} novas) — tudo em ip.txt.`);

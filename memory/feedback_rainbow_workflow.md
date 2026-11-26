@@ -47,3 +47,7 @@ um agente, dar ao outro um ficheiro novo (Rio → `landmarks-rio.ts`). Ele respo
 palavras ("sim, substitui", "4,7 m/s") — aplicar à letra e não estender a outros casos sem perguntar (ex.: 4,7 só nas cidades).
 Som em headless: intercetar `speechSynthesis.speak` e `AudioContext.createOscillator/createBufferSource` com `addInitScript`
 e gravar num `dataset` do DOM — prova que o jogo fala/toca, mas o Telmo é quem confirma volume e voz a ouvir.
+
+2026-11-26: o workspace do VS Code tem vários projetos (ex.: Bolsex); o Telmo colou um token no `.env` do Bolsex e disse
+"gravei". Verificar no disco (`grep -c VAR .env`, tamanho) e, se estiver noutro projeto, pedir-lhe para mover a linha —
+não mexer no `.env` de outro projeto. Comandos para ele correr devem mostrar o resultado no ecrã (ele não abre o ficheiro).

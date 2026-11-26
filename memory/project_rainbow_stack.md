@@ -19,3 +19,8 @@ interativos, sem custos; Google 3D Tiles foi rejeitado (faturação, malha sem c
 
 **How to apply:** não propor backend nem serviços pagos sem perguntar; qualquer fonte de tiles/geocoding tem de
 respeitar as políticas de uso do OSM (ex.: Nominatim tem limites — usar com cache ou alternativa). Ver [[project-rainbow-origins]].
+
+**Publicação (2026-11-26):** está na **Vercel** (https://rainbow-alpha-liard.vercel.app/, deploy automático a cada push
+para `main`), não no GitHub Pages como dizia o ROADMAP. Única exceção ao "sem backend": `api/visit.js` grava as visitas
+(IP) no Vercel Blob, a pedido do Telmo, para saber quem joga enquanto só 2 pais têm o link; `npm run ips` traz para o
+`ip.txt`. **Why:** jogo ainda não divulgado. **How to apply:** antes de divulgar, lembrar que são dados pessoais de crianças.

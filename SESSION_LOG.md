@@ -174,3 +174,15 @@
 - **Em curso no fecho:** Torre dos Clérigos mais ao centro do Porto (agente a trabalhar em `src/landmarks.ts`; por verificar).
 - **Decisões do Telmo:** Lua sem energia 2,7; Pão de Açúcar só desce com toque/Enter; Clérigos mais ao centro.
 - **Lição:** o "som" testa-se em headless intercetando as chamadas (speech + AudioContext) num `dataset` do DOM; não substitui ouvir.
+
+## 2026-11-26 — registo de IPs (#SS → #SEP)
+
+- **Abertura:** o commit + push pendente já estava feito (`637812e`); o CONTEXT ainda o dava como pendente.
+- **Pedido do Telmo:** guardar num `ip.txt` os IPs de quem joga ("para saber quem joga"; o jogo ainda não está divulgado, por isso a privacidade não se coloca, disse ele).
+- **Feito e testado:**
+  - `vite.config.js`: middleware no dev/preview que escreve no `ip.txt` cada abertura de página (só HTML, não cada ficheiro). Commit `eba7653`.
+  - O jogo afinal está publicado na **Vercel** (https://rainbow-alpha-liard.vercel.app/, deploy a partir do GitHub), não no GitHub Pages. `api/visit.js` (função Node) grava um blob **privado** por visita em `visitas/` (data · IP · país · cidade · browser); `src/main.ts` chama-a só fora do dev; `scripts/ips.mjs` (`npm run ips`) junta tudo no `ip.txt` e mostra no terminal. `npm run dev` com `--host`. Commit `209289f`.
+  - Testado em produção: deploy em ~30 s, função responde 204, `npm run ips` trouxe 3 visitas (o meu curl + 2 robôs da Vercel em San Jose).
+- **Decisões do Telmo:** registar IPs também na versão publicada; dev aberto à rede.
+- **Lições:** (1) perguntar onde está publicado antes de assumir — o ROADMAP dizia GitHub Pages; (2) o workspace tem vários projetos e o token foi parar ao `.env` do Bolsex — verificar o ficheiro no disco (tamanho/`grep -c`) em vez de confiar em "gravei"; (3) não mexer no `.env` de outro projeto: pedir ao Telmo para mover a linha; (4) um comando para o Telmo deve mostrar o resultado no ecrã, não só escrever num ficheiro.
+- `.tmp/`: só capturas/scripts de QA, nada a promover. Passos LINEAGE/bootstrap N/A.
