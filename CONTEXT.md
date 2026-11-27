@@ -1,6 +1,6 @@
 # CONTEXT — Rainbow
 
-> Substituído a 2026-11-26 (#SEP). Uma só janela: sem LINEAGE.
+> Substituído a 2026-11-27 (#SEP). Uma só janela: sem LINEAGE.
 > Ler com [ROADMAP.md](ROADMAP.md) · [CLAUDE.md](CLAUDE.md) · [memory/MEMORY.md](memory/MEMORY.md).
 
 ## O que é
@@ -19,8 +19,9 @@ Porto → … → Nuuk → Estados Unidos → Lua. Fim: máquina do tempo na Lua
   `npm run ips` traz tudo para `ip.txt` (no .gitignore) e mostra no terminal (hora de Lisboa · IP · cidade · aparelho).
   Em dev, `vite.config.js` escreve no mesmo `ip.txt`. As linhas "robô" de San Jose são a Vercel a abrir o site após deploy.
 
-## What works (HEAD `209289f` = `origin/main`)
+## What works (HEAD = `origin/main`, commit de 2026-11-27)
 
+- **2026-11-27:** personagens renomeadas — Lia → **Emma**, Leonor → **Íris**, Rita → **Maria** (só `name` em `src/characters.ts`; os `id` e os saves ficam iguais). Visto no ecrã de escolha; a pronúncia de "Emma" na voz pt-PT não foi ouvida.
 - **2026-11-26:** registo de IPs (acima); `npm run dev` agora com `--host` (aberto à rede de casa, ex.: tablet).
 - **Lote de 2026-11-21/22 (commit `637812e`, testado no browser):** Clérigos (vista + descer), Rio (`src/landmarks-rio.ts`:
   Urca, Pão de Açúcar, bondinho, Cristo), aviador, Nuuk com neve (`src/snowplay.ts`), tanque em Moscovo, Estátua +

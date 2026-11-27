@@ -186,3 +186,10 @@
 - **Decisões do Telmo:** registar IPs também na versão publicada; dev aberto à rede.
 - **Lições:** (1) perguntar onde está publicado antes de assumir — o ROADMAP dizia GitHub Pages; (2) o workspace tem vários projetos e o token foi parar ao `.env` do Bolsex — verificar o ficheiro no disco (tamanho/`grep -c`) em vez de confiar em "gravei"; (3) não mexer no `.env` de outro projeto: pedir ao Telmo para mover a linha; (4) um comando para o Telmo deve mostrar o resultado no ecrã, não só escrever num ficheiro.
 - `.tmp/`: só capturas/scripts de QA, nada a promover. Passos LINEAGE/bootstrap N/A.
+
+## 2026-11-27 — nomes das personagens (#SS → #SEP)
+
+- **Pedido do Telmo:** Lia → Emma, Rita → Maria, Leonor → Íris.
+- **Feito e testado:** só o campo `name` em `src/characters.ts` (os `id` — princesa, guerreira, voleibolista — ficam, por isso os saves continuam válidos); CLAUDE.md e ROADMAP atualizados. Ecrã de escolha visto no browser (`.tmp/qa-nomes.mjs`, `.tmp/nomes.png`), 0 erros na consola. A narradora lê o mesmo `name`.
+- **Não verificado:** como soa "Emma" na voz pt-PT (o browser de testes não tem som).
+- **Lição:** o QA local também escreve no `ip.txt` (HeadlessChrome em `::1`) — apagar essa linha depois do teste.

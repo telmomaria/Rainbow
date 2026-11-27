@@ -826,14 +826,14 @@ function buildAlice(): CharacterModel {
 // ---------------------------------------------------------------------------
 
 export const CHARACTERS: CharacterDef[] = [
-  { id: 'princesa', name: 'Lia', label: 'Princesa', build: buildPrincesa },
+  { id: 'princesa', name: 'Emma', label: 'Princesa', build: buildPrincesa },
   { id: 'unicornio', name: 'Estrela', label: 'Unicórnio', build: buildUnicornio },
   { id: 'cantora-bia', name: 'Bia', label: 'Cantora K-pop', build: buildBia },
   { id: 'cantora-nina', name: 'Nina', label: 'Cantora K-pop', build: buildNina },
   { id: 'cantora-ines', name: 'Inês', label: 'Cantora K-pop', build: buildInes },
   { id: 'extraterrestre', name: 'Zuca', label: 'Extraterrestre', build: buildAlien },
-  { id: 'guerreira', name: 'Leonor', label: 'Guerreira', build: buildGuerreira },
-  { id: 'voleibolista', name: 'Rita', label: 'Voleibolista', build: buildVoleibol },
+  { id: 'guerreira', name: 'Íris', label: 'Guerreira', build: buildGuerreira },
+  { id: 'voleibolista', name: 'Maria', label: 'Voleibolista', build: buildVoleibol },
   { id: 'bailarina', name: 'Clara', label: 'Bailarina', build: buildBailarina },
   { id: 'karateca', name: 'Tomás', label: 'Karateca', build: buildKarateca },
   { id: 'astronauta', name: 'Vega', label: 'Astronauta', build: buildAstronauta },
