@@ -36,7 +36,7 @@ Aplicar no Session End Protocol.
   - 🔄 Cidades com ex-líbris (2026-11-17): Porto Clérigos · Roma Trevi · Londres relógio+roda · Paris torre · Varsóvia×6 · Pequim muralha (~128 m, 7 torres) · Tóquio templo · Rio teleférico · Moscovo São Basílio · EUA×4. **Sem ex-líbris:** Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk. Área a dobrar: por confirmar (Lua / Nuuk / não). Traçados de rua ainda partilhados
   - 🔄 **Final do jogo (código existe):** Nuuk → EUA (Estátua, Ponte, Parque Arco-Íris, Hotel das Fontes; foguetão Cabo Canaveral) → Lua (altar + joias). Joias: as que tem + 10 (2026-11-19). Área a dobrar: ignorada. Morada/arranque: cancelada
   - ⬜ Casa mais alta e maior, vista também com a câmara normal (não só de cima)
-- ✅ Seleção de personagem: 12 originais (Emma · Estrela · Bia, Nina, Inês · Zuca · Íris · Maria · Clara · Tomás · Vega · Alice)
+- ✅ Seleção de personagem: 12 originais (Emma · Estrela · Bia, Valentina, Inês · Zuca · Íris · Maria · Clara · Tomás · Vega · Alice)
 - 🔄 Personagens-NPC com perguntas — 227 perguntas (2026-11-19: ~65 por disciplina + 2–3 por cidade; polícia de Londres com 8 em inglês), voz, 3 opções; errar → volta em ~3 min sem revelar; falta voz pt-PT garantida
 - ✅ Bichos maus: spawn em função das moedas, falam, atrapalham, batem (perde moedas)
 - 🔄 Subida de nível aos 100 moedas → próxima cidade — viagem feita; 16 níveis até à Lua; cidades ainda partilham grelha (faltam traçados próprios). Ordem: Porto → … → Nuuk → Estados Unidos → Lua
@@ -98,7 +98,7 @@ Aplicar no Session End Protocol.
 | v1.6 | 2026-11-11 | Aeroporto e voo, ícone, Casa, 10 personagens, carro, pobre, 12 adereços |
 | v1.7 | 2026-11-11 | Cidade viva: lojas, pombos, adeptos, bar, trânsito, hospital, tempo real, gato na árvore; ecrã inicial e definições |
 | v1.8 | 2026-11-11 | Compra por clique, inventário, definições no início, dia/noite real com candeeiros |
-| v3.0 | 2026-11-27 | #SEP: personagens renomeadas (Emma, Íris, Maria) |
+| v3.0 | 2026-11-27 | #SEP: personagens renomeadas (Emma, Íris, Maria, Valentina) |
 | v2.9 | 2026-11-26 | #SEP: registo de IPs (dev + Vercel Blob, `npm run ips`), dev com --host; deploy na Vercel registado |
 | v2.8 | 2026-11-22 | #SEP: Clérigos (vista + descer), Rio novo com Cristo, aviador, neve em Nuuk, tanque, Estátua + Hotel das Fontes, Lua (fato, ±60 m, saltos; "Continuar" corrigido), sem energia 4,7 m/s, bandeiras, matriz por cidade; Lua sem energia 2,7, Casa na Lua corrigida, Pão de Açúcar só desce com toque, Clérigos ao centro (em curso) |
 | v2.7 | 2026-11-21 | WIP terminado e testado; botão Cidade (testes); Varsóvia corrigida; parque, SPA, rei; cidades sem estádio/piscina/feira/concerto/trotinete; aurora boreal |

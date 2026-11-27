@@ -46,7 +46,7 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
 - **Viagem:** 100 moedas → aviso falado + bússola ✈️ → ir ao aeroporto → tocar nas escadas do avião → cena animada
   (sobe, porta fecha, descola, nuvens, aterra na cidade seguinte, sai). Gastam-se 100 moedas, o resto passa. Sem
   moedas, o avião diz quantas faltam. Troca de cidade sem recarregar a página. Depois de Nuuk: EUA (foguetão em Cabo Canaveral) → Lua → máquina do tempo → ecrã final "Rainbow 2".
-- **Personagens (src/characters.ts):** Emma (princesa) · Estrela (unicórnio) · Bia, Nina, Inês (cantoras K-pop) ·
+- **Personagens (src/characters.ts):** Emma (princesa) · Estrela (unicórnio) · Bia, Valentina, Inês (cantoras K-pop) ·
   Zuca (extraterrestre) · Íris (guerreira) · Maria (voleibolista) · Clara (bailarina) · Tomás (karateca) ·
   Vega (astronauta, sem logótipos de agências) · Alice (País das Maravilhas — livro de 1865 / cores de Tenniel 1890,
   domínio público: vestido amarelo, avental branco, laço azul; nunca o visual da Disney).

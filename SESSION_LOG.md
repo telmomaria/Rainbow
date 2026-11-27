@@ -193,3 +193,8 @@
 - **Feito e testado:** só o campo `name` em `src/characters.ts` (os `id` — princesa, guerreira, voleibolista — ficam, por isso os saves continuam válidos); CLAUDE.md e ROADMAP atualizados. Ecrã de escolha visto no browser (`.tmp/qa-nomes.mjs`, `.tmp/nomes.png`), 0 erros na consola. A narradora lê o mesmo `name`.
 - **Não verificado:** como soa "Emma" na voz pt-PT (o browser de testes não tem som).
 - **Lição:** o QA local também escreve no `ip.txt` (HeadlessChrome em `::1`) — apagar essa linha depois do teste.
+
+## 2026-11-27 (2.ª janela) — Nina → Valentina (#SS → #SEP)
+
+- **Feito e testado:** `name` da `cantora-nina` passa a Valentina (`id` igual, saves válidos); CLAUDE.md e ROADMAP atualizados. Ecrã de escolha visto no browser a 1100 px: o nome cabe no cartão; 0 erros.
+- **Não verificado:** cartão num tablet ao alto (Valentina é o nome mais comprido); pronúncia na voz pt-PT.

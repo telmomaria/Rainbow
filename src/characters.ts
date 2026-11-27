@@ -423,7 +423,7 @@ function buildBia(): CharacterModel {
   return b;
 }
 
-/** Nina: aqua high ponytail, glowing ribbon wand. */
+/** Valentina: aqua high ponytail, glowing ribbon wand. */
 function buildNina(): CharacterModel {
   const s = { hair: 0x2ad4d4, neon: 0x16b8ff, skin: 0xf1c7a3 };
   const b = idolBase(s);
@@ -829,7 +829,7 @@ export const CHARACTERS: CharacterDef[] = [
   { id: 'princesa', name: 'Emma', label: 'Princesa', build: buildPrincesa },
   { id: 'unicornio', name: 'Estrela', label: 'Unicórnio', build: buildUnicornio },
   { id: 'cantora-bia', name: 'Bia', label: 'Cantora K-pop', build: buildBia },
-  { id: 'cantora-nina', name: 'Nina', label: 'Cantora K-pop', build: buildNina },
+  { id: 'cantora-nina', name: 'Valentina', label: 'Cantora K-pop', build: buildNina },
   { id: 'cantora-ines', name: 'Inês', label: 'Cantora K-pop', build: buildInes },
   { id: 'extraterrestre', name: 'Zuca', label: 'Extraterrestre', build: buildAlien },
   { id: 'guerreira', name: 'Íris', label: 'Guerreira', build: buildGuerreira },

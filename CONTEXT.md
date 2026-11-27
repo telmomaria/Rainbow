@@ -21,7 +21,7 @@ Porto → … → Nuuk → Estados Unidos → Lua. Fim: máquina do tempo na Lua
 
 ## What works (HEAD = `origin/main`, commit de 2026-11-27)
 
-- **2026-11-27:** personagens renomeadas — Lia → **Emma**, Leonor → **Íris**, Rita → **Maria** (só `name` em `src/characters.ts`; os `id` e os saves ficam iguais). Visto no ecrã de escolha; a pronúncia de "Emma" na voz pt-PT não foi ouvida.
+- **2026-11-27:** personagens renomeadas — Lia → **Emma**, Leonor → **Íris**, Rita → **Maria**, Nina → **Valentina** (só `name` em `src/characters.ts`; os `id` e os saves ficam iguais). Visto no ecrã de escolha; a pronúncia de "Emma" na voz pt-PT não foi ouvida.
 - **2026-11-26:** registo de IPs (acima); `npm run dev` agora com `--host` (aberto à rede de casa, ex.: tablet).
 - **Lote de 2026-11-21/22 (commit `637812e`, testado no browser):** Clérigos (vista + descer), Rio (`src/landmarks-rio.ts`:
   Urca, Pão de Açúcar, bondinho, Cristo), aviador, Nuuk com neve (`src/snowplay.ts`), tanque em Moscovo, Estátua +
