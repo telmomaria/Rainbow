@@ -4,6 +4,7 @@ import type { GameCtx } from './gamectx';
 import { AIRPORT_ZONE } from './airport';
 import { tone } from './audio';
 import { feel } from './bus';
+import { onReservedGround, reserveGround } from './places';
 import { ROADS, SPAWN, onRoad, type Interactable, type Obstacle } from './world';
 
 /**
@@ -198,6 +199,11 @@ type HatKind = 'chef' | 'cap' | 'beret' | 'bow';
  */
 /** Builders for the items sold (filled by createShops), so the game can put a bag item in her hand. */
 const itemBuilders = new Map<string, () => THREE.Group>();
+/** Inside of the walk-in bakery of the current city (no coins / NPCs / monsters spawn there). */
+let lastBakeryZone: Obstacle | null = null;
+export function bakeryZone(): Obstacle | null {
+  return lastBakeryZone;
+}
 export function buildItem(kind: string): THREE.Group | null {
   return itemBuilders.get(kind)?.() ?? itemDef(kind)?.build() ?? null;
 }
@@ -208,7 +214,10 @@ export function createShops(
   rng: () => number,
   ctx: GameCtx,
   clearLamps?: LampClearer,
+  /** Things already in the city (xylophone tiles, swings…): the walk-in bakery never sits on top of them. */
+  placed: readonly { position: THREE.Vector3 }[] = [],
 ): Interactable[] {
+  lastBakeryZone = null;
   /* ---- shared materials / geometries ---- */
   const mats = new Map<string, THREE.MeshStandardMaterial>();
   const mat = (color: number, emissive = 0): THREE.MeshStandardMaterial => {
@@ -281,7 +290,14 @@ export function createShops(
    * A spot beside a road: the footprint (local x ∈ ±hw, z ∈ [back, front]) has its front at FRONT_OFF
    * from the road centre line, facing the road. `accept` filters by the customer's standing point.
    */
-  const roadSpot = (hw: number, back: number, front: number, accept: (x: number, z: number) => boolean, margin: number): Spot | null => {
+  const roadSpot = (
+    hw: number,
+    back: number,
+    front: number,
+    accept: (x: number, z: number) => boolean,
+    margin: number,
+    keepOffChalk = false,
+  ): Spot | null => {
     const nRoads = ROADS.xs.length + ROADS.zs.length;
     for (let i = 0; i < 500; i++) {
       const ri = Math.floor(rng() * nRoads);
@@ -299,6 +315,9 @@ export function createShops(
       const apron = footprint(spot, -hw - 0.3, hw + 0.3, front, front + DOOR_APRON);
       const check = boxFree(body, margin, apron);
       if (!check.ok) continue;
+      // walk-in bakery: never over walkable things (hopscotch chalk, floor xylophone…), nor with its door on them
+      if (keepOffChalk && (onReservedGround(obstacles, body) || onReservedGround(obstacles, apron))) continue;
+      if (keepOffChalk && placed.some((p) => circleHitsBox(p.position.x, p.position.z, 1.5, body) || circleHitsBox(p.position.x, p.position.z, 1.0, apron))) continue;
       if (!pointFree(stand.x, stand.z, 1.2)) continue;
       if (check.postsInApron && clearLamps) clearLamps(apron, obstacles);
       return spot;
@@ -309,9 +328,15 @@ export function createShops(
    * Tries the `accepts` filters in order of preference with full walking room around the shop, then again
    * with less room (busy maps still get every shop, but never glued to a building if it can be helped).
    */
-  const bestRoadSpot = (hw: number, back: number, front: number, accepts: ((x: number, z: number) => boolean)[]): Spot | null => {
+  const bestRoadSpot = (
+    hw: number,
+    back: number,
+    front: number,
+    accepts: ((x: number, z: number) => boolean)[],
+    keepOffChalk = false,
+  ): Spot | null => {
     for (const m of ROOM_STEPS) for (const ok of accepts) {
-      const s = roadSpot(hw, back, front, ok, m);
+      const s = roadSpot(hw, back, front, ok, m, keepOffChalk);
       if (s) return s;
     }
     return null;
@@ -648,16 +673,19 @@ export function createShops(
   const out: Interactable[] = [];
 
   /* ================================================================ Padaria */
-  // A real little bakery a child spots from the street: cream walls, wooden pillars, an orange-and-cream
-  // scalloped awning, a glass display counter full of breads / croissants / cakes, the baker in a tall
-  // white hat right behind it, loaf shelves and a glowing bread oven at the back, and a big croissant +
-  // baguette sign on the roof (no letters). She buys at the counter from outside (walk-up).
-  const BK = { hw: 3.2, back: -2.4, front: 1.9 };
+  // A small real bakery she walks into (like the try-on shops, tryon.ts): cream walls, a terracotta roof
+  // with a big croissant + baguette sign (no letters), a wooden door standing open in the middle of the
+  // front and a shop window full of bread on each side of it. Inside: checker tiles, bread racks on the
+  // side walls, the glass counter full of pastries across the back with the baker (tall white hat) behind
+  // it, loaf shelves and a glowing oven behind him. She buys INSIDE: tap the counter / baker / bread, or
+  // Enter next to the counter. The roof and everything above the door hide while she is inside.
+  const BK = { hw: 3.4, back: -6.0, front: 0 };
+  const DOOR_HW = 1.0; // doorway half-width (m), in the middle of the front wall
   const bakerySpot = bestRoadSpot(BK.hw, BK.back, BK.front, [
     (x, z) => quadOf(x, z) === quads[0] && spawnDist(x, z) > 40 && spawnDist(x, z) < 110,
     (x, z) => spawnDist(x, z) > 30 && spawnDist(x, z) < 130,
     (x, z) => spawnDist(x, z) > 15,
-  ]);
+  ], true);
   let bakeryStand: THREE.Vector3 | null = null;
   if (bakerySpot) {
     const s = bakerySpot;
@@ -665,8 +693,16 @@ export function createShops(
     g.position.set(s.x, 0, s.z);
     g.rotation.y = s.rot;
     scene.add(g);
+    // the shop itself (counter, baker, breads): what a tap on "the bakery" means → walk in and buy
+    const shop = new THREE.Group();
+    g.add(shop);
+    // everything above the door (front band, roof, sign, chimney): hidden while she is inside
+    const top = new THREE.Group();
+    g.add(top);
     const { hw, back, front } = BK;
     const H = 3.3; // wall height
+    const FH = 2.4; // door / shop-window top: above it is the front band (part of `top`)
+    const T = 0.25; // wall thickness
     const W = hw * 2;
     const D = front - back;
     const midZ = (back + front) / 2;
@@ -675,35 +711,65 @@ export function createShops(
     const woodLite = mat(0xc08552);
     const crust = mat(0xd98e3f);
     const golden = mat(0xe8a646);
-    // floor (warm tiles) + walls (back, sides) with wooden skirting and corner pillars
-    mk(box(W - 0.3, 0.05, D - 0.3), mat(0xf3d9b1), g, 0, 0.025, midZ).receiveShadow = true;
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0xdff3ff, transparent: true, opacity: 0.22, roughness: 0.1, depthWrite: false });
+    const solid = (x0: number, x1: number, z0: number, z1: number, height?: number): void => {
+      const o = footprint(s, x0, x1, z0, z1);
+      if (height !== undefined) o.height = height;
+      obstacles.push(o);
+    };
+
+    /* --- floor (warm tiles) --- */
+    mk(box(W, 0.06, D), mat(0xf3d9b1), g, 0, 0.03, midZ).receiveShadow = true;
     for (let ix = 0; ix < 5; ix++)
-      for (let iz = 0; iz < 3; iz++)
-        if ((ix + iz) % 2 === 0) mk(box(0.95, 0.01, 0.95), mat(0xe6b980), g, -2.3 + ix * 1.15, 0.055, back + 0.75 + iz * 1.0);
-    mk(box(W, H, 0.3), wall, g, 0, H / 2, back + 0.15).receiveShadow = true;
+      for (let iz = 0; iz < 4; iz++)
+        if ((ix + iz) % 2 === 0) mk(box(0.95, 0.012, 0.95), mat(0xe6b980), g, -2.4 + ix * 1.2, 0.066, -0.9 - iz * 1.15).castShadow = false;
+    mk(box(1.5, 0.03, 0.75), mat(0xa05a2c), g, 0, 0.015, front + 0.5).castShadow = false; // doormat outside
+
+    /* --- walls: back, sides (with wooden skirting and corner pillars) --- */
+    mk(box(W, H, T), wall, g, 0, H / 2, back + T / 2).receiveShadow = true;
+    mk(box(W, 0.3, T + 0.04), wood, g, 0, 0.15, back + T / 2);
     for (const sx of [-1, 1]) {
-      mk(box(0.3, H, D), wall, g, sx * (hw - 0.15), H / 2, midZ).receiveShadow = true;
-      mk(box(0.42, H + 0.05, 0.42), wood, g, sx * (hw - 0.15), H / 2, front - 0.21); // front pillars
-      mk(box(0.34, 0.3, D), wood, g, sx * (hw - 0.15), 0.15, midZ); // skirting
+      mk(box(T, H, D), wall, g, sx * (hw - T / 2), H / 2, midZ).receiveShadow = true;
+      mk(box(T + 0.04, 0.3, D), wood, g, sx * (hw - T / 2), 0.15, midZ); // skirting
+      mk(box(0.42, H + 0.05, 0.42), wood, g, sx * (hw - 0.15), H / 2, front - 0.2); // front corner pillars
     }
-    // flat roof with a wooden trim (sits on the walls)
-    mk(box(W + 0.4, 0.25, D + 0.3), mat(0xc0582b), g, 0, H + 0.125, midZ);
-    mk(box(W + 0.5, 0.12, D + 0.4), wood, g, 0, H + 0.31, midZ);
-    mk(box(W, 0.4, 0.2), wood, g, 0, H - 0.2, front - 0.1); // lintel over the shop front
-    // scalloped awning, orange & cream stripes, sloping out over the walk-up spot (high: the baker stays visible)
-    const n = 8;
-    const sw = (W + 0.4) / n;
-    const awnCol = [0xf08c3a, 0xfff3d6];
-    // a thin half-disc (solid, lit on both faces) hanging from the awning's edge
-    const scallop = geo('bkScallop', () => new THREE.CylinderGeometry(1, 1, 0.05, 12, 1, false, -Math.PI / 2, Math.PI));
-    for (let i = 0; i < n; i++) {
-      const x = -hw - 0.2 + sw * (i + 0.5);
-      const st = mk(box(sw, 0.06, 1.0), mat(awnCol[i % 2]), g, x, H - 0.2, front + 0.42);
-      st.rotation.x = 0.36;
-      const sc = mk(scallop, mat(awnCol[i % 2]), g, x, H - 0.38, front + 0.9);
-      sc.rotation.x = Math.PI / 2;
-      sc.scale.set(sw / 2, 1, sw / 2.6);
+
+    /* --- front wall: a shop window each side of the open doorway --- */
+    const winW = hw - DOOR_HW - 0.7; // glass width
+    for (const sx of [-1, 1]) {
+      const cx = sx * (hw + DOOR_HW) / 2;
+      mk(box(hw - DOOR_HW, 0.8, T), wall, g, cx, 0.4, front - T / 2); // under the window
+      mk(box(0.35, FH - 0.8, T), wall, g, sx * (DOOR_HW + 0.175), 0.8 + (FH - 0.8) / 2, front - T / 2); // beside the door
+      mk(box(0.35, FH - 0.8, T), wall, g, sx * (hw - 0.175), 0.8 + (FH - 0.8) / 2, front - T / 2); // outer
+      mk(box(winW, FH - 0.8, 0.04), glassMat, g, cx, 0.8 + (FH - 0.8) / 2, front - T / 2).castShadow = false;
+      mk(box(winW + 0.2, 0.08, 0.36), wood, g, cx, 0.84, front - 0.1); // window sill
+      mk(box(0.1, FH, T + 0.1), wood, g, sx * (DOOR_HW + 0.05), FH / 2, front - T / 2); // door jambs
+      // window display inside: a wooden ledge with loaves, baguettes and croissants (seen from the street)
+      mk(box(winW + 0.2, 0.06, 0.45), woodLite, shop, cx, 0.86, front - T - 0.22);
     }
+    // the door, standing wide open inwards against the left jamb (wood, a little window, a brass knob)
+    const door = new THREE.Group();
+    door.position.set(-DOOR_HW - 0.05, 0, front - T);
+    g.add(door);
+    mk(box(0.06, FH - 0.08, 0.9), mat(0x7a3f1c), door, 0, (FH - 0.08) / 2, -0.45);
+    mk(box(0.07, 0.6, 0.5), mat(0xbfe3f5), door, 0, 1.6, -0.5);
+    ball(door, 0xffc533, 0.04, 0.04, 0.04, 0.06, 1.05, -0.8);
+    // above the door / windows: the front band, lintel and a little bread-shaped sign (all in `top`)
+    mk(box(W, H - FH, T), wall, top, 0, (FH + H) / 2, front - T / 2);
+    mk(box(DOOR_HW * 2 + 0.3, 0.14, T + 0.12), wood, top, 0, FH + 0.07, front - T / 2); // lintel
+    for (const sx of [-1, 1]) mk(box(hw - DOOR_HW - 0.5, 0.1, T + 0.1), wood, top, sx * (hw + DOOR_HW) / 2, FH + 0.05, front - T / 2);
+
+    // solids: walls, the two front pieces (with the window ledges), the open door leaf
+    solid(-hw, hw, back, back + T);
+    solid(-hw, -hw + T, back, front);
+    solid(hw - T, hw, back, front);
+    solid(-hw, -DOOR_HW, front - T - 0.45, front);
+    solid(DOOR_HW, hw, front - T - 0.45, front);
+    solid(-DOOR_HW - 0.1, -DOOR_HW, front - T - 0.95, front - T - 0.45);
+
+    /* --- roof (sits on the walls) --- */
+    mk(box(W + 0.4, 0.25, D + 0.3), mat(0xc0582b), top, 0, H + 0.125, midZ);
+    mk(box(W + 0.5, 0.12, D + 0.4), wood, top, 0, H + 0.31, midZ);
 
     /* --- pastries (little builders) --- */
     const croissant = (p: THREE.Object3D, x: number, y: number, z: number, sc = 1, ry = 0): void => {
@@ -724,6 +790,9 @@ export function createShops(
       mk(sphere, crust, p, x, y + 0.07 * sc, z).scale.set(0.2 * sc, 0.12 * sc, 0.17 * sc);
       for (const dx of [-0.07, 0.07]) mk(box(0.02 * sc, 0.012, 0.18 * sc), mat(0xf6d6a0), p, x + dx * sc, y + 0.18 * sc, z).rotation.y = 0.4;
     };
+    const baguette = (p: THREE.Object3D, x: number, y: number, z: number, ry = 0.15): void => {
+      ball(p, 0xe9b872, 0.34, 0.1, 0.11, x, y + 0.09, z).rotation.y = ry;
+    };
     const cake = (p: THREE.Object3D, x: number, y: number, z: number, icing: number): void => {
       mk(cyl(0.17, 0.17, 0.14, 18), mat(0xf6d6a0), p, x, y + 0.07, z);
       mk(cyl(0.175, 0.175, 0.05, 18), mat(icing), p, x, y + 0.16, z);
@@ -741,60 +810,88 @@ export function createShops(
       ball(p, 0x6b3a12, 0.02, 0.006, 0.02, x + 0.015, y + 0.06, z - 0.01);
     };
 
-    /* --- glass display counter across the front (walk-up) --- */
-    const cz = front - 0.4; // counter centre line
-    const CW = W - 0.9;
-    mk(box(CW, 0.7, 0.7), woodLite, g, 0, 0.35, cz); // wooden base
-    mk(box(CW + 0.04, 0.06, 0.74), wood, g, 0, 0.72, cz); // display floor
-    const glassMat = new THREE.MeshStandardMaterial({ color: 0xdff3ff, transparent: true, opacity: 0.22, roughness: 0.1, depthWrite: false });
-    mk(box(CW, 0.5, 0.03), glassMat, g, 0, 0.99, front - 0.06).castShadow = false;
-    for (const sx of [-1, 1]) mk(box(0.03, 0.5, 0.7), glassMat, g, sx * (CW / 2), 0.99, cz).castShadow = false;
-    mk(box(CW + 0.1, 0.07, 0.8), mat(0xfff3d6), g, 0, 1.27, cz); // counter top (coins land here)
+    // shop-window displays (both sides of the door)
+    for (const sx of [-1, 1]) {
+      const cx = sx * (hw + DOOR_HW) / 2;
+      const wz = front - T - 0.22;
+      roundLoaf(shop, cx - 0.5, 0.89, wz, 1.1);
+      baguette(shop, cx + 0.05, 0.86, wz, 0.25);
+      croissant(shop, cx + 0.55, 0.89, wz - 0.06, 1.1, 0.3);
+    }
+
+    /* --- bread racks on the side walls (customer side) --- */
+    const RK = { z0: -3.0, z1: -1.3, d: 0.55 };
+    for (const sx of [-1, 1]) {
+      const rx = sx * (hw - T - RK.d / 2);
+      const rz = (RK.z0 + RK.z1) / 2;
+      const rl = RK.z1 - RK.z0;
+      for (const ez of [RK.z0 + 0.03, RK.z1 - 0.03]) mk(box(RK.d, 1.75, 0.06), wood, shop, rx, 0.875, ez);
+      [0.35, 0.95, 1.55].forEach((y, k) => {
+        mk(box(RK.d, 0.05, rl), woodLite, shop, rx, y, rz);
+        if ((k + (sx > 0 ? 1 : 0)) % 2) {
+          baguette(shop, rx, y + 0.02, rz - 0.4, Math.PI / 2 + 0.1);
+          baguette(shop, rx, y + 0.02, rz + 0.4, Math.PI / 2 - 0.1);
+        } else {
+          roundLoaf(shop, rx, y + 0.025, rz - 0.45, 1.1);
+          roundLoaf(shop, rx, y + 0.025, rz + 0.45, 1.1);
+        }
+      });
+      solid(sx < 0 ? -hw : hw - T - RK.d - 0.05, sx < 0 ? -hw + T + RK.d + 0.05 : hw, RK.z0 - 0.05, RK.z1 + 0.05, 1.8);
+    }
+
+    /* --- glass display counter across the back, wall to wall (the baker is behind it) --- */
+    const cz = -3.7; // counter centre line
+    const CW = W - 2 * T;
+    mk(box(CW, 0.7, 0.7), woodLite, shop, 0, 0.35, cz); // wooden base
+    mk(box(CW, 0.06, 0.74), wood, shop, 0, 0.72, cz); // display floor
+    mk(box(CW, 0.5, 0.03), glassMat, shop, 0, 0.99, cz + 0.34).castShadow = false;
+    mk(box(CW + 0.04, 0.07, 0.8), mat(0xfff3d6), shop, 0, 1.27, cz); // counter top (coins land here)
+    solid(-hw, hw, cz - 0.4, cz + 0.42, 1.35);
     // pastries inside the glass
-    const cols = 9;
+    const cols = 11;
     for (let i = 0; i < cols; i++) {
       const x = -CW / 2 + 0.35 + i * ((CW - 0.7) / (cols - 1));
       const kind = i % 4;
-      if (kind === 0) croissant(g, x, 0.75, cz + 0.12, 1, 0.3);
-      else if (kind === 1) cake(g, x, 0.75, cz + 0.05, i % 8 === 1 ? 0xff8fab : 0x8d5a3b);
-      else if (kind === 2) for (const dz of [-0.1, 0.12]) nata(g, x + (dz > 0 ? 0.08 : -0.05), 0.75, cz + dz);
-      else donut(g, x, 0.75, cz + 0.08, i % 8 === 3 ? 0xff8fab : 0xffffff);
+      if (kind === 0) croissant(shop, x, 0.75, cz + 0.12, 1, 0.3);
+      else if (kind === 1) cake(shop, x, 0.75, cz + 0.05, i % 8 === 1 ? 0xff8fab : 0x8d5a3b);
+      else if (kind === 2) for (const dz of [-0.1, 0.12]) nata(shop, x + (dz > 0 ? 0.08 : -0.05), 0.75, cz + dz);
+      else donut(shop, x, 0.75, cz + 0.08, i % 8 === 3 ? 0xff8fab : 0xffffff);
     }
     // on top of the counter: a basket of standing baguettes and a tray of croissants (clear of the coin spot)
-    mk(cyl(0.3, 0.24, 0.26, 14), mat(0xa0522d), g, -CW / 2 + 0.45, 1.43, cz);
+    mk(cyl(0.3, 0.24, 0.26, 14), mat(0xa0522d), shop, -1.6, 1.43, cz);
     for (const [dx, tilt] of [[-0.1, 0.25], [0.05, -0.15], [0.12, 0.35]] as const) {
-      const b = ball(g, 0xe9b872, 0.06, 0.4, 0.06, -CW / 2 + 0.45 + dx, 1.75, cz + dx * 0.5);
+      const b = ball(shop, 0xe9b872, 0.06, 0.4, 0.06, -1.6 + dx, 1.75, cz + dx * 0.5);
       b.rotation.z = tilt;
     }
-    mk(box(0.7, 0.04, 0.45), mat(0xced4da), g, CW / 2 - 0.55, 1.32, cz);
-    croissant(g, CW / 2 - 0.72, 1.34, cz - 0.05, 1.1, -0.2);
-    croissant(g, CW / 2 - 0.4, 1.34, cz + 0.02, 1.1, 0.4);
+    mk(box(0.7, 0.04, 0.45), mat(0xced4da), shop, 1.6, 1.32, cz);
+    croissant(shop, 1.43, 1.34, cz - 0.05, 1.1, -0.2);
+    croissant(shop, 1.75, 1.34, cz + 0.02, 1.1, 0.4);
 
     /* --- back wall: wooden shelves full of loaves, and a bread oven glowing in the corner --- */
     for (const y of [1.25, 1.95]) {
-      mk(box(3.2, 0.08, 0.45), wood, g, -0.9, y, back + 0.55);
+      mk(box(3.6, 0.08, 0.45), wood, shop, -1.1, y, back + T + 0.25);
       for (let i = 0; i < 4; i++) {
-        if ((i + (y > 1.5 ? 1 : 0)) % 2) roundLoaf(g, -2.1 + i * 0.8, y + 0.04, back + 0.55, 1.2);
-        else ball(g, 0xe9b872, 0.34, 0.1, 0.11, -2.1 + i * 0.8, y + 0.13, back + 0.55).rotation.y = 0.15; // baguette
+        if ((i + (y > 1.5 ? 1 : 0)) % 2) roundLoaf(shop, -2.45 + i * 0.9, y + 0.04, back + T + 0.25, 1.2);
+        else baguette(shop, -2.45 + i * 0.9, y + 0.04, back + T + 0.25);
       }
     }
     // brick oven (dome) with a warm glowing mouth
-    const ovenX = hw - 1.05;
-    const ovenZ = back + 0.9;
-    mk(box(1.3, 0.8, 1.1), mat(0xb5562f), g, ovenX, 0.4, ovenZ);
-    const dome = mk(geo('bkDome', () => new THREE.SphereGeometry(0.62, 16, 8, 0, TAU, 0, Math.PI / 2)), mat(0xc4633a), g, ovenX, 0.8, ovenZ);
+    const ovenX = hw - T - 0.8;
+    const ovenZ = back + T + 0.6;
+    mk(box(1.3, 0.8, 1.1), mat(0xb5562f), shop, ovenX, 0.4, ovenZ);
+    const dome = mk(geo('bkDome', () => new THREE.SphereGeometry(0.62, 16, 8, 0, TAU, 0, Math.PI / 2)), mat(0xc4633a), shop, ovenX, 0.8, ovenZ);
     dome.scale.set(1, 0.9, 0.85);
-    const mouth = mk(geo('bkMouth', () => new THREE.CircleGeometry(0.26, 16, 0, Math.PI)), mat(0xff8a1f, 1.4), g, ovenX, 0.82, ovenZ + 0.535);
+    const mouth = mk(geo('bkMouth', () => new THREE.CircleGeometry(0.26, 16, 0, Math.PI)), mat(0xff8a1f, 1.4), shop, ovenX, 0.82, ovenZ + 0.535);
     mouth.castShadow = false;
-    mk(cyl(0.13, 0.13, 1.0, 10), mat(0x8a4b2b), g, ovenX + 0.2, H + 0.55, ovenZ - 0.1); // chimney above the roof
+    mk(cyl(0.13, 0.13, 1.0, 10), mat(0x8a4b2b), top, ovenX + 0.2, H + 0.55, ovenZ - 0.1); // chimney above the roof
     const glow = new THREE.PointLight(0xffc078, 1.6, 9, 1.6);
     glow.position.set(0, H - 0.5, midZ);
-    g.add(glow);
+    shop.add(glow);
 
     /* --- roof sign: a big croissant and a baguette on a cream board (no letters needed) --- */
     const sign = new THREE.Group();
-    sign.position.set(0, H + 1.3, front - 0.35);
-    g.add(sign);
+    sign.position.set(0, H + 1.3, front - 0.6);
+    top.add(sign);
     mk(box(3.6, 1.5, 0.16), mat(0xfff3d6), sign, 0, 0, 0);
     mk(box(3.8, 0.16, 0.22), wood, sign, 0, 0.78, 0);
     mk(box(3.8, 0.16, 0.22), wood, sign, 0, -0.78, 0);
@@ -814,13 +911,29 @@ export function createShops(
       cut.rotation.z = tilt - 0.6;
     }
 
-    // the baker: white clothes, tall chef's hat, apron — right behind the glass, facing the street
-    const baker = makeSeller(g, 1.0, cz - 0.95, 0xffffff, 'chef', 0xffffff);
+    // the baker: white clothes, tall chef's hat, apron — right behind the glass, facing the door
+    const baker = makeSeller(shop, 0.6, cz - 0.95, 0xffffff, 'chef', 0xffffff);
     mk(box(0.5, 0.62, 0.05), mat(0xf6d6a0), baker.root, 0, 0.82, 0.31); // apron
-    obstacles.push(footprint(s, -hw, hw, back, front));
     taken.push(footprint(s, -hw, hw, back, front));
-    bakeryStand = toWorld(s, 0, front + STAND_OFF);
-    out.push(stall(g, baker, bakeryStand, 1.8, new THREE.Vector3(0.35, 1.31, cz), 2, 'pao', buildBread));
+    lastBakeryZone = footprint(s, -hw, hw, back, front);
+    // only the walls are solid: keep later plots (roadsideSite: services, cabins…) out of the walkable inside
+    reserveGround(obstacles, lastBakeryZone, 3);
+    // she stands in the middle of the shop, right in front of the counter (a tap from outside walks her in)
+    bakeryStand = toWorld(s, 0, cz + 1.0);
+    const it = stall(shop, baker, bakeryStand, 1.2, new THREE.Vector3(0.35, 1.31, cz), 2, 'pao', buildBread);
+    const sellerUpdate = it.update?.bind(it);
+    const c = Math.cos(s.rot);
+    const si = Math.sin(s.rot);
+    it.update = (dt: number) => {
+      // roof + front band hide while she is inside, so the camera sees her (as in tryon.ts)
+      const dx = ctx.player.x - s.x;
+      const dz = ctx.player.z - s.z;
+      const lx = dx * c - dz * si;
+      const lz = dx * si + dz * c;
+      top.visible = !(Math.abs(lx) < hw + 0.1 && lz < front + 0.3 && lz > back - 0.1);
+      sellerUpdate?.(dt);
+    };
+    out.push(it);
   }
 
   /* ================================================================ Pombos */

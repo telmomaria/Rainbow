@@ -23,7 +23,7 @@ import { createScooter, noScooter, type Scooter } from './scooter';
 import { createBeggar } from './beggar';
 import { chooseCharacter, createAvatarButton } from './select';
 import { CAT_REWARD, CatTree } from './cattree';
-import { buildItem, createShops } from './shops';
+import { bakeryZone, buildItem, createShops } from './shops';
 import { Trouble } from './trouble';
 import { Traffic } from './traffic';
 import { createBusStops } from './busstops';
@@ -781,7 +781,7 @@ function addCityExtras(): Car {
   world.interactables.push(...livingStatue.things);
   catTree = new CatTree(scene, world.obstacles, mulberry32(city.seed * 31 + 5));
   hospital = createHospital(scene, world.obstacles, mulberry32(city.seed * 41 + 9));
-  world.interactables.push(...createShops(scene, world.obstacles, mulberry32(city.seed * 13 + 7), gameCtx, clearLamps));
+  world.interactables.push(...createShops(scene, world.obstacles, mulberry32(city.seed * 13 + 7), gameCtx, clearLamps, world.interactables));
   // Fase 4: cabeleireiro, sapataria, roupa, SPA, médico… (S01–S10)
   services?.dispose();
   services = createServices(scene, world.obstacles, city.seed, gameCtx, player, clearLamps);
@@ -801,6 +801,7 @@ function addCityExtras(): Car {
     snowPlay?.zone ?? null,
     trouble.clearance,
     ...(services?.zones() ?? []), // walk-in try-on shops (tryon.ts)
+    bakeryZone(), // walk-in bakery (shops.ts)
   ].filter((z): z is Obstacle => !!z);
   setNoSpawnZones(venueZones);
   // Keep venue footprints in obstacles while landmarks pick plots (soft pads were only temporary earlier).
