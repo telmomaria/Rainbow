@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { entersRunway, onRunway } from './airport';
 import { inNoSpawn, isFree, randomFreeSpot } from './spawn';
 import { onRoad, type Obstacle, type World } from './world';
 
@@ -60,7 +61,7 @@ export class WanderRabbit {
   private pavementSpot(center: THREE.Vector3, range: number, avoid?: THREE.Vector3): THREE.Vector3 | null {
     for (let i = 0; i < 16; i++) {
       const p = randomFreeSpot(this.obstacles, { center, range, radius: 0.9, avoid, minDist: avoid ? 12 : 0 });
-      if (!onRoad(p.x, p.z, 1.1) && !inNoSpawn(p.x, p.z, 1)) return p;
+      if (!onRoad(p.x, p.z, 1.1) && !onRunway(p.x, p.z, 2) && !inNoSpawn(p.x, p.z, 1)) return p;
     }
     return null;
   }
@@ -146,7 +147,7 @@ export class WanderRabbit {
     const nx = g.position.x + (dx / dist) * s;
     const nz = g.position.z + (dz / dist) * s;
     const leavesPavement = onRoad(nx, nz, 0.45) && !onRoad(g.position.x, g.position.z, 0.45);
-    if (!isFree(nx, nz, BODY_R, this.obstacles) || leavesPavement || inNoSpawn(nx, nz, BODY_R)) {
+    if (!isFree(nx, nz, BODY_R, this.obstacles) || leavesPavement || entersRunway(g.position.x, g.position.z, nx, nz) || inNoSpawn(nx, nz, BODY_R)) {
       this.target = null;
       this.wait = 0.25;
       this.hop = 0;

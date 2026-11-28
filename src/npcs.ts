@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { entersRunway, onRunway } from './airport';
 import { nextQuestion, type Question } from './questions';
 import { inNoSpawn, randomFreeSpot } from './spawn';
 import { PERSON_BODY_HALF, PERSON_CLEAR, onRoad, type Obstacle } from './world';
@@ -65,7 +66,7 @@ export class Npcs {
     let p = randomFreeSpot(this.obstacles, { radius: 1.2, avoid: player, minDist, range: 60 });
     for (let tries = 0; tries < 40; tries++) {
       const farEnough = this.list.every((n) => Math.hypot(n.group.position.x - p.x, n.group.position.z - p.z) >= NPC_MIN_DIST);
-      if (farEnough) break;
+      if (farEnough && !onRunway(p.x, p.z, 2)) break;
       p = randomFreeSpot(this.obstacles, { radius: 1.2, avoid: player, minDist, range: 60 });
     }
     const group = buildNpc();
@@ -115,7 +116,8 @@ export class Npcs {
           if (
             isFreeIgnoring(nx, nz, BODY_R, this.obstacles, n.body) &&
             !inNoSpawn(nx, nz, BODY_R) &&
-            !(onRoad(nx, nz, 0.5) && !onRoad(g.position.x, g.position.z, 0.5))
+            !(onRoad(nx, nz, 0.5) && !onRoad(g.position.x, g.position.z, 0.5)) &&
+            !entersRunway(g.position.x, g.position.z, nx, nz)
           ) {
             g.position.x = nx;
             g.position.z = nz;
@@ -200,7 +202,7 @@ export class Npcs {
     const nz = g.position.z + (dz / dist) * s;
     const leavesPavement = onRoad(nx, nz, 0.5) && !onRoad(g.position.x, g.position.z, 0.5);
     // Skip own body when testing free space (otherwise they never move).
-    if (!isFreeIgnoring(nx, nz, BODY_R, this.obstacles, n.body) || leavesPavement || inNoSpawn(nx, nz, BODY_R)) {
+    if (!isFreeIgnoring(nx, nz, BODY_R, this.obstacles, n.body) || leavesPavement || entersRunway(g.position.x, g.position.z, nx, nz) || inNoSpawn(nx, nz, BODY_R)) {
       n.target = null; // blocked (wall, road, concert fence): pick another way straight away
       n.wait = 0.3;
       return false;

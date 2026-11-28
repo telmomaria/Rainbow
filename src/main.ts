@@ -10,7 +10,7 @@ import { Hud, askChoice, askQuestion, cameraFlash, createHomeButton, setCompass,
 import { speak, sfx, spokenLog, taunt, tone, voiceInfo } from './audio';
 import { CITIES, COINS_PER_LEVEL, cityAt, cityHas } from './cities';
 import { Monsters } from './monsters';
-import { Airport } from './airport';
+import { Airport, setRunwayActive } from './airport';
 import { Flight } from './flight';
 import { Launch } from './launch';
 import { Spaceport } from './spaceport';
@@ -193,6 +193,7 @@ const questionRecyclable = (id: string) => solved.has(id) && (save.retryAt[id] ?
 let collectibles!: Collectibles;
 let npcs!: Npcs;
 let monsters!: Monsters;
+setRunwayActive(city.kind !== 'moon'); // first city of this page load (buildCity sets it on every switch)
 let airport: Airport =
   city.kind === 'moon'
     ? ({ update() {}, setDoorOpen() {}, boardPoint: new THREE.Vector3(999, 0, 999), plane: new THREE.Group() } as unknown as Airport)
@@ -861,6 +862,7 @@ function loadCity(): void {
   camYaw = SPAWN.h;
   insideInteractable.clear();
   // The Moon has no airport; the USA keeps one for arrivals but leaves by rocket (spaceport).
+  setRunwayActive(city.kind !== 'moon'); // people / cat / rabbit never walk onto the runway (airport.ts onRunway)
   airport = city.kind === 'moon' ? (null as unknown as Airport) : new Airport(scene, world.obstacles, city.name);
   if (city.kind === 'moon') {
     // placeholder airport object so Flight typing isn't needed; boarding is disabled on the Moon
@@ -2062,6 +2064,7 @@ function tick(time: number): void {
         difficulty: save.difficulty,
         monsterCount: monsters.positions().length,
         npcsInside: npcs.list.filter((n) => !isFree(n.group.position.x, n.group.position.z, 0.6, world.obstacles)).length,
+        npcPos: npcs.list.map((n) => [+n.group.position.x.toFixed(1), +n.group.position.z.toFixed(1)]),
         rescuing,
         hospital: hospitalPhase,
         hospitalLeft: Math.max(0, save.hospitalUntil - Date.now()),

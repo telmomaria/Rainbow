@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { entersRunway, onRunway } from './airport';
 import { tone } from './audio';
 import type { GameCtx } from './gamectx';
 import { registerItem } from './items';
@@ -96,7 +97,7 @@ export class Postman {
         avoid,
         minDist: avoid ? 12 : 0,
       });
-      if (!onRoad(p.x, p.z, 1.1) && !inNoSpawn(p.x, p.z, 1)) return p;
+      if (!onRoad(p.x, p.z, 1.1) && !onRunway(p.x, p.z, 2) && !inNoSpawn(p.x, p.z, 1)) return p;
     }
     return null;
   }
@@ -167,7 +168,7 @@ export class Postman {
     const nx = g.position.x + (dx / dist) * s;
     const nz = g.position.z + (dz / dist) * s;
     const leavesPavement = onRoad(nx, nz, 0.45) && !onRoad(g.position.x, g.position.z, 0.45);
-    if (!isFree(nx, nz, BODY_R, this.obstacles) || leavesPavement || inNoSpawn(nx, nz, BODY_R)) {
+    if (!isFree(nx, nz, BODY_R, this.obstacles) || leavesPavement || entersRunway(g.position.x, g.position.z, nx, nz) || inNoSpawn(nx, nz, BODY_R)) {
       this.target = null;
       this.wait = 0.25;
       return false;

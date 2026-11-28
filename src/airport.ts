@@ -15,6 +15,32 @@ export const PARK_X = 64; // past the end of the terminal (x 30..54), so the sta
 /** Area kept free of buildings by the world generator. */
 export const AIRPORT_ZONE: Obstacle = { minX: 12, maxX: 150, minZ: 13, maxZ: 50 };
 
+/** Half-width of the runway strip (the asphalt is 14 m wide). */
+const RUNWAY_HALF_W = 7;
+/** Margin kept between walkers and the runway edge. */
+const RUNWAY_MARGIN = 1;
+/** True while the current level has an airport (false on the Moon). Set by Airport / setRunwayActive. */
+let runwayActive = false;
+export function setRunwayActive(on: boolean): void {
+  runwayActive = on;
+}
+/**
+ * True if (x, z) is on the runway (+ margin). Nobody but her walks there (Telmo, 2026-11-28): people, the cat and
+ * the rabbit pick targets off it and never step onto it (a step that leaves it is always allowed).
+ */
+export function onRunway(x: number, z: number, margin = RUNWAY_MARGIN): boolean {
+  return (
+    runwayActive &&
+    x > RUNWAY_START_X - margin &&
+    x < RUNWAY_END_X + margin &&
+    Math.abs(z - RUNWAY_Z) < RUNWAY_HALF_W + margin
+  );
+}
+/** True if a step from (x0, z0) to (x1, z1) walks onto the runway (stepping off it is fine). */
+export function entersRunway(x0: number, z0: number, x1: number, z1: number): boolean {
+  return onRunway(x1, z1) && !onRunway(x0, z0);
+}
+
 const FUSELAGE_R = 1.5;
 const FUSELAGE_Y = 2.6; // centre height above the wheels
 const DOOR_LOCAL_X = 4;

@@ -9,7 +9,7 @@ de cidade em cidade. Ver [CONTEXT.md](CONTEXT.md) e [ROADMAP.md](ROADMAP.md).
 - **Mapa:** mundo **gerado** por cidade (grelha de ruas + edifícios low-poly), como está. **Sem mapas reais** (nem
   OpenStreetMap nem Google 3D Tiles): seriam demasiado grandes para as crianças. (Decisão do Telmo a 2026-11-15, que
   substitui a de 2026-11-11.) Cada cidade distingue-se pelos seus ex-líbris e pelo que lá se pode fazer; as cidades não
-  devem ser iguais nem ter todas as mesmas coisas. Área a dobrar: abandonada (Telmo, 2026-11-19). Sem ex-líbris ainda: Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk (ver ROADMAP).
+  devem ser iguais nem ter todas as mesmas coisas. Área a dobrar: abandonada (Telmo, 2026-11-19). Sem ex-líbris ainda: Madrid · Vilnius · Reiquiavique · Nuuk (ver ROADMAP).
 - **Voz:** Web Speech API (`speechSynthesis`, voz `pt-PT`). Fallback a definir se a voz pt-PT faltar no dispositivo.
 - **Persistência:** `localStorage` (progresso, moedas, roupa, posição). Sem contas, sem dados pessoais. Sem morada de início.
 - **Registo de IPs (Telmo, 2026-11-26):** só para saber quem joga enquanto o jogo não é divulgado (rever antes de divulgar).
@@ -76,9 +76,10 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   Vermelha → Urca → cimo: entrar na cabine a andar / tocar na cabine ou estação / Enter (no cimo só com toque na cabine / Enter: encostar não desce); subir = 2 moedas (sem moedas o
   operador abana a cabeça), descer grátis; joia no miradouro. Cristo Redentor de braços abertos no Corcovado, noutra zona,
   visível de longe; tocar no morro = carrilhão + narradora (sem subida nem joia).
+- **Cidade do México (src/landmarks-mexico.ts, 2026-11-28):** pirâmide de Teotihuacán (5 patamares, ~18,5 m; sobe-se a escadaria com `towerClimb`, joia no cimo) · guerreiros de Tula (tocar = tambor de pedra + narradora) · Casa Azul de Frida Kahlo (pátio: pássaros voam + narradora) · bandeirinhas vermelhas/brancas/verdes (papel picado) em fios entre edifícios · 4 crianças com máscaras de caveirinha (fofas) a brincar à apanhada; param e acenam quando ela chega.
 - **Moscovo:** tanque antigo em exibição na Praça Vermelha (plinto, flores, correntes; sem marcas nem sons de guerra);
   tocar = a torre roda devagar e uma pomba pousa no canhão.
-- **Aurora boreal (src/aurora.ts):** só em Reiquiavique, à noite e sem nuvens/chuva; da 1.ª vez a narradora diz "Olha para o céu! É a aurora boreal!" e a câmara olha para o céu ~7 s.
+- **Aurora boreal (src/aurora.ts):** só em Reiquiavique, sempre que é de noite, com qualquer tempo (mais fraca com nuvens/chuva — Telmo 2026-11-28); da 1.ª vez a narradora diz "Olha para o céu! É a aurora boreal!" e a câmara olha para o céu ~7 s.
 - **Segredo:** ninguém diz que o último nível é a Lua antes de lá chegar (as joias dizem "Guarda-a bem!").
 - **Ordem de construção da cidade:** mundo → aeroporto → extras (candeeiros, carro, pobre, adereços, gato, hospital, lojas, estádio/bar, trânsito) → só depois moedas, personagens das perguntas e monstros (nunca nascem dentro de edifícios).
 - **Arranque:** ecrã de escolha com "Continuar" (tudo como estava) e "Novo jogo" (tudo a zero, mantém personagem e definições).

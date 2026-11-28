@@ -4,16 +4,16 @@
  * A few big curved ribbons far away in the sky, drawn with one tiny shader each: green curtains with
  * slowly moving folds and vertical rays, a touch of pink/violet at the top edge. Additive, no depth
  * write, no fog, no post-processing. The group follows the camera (like the stars) so it always sits
- * on the sky. It fades in when it gets dark (weather daylight) and out at dawn; hidden when the sky is
- * covered or it rains. The narrator says once per visit "Olha para o céu! É a aurora boreal!".
+ * on the sky. It fades in when it gets dark (weather daylight) and out at dawn; a bit dimmer under clouds/rain,
+ * never hidden. The narrator says once per visit "Olha para o céu! É a aurora boreal!".
  * No UI. `dispose()` on city change.
  */
 import * as THREE from 'three';
 import type { WeatherKind } from './weather';
 
-/** How much of the aurora each kind of weather lets through (cloudy/rainy skies hide it). */
+/** How much of the aurora each kind of weather lets through — never hidden (Telmo, 2026-11-28: it must appear at night whatever the real weather). */
 const SKY_CLEAR: Record<WeatherKind, number> = {
-  clear: 1, partly: 0.7, overcast: 0, fog: 0, drizzle: 0, rain: 0, snow: 0.15, storm: 0,
+  clear: 1, partly: 0.9, overcast: 0.8, fog: 0.75, drizzle: 0.8, rain: 0.75, snow: 0.8, storm: 0.7,
 };
 
 /** Ribbons: start azimuth, span (rad), radius, bottom/top elevation (rad), phase. A gap stays in the south. */

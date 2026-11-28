@@ -4,6 +4,7 @@ import { AIRPORT_ZONE } from './airport';
 import { tone } from './audio';
 import { FIREWORK_COLORS, Fireworks } from './fireworks';
 import type { GameCtx } from './gamectx';
+import { buildMexico } from './landmarks-mexico';
 import { buildMoscovo } from './landmarks-moscovo';
 import { buildRio } from './landmarks-rio';
 import { gemMesh, mat, openSpot } from './places';
@@ -13,7 +14,8 @@ import { onRoad, ROADS, SPAWN, type Interactable, type Obstacle, type World } fr
 /**
  * Fase 5 — ex-líbris por cidade (I81–I90 style): landmark diamonds (never spent — for the Moon).
  * Cities with builders: Porto, Roma, Londres, Paris, Varsóvia (six), Pequim, Tóquio, Rio de Janeiro (landmarks-rio.ts), Moscovo (landmarks-moscovo.ts).
- * No landmark (empty builders — no fake obelisk): Madrid, Vilnius, Cidade do México, Reiquiavique, Nuuk.
+ * Cidade do México: landmarks-mexico.ts (Teotihuacán, Tula, Casa Azul, bandeirinhas, crianças).
+ * No landmark (empty builders — no fake obelisk): Madrid, Vilnius, Reiquiavique, Nuuk.
  * EUA / Lua: handled elsewhere (usa.ts / none). Missing BY_CITY keys return [] (no default monument).
  *
  * Placement runs AFTER venues (pool, concert, fair, house…) with setNoSpawnZones already set — never on top of
@@ -873,22 +875,31 @@ const BY_CITY: Record<string, Builder> = {
       jet.userData.splash = splash;
     }
 
-    // Collide only with facade + rock shelf — plaza / basin edge stay walkable
-    obstacles.push({
-      minX: at.x - 8.4,
-      maxX: at.x + 8.4,
-      minZ: at.z - 6.6,
-      maxZ: at.z - 0.2,
-      height: 11,
-    });
+    // Collision hugs what is built: facade (+ wings/columns), then rocks + side walls + front pool,
+    // then the semicircular basin as thin slices up to the rim. Water stays unenterable; the plaza
+    // around the rim and the sides of the facade stay walkable.
+    const block = (minX: number, maxX: number, minZ: number, maxZ: number, height: number) =>
+      obstacles.push({ minX: at.x + minX, maxX: at.x + maxX, minZ: at.z + minZ, maxZ: at.z + maxZ, height });
+    block(-8.3, 8.3, facadeZ - 0.9, -3.95, 11); // facade, wings, column bases
+    const poolC = basinZ - 0.35; // centre of the semicircle
+    block(-7.1, 7.1, -3.95, poolC, 7); // rocks, statue, horses, side walls, front pool
+    const RIM = 7.0; // rim boxes sit at r 6.9 (water r 6.6)
+    const SLICES = 10;
+    for (let i = 0; i < SLICES; i++) {
+      const z0 = (i / SLICES) * RIM;
+      const z1 = ((i + 1) / SLICES) * RIM;
+      const zm = (z0 + z1) / 2;
+      const hw = Math.sqrt(RIM * RIM - zm * zm);
+      block(-hw, hw, poolC + z0, poolC + z1, 0.8);
+    }
 
     const gem = gemMesh(0xffe14d, 1.3);
-    gem.position.set(5.0, 1.05, 5.4);
+    gem.position.set(5.95, 1.05, 5.95); // on the rim (not in the water — the basin is blocked)
     g.add(gem);
 
     let jetT = 0;
     const things: Interactable[] = [
-      diamondAt(ctx, `gem:${ctx.city()}:trevi`, new THREE.Vector3(at.x + 5.0, 0, at.z + 5.4), gem),
+      diamondAt(ctx, `gem:${ctx.city()}:trevi`, new THREE.Vector3(at.x + 5.95, 0, at.z + 5.95), gem),
       {
         object: g,
         position: new THREE.Vector3(at.x, 0, at.z + 5.6),
@@ -2724,8 +2735,9 @@ const BY_CITY: Record<string, Builder> = {
   Moscovo(scene, obstacles, rng, ctx, world) {
     return buildMoscovo(scene, obstacles, rng, ctx, world, { diamondAt, setDebug: (d) => (landmarkDebug = d) });
   },
-  'Cidade do México'() {
-    return [];
+  /** Teotihuacán (sobe-se) + guerreiros de Tula + Casa Azul + bandeirinhas + crianças com máscaras — src/landmarks-mexico.ts. */
+  'Cidade do México'(scene, obstacles, rng, ctx, world) {
+    return buildMexico(scene, obstacles, rng, ctx, world, { setDebug: (d) => (landmarkDebug = d), climb: towerClimb });
   },
   Reiquiavique() {
     return [];

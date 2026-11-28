@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AIRPORT_ZONE } from './airport';
+import { AIRPORT_ZONE, entersRunway } from './airport';
 import { taunt, tone } from './audio';
 import { flagTexture } from './flags';
 import type { GameCtx } from './gamectx';
@@ -414,8 +414,8 @@ interface Fighter {
 function moveSlide(pos: THREE.Vector3, vx: number, vz: number, dist: number, obstacles: Obstacle[]): void {
   const nx = pos.x + vx * dist;
   const nz = pos.z + vz * dist;
-  if (isFree(nx, pos.z, PERSON_R, obstacles)) pos.x = nx;
-  if (isFree(pos.x, nz, PERSON_R, obstacles)) pos.z = nz;
+  if (isFree(nx, pos.z, PERSON_R, obstacles) && !entersRunway(pos.x, pos.z, nx, pos.z)) pos.x = nx; // never onto the runway
+  if (isFree(pos.x, nz, PERSON_R, obstacles) && !entersRunway(pos.x, pos.z, pos.x, nz)) pos.z = nz;
 }
 
 function pick<T>(list: readonly T[]): T {

@@ -11,6 +11,7 @@ import {
   coinMesh,
   cyl,
   mat,
+  reserveGround,
   roadsideSite,
   siteBox,
   siteGroup,
@@ -135,6 +136,8 @@ export class TryOnShop {
     this.buildShell(g);
     this.look.decor?.(g);
     this.zoneBox = siteBox(site, -hw, hw, -depth, 0);
+    // the floor inside is walkable, not an obstacle: reserve it so nothing placed later (massage cabin, clinic…) lands in the shop
+    reserveGround(obstacles, this.zoneBox, 3);
 
     // walls only (she walks in through the open front); stands / counter are their own solids
     obstacles.push(siteBox(site, -hw, hw, -depth, -depth + 0.25)); // back

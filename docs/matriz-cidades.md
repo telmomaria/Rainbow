@@ -1,7 +1,7 @@
 # Matriz das cidades — o que existe em cada nível
 
 - **Data:** 2026-11-21
-- **Commit:** `705615f` + alterações de 2026-11-21 (Clérigos, Rio, aviador, Nuuk, tanque, Estátua da Liberdade, Hotel das Fontes)
+- **Commit:** `705615f` + alterações de 2026-11-21 (Clérigos, Rio, aviador, Nuuk, tanque, Estátua da Liberdade, Hotel das Fontes) + 2026-11-28 (Cidade do México: Teotihuacán, Tula, Casa Azul, bandeirinhas, crianças)
 - **Fonte:** o código (`src/`), não o CLAUDE.md. As diferenças estão na última secção.
 
 **Legenda:** ✅ existe · — não existe · número = quantidade.
@@ -28,9 +28,9 @@ usam o `usa.ts`).
 
 | Elemento | POR | ROM | MAD | LON | PAR | VAR | VIL | MOS | PEQ | TÓQ | RIO | MÉX | REI | NUU | EUA | LUA |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Nº de ex-líbris | 1 | 1 | **0** | 2 | 1 | 6 | **0** | 2 | 1 | 1 | 2 | **0** | **0** | **0** | 4 | — |
-| Nº onde se sobe / se anda | 1 | — | — | 1 | — | 2 | — | — | — | — | 1 | — | — | — | 2 | — |
-| Nº de joias de ex-líbris | 1 | 1 | — | 2 | 1 | 6 | — | 1 | 1 | 1 | 1 | — | — | — | 2 | — |
+| Nº de ex-líbris | 1 | 1 | **0** | 2 | 1 | 6 | **0** | 2 | 1 | 1 | 2 | 3 | **0** | **0** | 4 | — |
+| Nº onde se sobe / se anda | 1 | — | — | 1 | — | 2 | — | — | — | — | 1 | 1 | — | — | 2 | — |
+| Nº de joias de ex-líbris | 1 | 1 | — | 2 | 1 | 6 | — | 1 | 1 | 1 | 1 | 1 | — | — | 2 | — |
 | Custa moedas | — | 1 (desejo) | — | — | — | — | — | — | — | — | 2 (teleférico) | — | — | — | — | — |
 
 ### 1b. Detalhe
@@ -58,7 +58,11 @@ usam o `usa.ts`).
 | EUA | Ponte do Pacífico (suspensa, laranja) | atravessa-se; "Olha o nevoeiro…" | ✅ atravessa | — |
 | EUA | Parque Arco-Íris (castelo) | fogo de artifício à noite | — | — |
 | EUA | Hotel das Fontes (lago + fontes dançantes) | "As fontes dançam no lago!" | — | ✅ `gem:usa:palace` |
-| Madrid · Vilnius · Cidade do México · Reiquiavique · Nuuk (Nuuk tem a zona de neve, ver atividades) | **nenhum** (funções vazias em `BY_CITY`) | — | — | — |
+| Cidade do México | Teotihuacán (pirâmide em 5 patamares, ~18,5 m, escadaria central, templo no cimo) — `src/landmarks-mexico.ts` | sobe as escadas (`towerClimb`: clicar/Enter), vista no terraço, andar = descer | ✅ sobe | ✅ `gem:Cidade do México:teotihuacan` (no topo, pedestal ao lado dela) |
+| Cidade do México | Guerreiros de Tula (4 atlantes de pedra numa plataforma com escadas, pilares atrás) | chegar à frente das escadas = tambor de pedra, olhos brilham, narradora | — | — |
+| Cidade do México | Casa Azul (paredes azul-cobalto, frisos vermelhos, janelas verdes, pátio com árvores, catos, agaves, vasos, pirâmide de jardim) | entrar no pátio = pássaros voam, flores saltitam, "Esta é a Casa Azul, onde vivia a pintora Frida Kahlo." | anda-se no pátio | — |
+| Cidade do México | Ambiente: bandeirinhas (papel picado vermelho/branco/verde) em fios entre pares de edifícios (até 12, nunca sobre a rua) · 4 crianças com máscaras de caveirinha do Dia dos Mortos a brincar à apanhada num relvado (ao chegar perto param, saltam, acenam e riem) | — | — | — |
+| Madrid · Vilnius · Reiquiavique · Nuuk (Nuuk tem a zona de neve, ver atividades) | **nenhum** (funções vazias em `BY_CITY`) | — | — | — |
 | Lua | (sem ex-líbris; o objetivo é a máquina do tempo, ver matriz 2) | — | — | — |
 
 ---
@@ -97,6 +101,8 @@ tempo real e hora local.
 | Fonte dos desejos | — | ✅ | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
 | Aurora boreal | — | — | — | — | — | — | — | — | — | — | — | — | ✅ | — | — | — |
 | Zona de neve (bonecos, buracos no gelo, crianças, bolas) | — | — | — | — | — | — | — | — | — | — | — | — | — | ✅ | — | — |
+| Bandeirinhas (papel picado) entre edifícios | — | — | — | — | — | — | — | — | — | — | — | ✅ | — | — | — | — |
+| Crianças com máscaras do Dia dos Mortos (apanhada) | — | — | — | — | — | — | — | — | — | — | — | ✅ | — | — | — | — |
 | Perguntas em inglês (polícia) | — | — | — | ✅ | — | — | — | — | — | — | — | — | — | — | — | — |
 | Perguntas próprias da cidade | 3 | 3 | 2 | 3 | 3 | 2 | 2 | 2 | 3 | 2 | 3 | 2 | 2 | 3 | 3 | — |
 | Personagens das perguntas | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
@@ -186,5 +192,5 @@ só existe em Londres (`onlyIn`); o pescador é extra só em Reiquiavique. Os EU
 7. **Comentário interno desatualizado (não é do CLAUDE.md):** `play.ts` diz que o coelho (I58) e a estátua viva (I76)
    foram tirados do jogo, mas hoje voltaram como `rabbit.ts` (Vilnius) e `livingstatue.ts` (nível ≥ 6).
 8. Bate certo com o código: `CITY_WITHOUT` para Moscovo, Tóquio, Vilnius e Rio; SPA em Vilnius, Moscovo e Nuuk; cidades
-   sem ex-líbris (Madrid, Vilnius, Cidade do México, Reiquiavique, Nuuk); carteiro a partir de Paris; Varsóvia com
+   sem ex-líbris (Madrid, Vilnius, Reiquiavique, Nuuk; a Cidade do México passou a tê-los a 2026-11-28); carteiro a partir de Paris; Varsóvia com
    duas subidas; aurora só em Reiquiavique; cometa e máquina do tempo só na Lua.

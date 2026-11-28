@@ -285,7 +285,7 @@ export class Car {
 
 /**
  * Parking spot with walking room: ≥ 2 m between the car and any building/solid (the driver's door opens there and
- * she steps out), thin posts such as kerb lamps excepted. If the wanted spot is too tight, slides along the same
+ * she steps out); thin posts such as kerb lamps get ≤ 1.5 m (so it can pull out). If the wanted spot is too tight, slides along the same
  * kerb (nearest first), then tries the opposite kerb of the same road (turned round so the door still faces away
  * from the road). Crowded maps relax the room (2 → 1.2 → 0.6 m) instead of losing the car.
  */
@@ -305,7 +305,8 @@ function parkingSpot(wanted: THREE.Vector3, heading: number, obstacles: Obstacle
     const cz = Math.max(b.minZ, Math.min(SPAWN.z, b.maxZ));
     if (Math.hypot(SPAWN.x - cx, SPAWN.z - cz) < 6) return false;
     for (const o of obstacles) {
-      const m = o.maxX - o.minX < 0.9 && o.maxZ - o.minZ < 0.9 ? 0.2 : room;
+      // thin posts (kerb lamps) also get room — a lamp hugging the car blocks it from pulling out
+      const m = o.maxX - o.minX < 0.9 && o.maxZ - o.minZ < 0.9 ? Math.min(room, 1.5) : room;
       if (b.maxX + m > o.minX && b.minX - m < o.maxX && b.maxZ + m > o.minZ && b.minZ - m < o.maxZ) return false;
     }
     return true;
