@@ -76,6 +76,7 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   Vermelha → Urca → cimo: entrar na cabine a andar / tocar na cabine ou estação / Enter (no cimo só com toque na cabine / Enter: encostar não desce); subir = 2 moedas (sem moedas o
   operador abana a cabeça), descer grátis; joia no miradouro. Cristo Redentor de braços abertos no Corcovado, noutra zona,
   visível de longe; tocar no morro = carrilhão + narradora (sem subida nem joia).
+  **Praia (src/beach.ts + src/beachlife.ts, 2026-11-28):** ao longo de todo o lado +Z (longe do aeroporto): calçadão de ondas pretas/brancas (z 110–116, as ruas N–S acabam aí e os carros voltam para trás), areia até z 138, mar animado até ao horizonte; molha os pés até z 141,5 (salpicos), mais fundo há uma parede invisível (onda + "Mais para lá é fundo!"). Chapéus de sol + toalhas (instanciados), 6 a apanhar sol, vólei de praia (4 jogadores; ir ao lado do campo/tocar no campo = a bola vem até ela), 4 a passear (acenam), 5 no mar. 1.ª vez: "Que praia tão comprida! É como Copacabana!" (flag `rio:praia`). A areia fica reservada durante a construção da cidade (guarda tirada no fim do landmarks-rio). QA: `?debug`, `landmarks.beach`.
 - **Cidade do México (src/landmarks-mexico.ts, 2026-11-28):** pirâmide de Teotihuacán (5 patamares, ~18,5 m; sobe-se a escadaria com `towerClimb`, joia no cimo) · guerreiros de Tula (tocar = tambor de pedra + narradora) · Casa Azul de Frida Kahlo (pátio: pássaros voam + narradora) · bandeirinhas vermelhas/brancas/verdes (papel picado) em fios entre edifícios · 4 crianças com máscaras de caveirinha (fofas) a brincar à apanhada; param e acenam quando ela chega.
 - **Moscovo:** tanque antigo em exibição na Praça Vermelha (plinto, flores, correntes; sem marcas nem sons de guerra);
   tocar = a torre roda devagar e uma pomba pousa no canhão.
@@ -156,7 +157,7 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
   Paris → Varsóvia → Vilnius → Moscovo → Pequim → Tóquio → Rio de Janeiro → Cidade do México → Reiquiavique → Nuuk.
   → Estados Unidos → Lua (16 níveis em src/cities.ts). **Sem morada de início / address settings** (decisão do Telmo: spawn/arranque fica como está).
 - **Final do jogo (decisão do Telmo a 2026-11-15, por construir):** o penúltimo nível é os **Estados Unidos**, com
-  atrações de várias cidades (Estátua da Liberdade, ponte de São Francisco, parque de diversões, **Hotel das Fontes**)
+  atrações de várias cidades (Estátua da Liberdade, ponte de São Francisco — sobre um rio entre dois montes, atravessa-se a pé ou de carro, parque de diversões, **Hotel das Fontes**)
   e **sem partida de avião** (chega-se de avião; o aeroporto só serve a chegada): de **Cabo Canaveral** lança-se um foguetão para a **Lua**, o último nível. Na Lua há pouca coisa:
   crateras, moedas espalhadas, subidas e descidas, areia, terra, rochas, pedras e **marcianos que tiram moedas**.
   **O objetivo do jogo é colocar os diamantes (as joias) num local específico; aí o jogo termina.** Joias precisas

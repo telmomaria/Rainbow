@@ -100,6 +100,10 @@ let cityLampClearer: ((area: Obstacle, obstacles: Obstacle[]) => void) | null = 
 export function setCityLampClearer(fn: ((area: Obstacle, obstacles: Obstacle[]) => void) | null): void {
   cityLampClearer = fn;
 }
+/** Hide the street lamps standing in the area (and drop their obstacles) — e.g. where a road climbs a hill (usa.ts). */
+export function clearCityLamps(area: Obstacle, obstacles: Obstacle[]): void {
+  cityLampClearer?.(area, obstacles);
+}
 
 /**
  * A free plot beside a road: body x ∈ [-hw, hw], z ∈ [-depth, 0], front (z = 0) facing the road.

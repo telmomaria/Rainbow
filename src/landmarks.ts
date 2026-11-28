@@ -8,7 +8,7 @@ import { buildMexico } from './landmarks-mexico';
 import { buildMoscovo } from './landmarks-moscovo';
 import { buildRio } from './landmarks-rio';
 import { gemMesh, mat, openSpot } from './places';
-import { inNoSpawn } from './spawn';
+import { groundHeight, inNoSpawn } from './spawn';
 import { onRoad, ROADS, SPAWN, type Interactable, type Obstacle, type World } from './world';
 
 /**
@@ -314,10 +314,11 @@ export function towerClimb(opts: {
       }
       if (phase === 'idle') {
         prox.set(foot.x, 0, foot.z);
-        if (ctx.player.y > 0.4 && activeClimb === null) {
+        const ground = groundHeight(ctx.player.x, ctx.player.z); // USA hills / bridge deck
+        if (ctx.player.y > ground + 0.4 && activeClimb === null) {
           const dTop = Math.hypot(ctx.player.x - top.x, ctx.player.z - top.z);
           const dFoot = Math.hypot(ctx.player.x - foot.x, ctx.player.z - foot.z);
-          if (dTop > 5 && dFoot > 4) ctx.player.y = 0;
+          if (dTop > 5 && dFoot > 4) ctx.player.y = ground;
         }
         return;
       }

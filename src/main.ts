@@ -93,6 +93,11 @@ if (DEBUG) {
     player.heading = h;
     camYaw = h; // keep the third-person camera behind her after a debug teleport
   });
+  // QA: park the car at {x, z, h} (e.g. at the foot of the USA bridge road)
+  window.addEventListener('rainbow-car', (e) => {
+    const { x, z, h } = (e as CustomEvent<{ x: number; z: number; h: number }>).detail;
+    if (!driving) car.place(x, z, h);
+  });
   // QA: drop a comet on her now (Moon only)
   window.addEventListener('rainbow-comet', () => moonPlay?.comets.dropNow());
   window.addEventListener('rainbow-hospital-end', () => {
@@ -489,7 +494,13 @@ function spawnActors(): void {
     return;
   }
   npcs = new Npcs(scene, world.obstacles, questionAvailable, player.position, questionRecyclable, city.name);
-  monsters = new Monsters(scene, world.obstacles);
+  // USA: creatures and coins follow the hills / bridge deck; a few coins wait along the deck
+  const usaGround = city.kind === 'usa' && world.heightAt ? (x: number, z: number) => world.heightAt?.(x, z) ?? 0 : undefined;
+  if (usaGround) {
+    collectibles.heightAt = usaGround;
+    for (const p of usaLandmarks?.deckCoins ?? []) collectibles.placeAt('coin', p.x, p.z);
+  }
+  monsters = new Monsters(scene, world.obstacles, usaGround ? { heightAt: usaGround } : undefined);
   monsters.difficulty = DIFFICULTY_FACTOR[save.difficulty];
   wanderCat = new WanderCat(scene, world.obstacles, player.position);
 }
@@ -729,6 +740,7 @@ function addCityExtras(): Car {
   // bus stops along the bus lines — after venues so they keep clear of stadium / fair / pool walls
   const busStops = createBusStops(scene, world.obstacles, mulberry32(city.seed * 67 + 19));
   const c = new Car(scene, world.obstacles, new THREE.Vector3(-16, 0, 7), Math.PI / 2, city.buildings[0], () => enterCar());
+  if (city.kind === 'usa') c.heightAt = (x, z) => world.heightAt?.(x, z) ?? 0; // up the hills and over the bridge (usa.ts)
   world.interactables.push(c.interactable);
   // I42 kick scooter (real vehicle) — Londres (index 3) onward; park/pavement pad with setback
   scooter = (cityHas(city, 'scooter') ? createScooter(scene, world.obstacles, world, city.seed, save.level, () => enterScooter()) : null) ?? noScooter();
@@ -802,6 +814,7 @@ function addCityExtras(): Car {
     trouble.clearance,
     ...(services?.zones() ?? []), // walk-in try-on shops (tryon.ts)
     bakeryZone(), // walk-in bakery (shops.ts)
+    usaLandmarks?.zone ?? null, // USA: hills + river of the Ponte do Pacífico (usa.ts)
   ].filter((z): z is Obstacle => !!z);
   setNoSpawnZones(venueZones);
   // Keep venue footprints in obstacles while landmarks pick plots (soft pads were only temporary earlier).
@@ -818,6 +831,9 @@ function addCityExtras(): Car {
   world.interactables.push(catTree.interactable);
   if (city.kind === 'usa') {
     spaceport = new Spaceport(scene, world.obstacles);
+    // the valley of the bridge was kept free while the city was built: she walks / drives on it from now on
+    const gi = usaLandmarks ? world.obstacles.indexOf(usaLandmarks.guard) : -1;
+    if (gi >= 0) world.obstacles.splice(gi, 1);
   }
   if (!save.visited.includes(city.name)) save.visited.push(city.name);
   return c;
@@ -1472,7 +1488,8 @@ function handleTap(x: number, y: number): void {
       return;
     }
   }
-  const groundHit = raycaster.intersectObject(world.ground)[0];
+  // the ground, or something she walks on above it (USA hills, road up them, bridge deck)
+  const groundHit = (world.walkable?.length ? raycaster.intersectObjects([world.ground, ...world.walkable], false) : raycaster.intersectObject(world.ground))[0];
   if (groundHit) {
     buyTarget = null; // changed her mind: walking somewhere else
     setTarget(groundHit.point);

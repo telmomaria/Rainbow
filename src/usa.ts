@@ -2,14 +2,15 @@ import * as THREE from 'three';
 import { tone } from './audio';
 import { Fireworks, FIREWORK_COLORS } from './fireworks';
 import type { GameCtx } from './gamectx';
-import { gemMesh, mat } from './places';
+import { clearCityLamps, gemMesh, mat } from './places';
 import { towerClimb } from './landmarks';
+import { setGroundHeight } from './spawn';
 import type { Interactable, Obstacle, World } from './world';
 
 /**
  * Estados Unidos landmarks (original names — never ship real brand names):
  *  - Estátua da Liberdade — pedestal + figura verde com coroa e tocha (US1)
- *  - Ponte do Pacífico — ponte suspensa laranja atravessável (US2)
+ *  - Ponte do Pacífico — ponte suspensa laranja sobre um rio, entre dois montes; passa-se a pé ou de carro (US2)
  *  - Parque Arco-Íris — castelo de contos + fogo de artifício à noite (US3)
  *  - Hotel das Fontes — lago + fontes dançantes + fachada de hotel (US4)
  *    Inspired by Bellagio fountains (Las Vegas) but original IP — not Caesars / Bellagio brands.
@@ -21,10 +22,86 @@ import type { Interactable, Obstacle, World } from './world';
 /** Off the road grid (roads at x∈{-80,0}, z∈{-70,0,75}) so silhouettes aren't buried in asphalt. */
 export const USA_SPOTS = {
   statue: { x: 50, z: -115 },
-  bridge: { x: -115, z: 35 },
+  bridge: { x: -115, z: 36 },
   castle: { x: 115, z: -105 },
   palace: { x: -45, z: -120 },
 } as const;
+
+/**
+ * Valley of the Ponte do Pacífico (Telmo 2026-11-28): the river runs west along z = riverZ from a spring pond at
+ * x = springX to the map edge; two hills face each other across it and the deck (top at deckY) joins their tops.
+ * The road up each hill is the bridge axis x (half-width BRIDGE.half, rails just outside), joining the z = 0 / z = 75 roads.
+ */
+export const BRIDGE = { x: -115, riverZ: 36, deckY: 4, half: 3.75, springX: -98 } as const;
+/** Hill profile (m): water half-width, top of the bank, plateau end, foot (distances from the river centre line);
+ *  plateau half-width and foot half-width across the road. */
+const VALLEY = { river: 6.5, bankTop: 11, ridge: 19, foot: 32, plateauHalf: 9, footHalf: 27 } as const;
+
+const smooth01 = (t: number): number => {
+  const k = Math.min(1, Math.max(0, t));
+  return k * k * (3 - 2 * k);
+};
+
+/** Height of the two hills at (x, z) — 0 in the river and off the hills. */
+function hillHeight(x: number, z: number): number {
+  const ax = Math.abs(x - BRIDGE.x);
+  const d = Math.abs(z - BRIDGE.riverZ);
+  if (ax >= VALLEY.footHalf || d >= VALLEY.foot || d <= VALLEY.river) return 0;
+  const a = ax <= VALLEY.plateauHalf ? 1 : smooth01(1 - (ax - VALLEY.plateauHalf) / (VALLEY.footHalf - VALLEY.plateauHalf));
+  let b: number;
+  if (d < VALLEY.bankTop) b = smooth01((d - VALLEY.river) / (VALLEY.bankTop - VALLEY.river)); // steep bank (behind the blockers)
+  else if (d <= VALLEY.ridge) b = 1; // flat hilltop
+  else {
+    // the road ramp: mostly straight (gentle, ~26 %), eased at both ends
+    const t = (VALLEY.foot - d) / (VALLEY.foot - VALLEY.ridge);
+    b = 0.5 * t + 0.5 * smooth01(t);
+  }
+  // rounder hills: a crown rises on both sides of the road (the road runs through the saddle between them)
+  const crown = 1.8 * smooth01((ax - 4.5) / 5) * (1 - smooth01((ax - 11) / (VALLEY.footHalf - 11)));
+  return (BRIDGE.deckY * a + crown) * b;
+}
+
+/** Walking / driving height in the valley (hills + bridge deck); null = outside it (flat city ground). */
+export function valleyHeight(x: number, z: number): number | null {
+  const ax = Math.abs(x - BRIDGE.x);
+  const d = Math.abs(z - BRIDGE.riverZ);
+  if (ax >= VALLEY.footHalf || d >= VALLEY.foot) return null;
+  if (ax < BRIDGE.half + 0.3 && d < VALLEY.bankTop + 0.5) return BRIDGE.deckY; // on the deck
+  return hillHeight(x, z);
+}
+
+/** Soft ripples for the river (scrolled every frame so the water flows). */
+function waterTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 64, 64);
+  g.strokeStyle = 'rgba(150,200,255,0.9)';
+  g.lineWidth = 3;
+  for (let i = 0; i < 5; i++) {
+    const y = 6 + i * 13;
+    g.beginPath();
+    for (let x = 0; x <= 64; x += 4) g.lineTo(x, y + Math.sin((x / 64) * Math.PI * 2 + i) * 3);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+/** Round soft-edged white blob (alpha falls off to 0 at the rim) — fog patches without hard edges. */
+function softBlobTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
 
 function addBox(
   g: THREE.Object3D,
@@ -105,6 +182,14 @@ export class UsaLandmarks {
   private readonly fountainJets: THREE.Mesh[] = [];
   private fogSheets: THREE.Mesh[] = [];
   private bridgeGroup: THREE.Group | null = null;
+  private waterTex: THREE.Texture | null = null;
+  private pondTex: THREE.Texture | null = null;
+  /** Keeps every later plot (fair, shops, props, stops…) off the valley while the city is built; main drops it after. */
+  readonly guard: Obstacle = { minX: -152, maxX: -86, minZ: 4.5, maxZ: 70.5 };
+  /** No-spawn zone: no coins / question people / cats walk on the hills or the river (only the deck coins). */
+  readonly zone: Obstacle = { minX: -152, maxX: -86, minZ: 4, maxZ: 68 };
+  /** A few coins along the bridge deck (placed by main once the coins exist). */
+  readonly deckCoins = [-6, -3, 0, 3, 6].map((dz) => ({ x: BRIDGE.x, z: BRIDGE.riverZ + dz }));
 
   constructor(
     scene: THREE.Scene,
@@ -272,117 +357,237 @@ export class UsaLandmarks {
     );
   }
 
-  /** Ponte do Pacífico: torres em A laranja, cabos em catenária, tabuleiro atravessável. */
+  /**
+   * Ponte do Pacífico (Telmo 2026-11-28): dois montes relvados frente a frente, um rio a correr entre eles e a ponte
+   * suspensa laranja de cimo a cimo. Uma estrada sobe cada monte desde as ruas z = 0 e z = 75, por isso ela passa a
+   * pé ou de carro. O rio não se pode pisar (blocos baixos nas margens); só se atravessa pela ponte.
+   */
   private buildBridge(scene: THREE.Scene, world: World): void {
-    const at = USA_SPOTS.bridge;
-    claim(world, at, 22, 12, 0.6);
+    const B = BRIDGE;
+    const H = B.deckY;
+    // the whole block west of the x = -80 road, between the z = 0 and z = 75 roads, becomes the valley
+    world.clearArea({ minX: -152, maxX: -86, minZ: 4, maxZ: 71 }, 1);
+    clearCityLamps({ minX: B.x - 11, maxX: B.x + 11, minZ: 3, maxZ: 72 }, world.obstacles);
+    world.obstacles.push(this.guard);
+
+    // --- the two hills (one displaced grid each), coloured from the city grass up to a greener top + earthy banks ---
+    const groundCol = ((world.ground.material as THREE.MeshStandardMaterial).color ?? new THREE.Color(0x86cf6a)).clone();
+    const green = new THREE.Color(0x5fb84f);
+    const earth = new THREE.Color(0xa8865a);
+    const hillMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+    const walk: THREE.Object3D[] = [];
+    for (const side of [-1, 1]) {
+      const len = VALLEY.foot;
+      const geo = new THREE.PlaneGeometry(VALLEY.footHalf * 2, len, 36, 32);
+      geo.rotateX(-Math.PI / 2);
+      const pos = geo.attributes.position as THREE.BufferAttribute;
+      const cols = new Float32Array(pos.count * 3);
+      const c = new THREE.Color();
+      for (let i = 0; i < pos.count; i++) {
+        const x = B.x + pos.getX(i);
+        const z = B.riverZ + side * (len / 2 + pos.getZ(i));
+        const h = hillHeight(x, z);
+        pos.setXYZ(i, x, h + 0.05, z);
+        const d = Math.abs(z - B.riverZ);
+        c.copy(groundCol).lerp(green, Math.min(1, (h / H) * 1.4));
+        if (d < VALLEY.bankTop) c.lerp(earth, THREE.MathUtils.clamp((VALLEY.bankTop - d) / 3, 0, 0.85));
+        cols.set([c.r, c.g, c.b], i * 3);
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      // the S grid is mirrored in z: flip its winding so it faces up
+      if (side < 0) {
+        const idx = geo.index!;
+        for (let i = 0; i < idx.count; i += 3) {
+          const a = idx.getX(i + 1);
+          idx.setX(i + 1, idx.getX(i + 2));
+          idx.setX(i + 2, a);
+        }
+      }
+      geo.computeVertexNormals();
+      const hill = new THREE.Mesh(geo, hillMat);
+      hill.receiveShadow = true;
+      scene.add(hill);
+      walk.push(hill);
+
+      // road up the hill: from the street kerb to the deck, following the slope (+ a dashed centre line)
+      const z0 = side < 0 ? 4 : B.riverZ + VALLEY.bankTop - 0.5;
+      const z1 = side < 0 ? B.riverZ - VALLEY.bankTop + 0.5 : 71;
+      const road = new THREE.PlaneGeometry(B.half * 2 - 0.2, z1 - z0, 1, 40);
+      road.rotateX(-Math.PI / 2);
+      const rp = road.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < rp.count; i++) {
+        const x = B.x + rp.getX(i);
+        const z = (z0 + z1) / 2 + rp.getZ(i);
+        rp.setXYZ(i, x, hillHeight(B.x, z) + 0.09, z);
+      }
+      road.computeVertexNormals();
+      const roadMesh = new THREE.Mesh(road, new THREE.MeshStandardMaterial({ color: 0x6c6f78 }));
+      roadMesh.receiveShadow = true;
+      scene.add(roadMesh);
+      walk.push(roadMesh);
+      const dash = mat(0xffe066);
+      for (let z = z0 + 1.5; z < z1 - 2; z += 4) {
+        const zc = z + 0.75;
+        const slope = (hillHeight(B.x, z + 1.5) - hillHeight(B.x, z)) / 1.5;
+        const m = addBox(scene, dash, 0.22, 0.02, 1.5, B.x, hillHeight(B.x, zc) + 0.11, zc);
+        m.rotation.x = -Math.atan(slope);
+        m.castShadow = false;
+      }
+      // a few round trees on the slopes (off the road), each a small solid
+      for (const [dx, dd] of [
+        [-15, 22],
+        [13, 25],
+        [-19, 15],
+        [18, 17],
+      ] as const) {
+        const x = B.x + dx * (side < 0 ? 1 : -1);
+        const z = B.riverZ + side * dd;
+        const y = hillHeight(x, z);
+        addCyl(scene, mat(0x8b5a2b), 0.22, 0.3, 1.6, x, y + 0.8, z, 7);
+        const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(1.6, 0), mat(0x3f9a3a));
+        crown.position.set(x, y + 2.6, z);
+        crown.castShadow = true;
+        scene.add(crown);
+        world.obstacles.push({ minX: x - 0.4, maxX: x + 0.4, minZ: z - 0.4, maxZ: z + 0.4 });
+      }
+    }
+
+    // --- the river: flowing water from a little spring pond (east) to the edge of the map (west) ---
+    const riverLen = B.springX + 160;
+    const tex = waterTexture();
+    tex.repeat.set(riverLen / 7, 2);
+    this.waterTex = tex;
+    const river = new THREE.Mesh(
+      new THREE.PlaneGeometry(riverLen, VALLEY.river * 2 + 1),
+      new THREE.MeshStandardMaterial({ color: 0x4dabf7, map: tex, roughness: 0.35, metalness: 0.1 }),
+    );
+    river.rotation.x = -Math.PI / 2;
+    river.position.set(-160 + riverLen / 2, 0.12, B.riverZ);
+    scene.add(river);
+    const pondTex = tex.clone();
+    pondTex.repeat.set(2, 2);
+    this.pondTex = pondTex;
+    const pond = new THREE.Mesh(new THREE.CircleGeometry(7.5, 28), new THREE.MeshStandardMaterial({ color: 0x4dabf7, map: pondTex, roughness: 0.35 }));
+    pond.rotation.x = -Math.PI / 2;
+    pond.position.set(B.springX, 0.13, B.riverZ);
+    scene.add(pond);
+    // stones round the spring, sandy edges along the flat banks west of the hills
+    const stone = mat(0xb7b2a8);
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      if (Math.cos(a) < -0.8) continue; // the river leaves the pond westwards
+      const rr = 7.6 + (i % 3) * 0.3;
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.55 + (i % 4) * 0.15, 0), stone);
+      rock.position.set(B.springX + Math.cos(a) * rr, 0.2, B.riverZ + Math.sin(a) * rr);
+      rock.rotation.set(i, i * 2, 0);
+      scene.add(rock);
+    }
+    for (const zs of [-1, 1]) {
+      const x0 = -160;
+      const x1 = B.x - VALLEY.footHalf + 2;
+      addBox(scene, mat(0xd8c49a), x1 - x0, 0.22, 1.1, (x0 + x1) / 2, 0.11, B.riverZ + zs * (VALLEY.river + 0.4)).castShadow = false;
+    }
+
+    // the river can't be entered: low blocks along both banks (the camera passes over them); the deck is the gap
+    const r = VALLEY.river + 0.6;
+    const bank = VALLEY.bankTop - 1;
+    const low = 0.3;
+    world.obstacles.push(
+      { minX: -170, maxX: B.x - VALLEY.footHalf, minZ: B.riverZ - r, maxZ: B.riverZ + r, height: low },
+      { minX: B.x - VALLEY.footHalf, maxX: B.x - B.half, minZ: B.riverZ - bank, maxZ: B.riverZ + bank, height: low },
+      { minX: B.x + B.half, maxX: B.springX + 8, minZ: B.riverZ - bank, maxZ: B.riverZ + bank, height: low },
+    );
+
+    // --- the bridge itself (built along local X, turned so it runs north–south over the river) ---
     const g = new THREE.Group();
-    g.position.set(at.x, 0, at.z);
-    // axis-aligned so the bay/deck read clearly from aerial (not a crooked blue slab)
-    g.rotation.y = 0;
+    g.position.set(B.x, 0, B.riverZ);
+    g.rotation.y = -Math.PI / 2; // local +X → world +Z
     g.userData.landmark = 'bridge';
     scene.add(g);
     this.bridgeGroup = g;
-
     const rust = mat(0xe8590c);
     const rustDark = mat(0xd9480f);
     const steel = mat(0x868e96);
-    const water = mat(0x4dabf7);
-
-    // water under the span only (local X along the bridge; stays under the deck after Y-rotation)
-    const bay = new THREE.Mesh(new THREE.PlaneGeometry(38, 14), water);
-    bay.rotation.x = -Math.PI / 2;
-    bay.position.set(0, 0.03, 0);
-    g.add(bay);
-    // stone abutments at each end so the deck doesn't look like it floats
-    for (const x of [-17.5, 17.5]) {
-      addBox(g, mat(0x868e96), 2.5, 3.8, 5.5, x, 1.9, 0);
-    }
-    // towers (Art-Deco / Golden-Gate-like A frame)
-    for (const tx of [-11, 11]) {
+    const span = VALLEY.bankTop + 0.5; // half-length of the deck: it rests on both hilltops
+    const deck = addBox(g, steel, span * 2, 0.5, B.half * 2 + 0.7, 0, H - 0.23, 0);
+    addBox(g, mat(0x5c5f66), span * 2, 0.04, B.half * 2 - 0.2, 0, H + 0.03, 0).castShadow = false; // asphalt
+    walk.push(deck);
+    for (let i = -Math.floor(span / 2); i <= Math.floor(span / 2); i++) addBox(g, mat(0xffe066), 1.2, 0.02, 0.22, i * 2, H + 0.06, 0).castShadow = false;
+    for (const z of [-1, 1]) addBox(g, rust, span * 2, 1.0, 0.2, 0, H + 0.5, z * (B.half + 0.2));
+    // piers in the water and the two Art-Deco towers on them
+    const towerX = VALLEY.river + 0.5;
+    const legZ = B.half + 0.9;
+    const topY = H + 12;
+    let firstTower: THREE.Object3D | null = null;
+    for (const tx of [-towerX, towerX]) {
+      addBox(g, mat(0x9aa0a8), 2.6, H + 0.3, legZ * 2 + 2, tx, (H - 0.3) / 2, 0);
       const tower = new THREE.Group();
       tower.position.set(tx, 0, 0);
       g.add(tower);
-      for (const z of [-1.7, 1.7]) {
-        addBox(tower, rust, 0.9, 14, 0.9, 0, 7.2, z);
-      }
-      // cross braces
-      for (let i = 0; i < 5; i++) {
-        const y = 2.5 + i * 2.2;
-        addBox(tower, rustDark, 0.25, 0.25, 3.6, 0, y, 0);
-        const xBrace = addBox(tower, rustDark, 0.2, 2.4, 0.2, 0, y + 0.9, 0);
-        xBrace.rotation.x = 0.7;
-        const xBrace2 = addBox(tower, rustDark, 0.2, 2.4, 0.2, 0, y + 0.9, 0);
-        xBrace2.rotation.x = -0.7;
-      }
-      // tower top
-      addBox(tower, rust, 1.4, 1.2, 4.2, 0, 14.5, 0);
+      firstTower ??= tower;
+      for (const z of [-legZ, legZ]) addBox(tower, rust, 1.0, topY - H + 0.6, 1.0, 0, (topY + H - 0.6) / 2, z);
+      for (const y of [H + 9.3, topY]) addBox(tower, rustDark, 0.9, 0.8, legZ * 2 + 0.8, 0, y, 0);
+      addBox(tower, rust, 1.3, 0.9, legZ * 2 + 1.2, 0, topY + 0.8, 0);
     }
-
-    // deck + rails
-    const deck = addBox(g, steel, 34, 0.45, 4.2, 0, 4.0, 0);
-    for (const z of [-2.0, 2.0]) addBox(g, rust, 34, 0.55, 0.18, 0, 4.5, z);
-    // roadway stripes
-    for (let i = -7; i <= 7; i++) addBox(g, mat(0xffe066), 1.2, 0.02, 0.25, i * 2.2, 4.24, 0);
-
-    // main cables: segments that actually follow the catenary (not upright sticks)
+    // main cables: anchor on the hilltop → tower top → sag to the middle → tower top → anchor (one tube each)
+    const anchorX = span + 4;
     const cableY = (x: number): number => {
-      const dL = Math.abs(x + 11);
-      const dR = Math.abs(x - 11);
-      const dTower = Math.min(dL, dR);
-      return 13.8 - Math.min(dTower, 11) * 0.58;
+      const ax = Math.abs(x);
+      if (ax >= towerX) return topY - ((ax - towerX) / (anchorX - towerX)) * (topY - (H + 0.8));
+      return H + 1.6 + (topY - H - 1.6) * (ax / towerX) ** 2;
     };
-    for (const z of [-1.6, 1.6]) {
-      let prev: THREE.Vector3 | null = null;
-      for (let i = 0; i <= 28; i++) {
-        const x = -16 + (i / 28) * 32;
-        const y = cableY(x);
-        const cur = new THREE.Vector3(x, y, z);
-        if (prev) {
-          const mid = prev.clone().add(cur).multiplyScalar(0.5);
-          const len = prev.distanceTo(cur);
-          const seg = addCyl(g, rust, 0.06, 0.06, len, mid.x, mid.y, mid.z, 5);
-          seg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), cur.clone().sub(prev).normalize());
-        }
-        if (i % 2 === 0 && Math.abs(x) < 15.5) {
-          const hangH = y - 4.3;
-          if (hangH > 0.5) addCyl(g, rustDark, 0.03, 0.03, hangH, x, 4.3 + hangH / 2, z, 5);
-        }
-        prev = cur;
+    for (const z of [-legZ, legZ]) {
+      const pts: THREE.Vector3[] = [];
+      for (let i = 0; i <= 40; i++) {
+        const x = -anchorX + (i / 40) * anchorX * 2;
+        pts.push(new THREE.Vector3(x, cableY(x), z));
+      }
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, 0.11, 5), rust));
+      for (let x = -span + 1; x <= span - 1; x += 1.5) {
+        const hh = cableY(x) - (H + 1.0);
+        if (hh > 0.3) addCyl(g, rustDark, 0.035, 0.035, hh, x, H + 1.0 + hh / 2, z, 4).castShadow = false;
+      }
+      for (const x of [-anchorX, anchorX]) addBox(g, mat(0x9aa0a8), 1.8, 1.6, 1.4, x, H + 0.6, z);
+    }
+    // anchor blocks are solid (beside the road, on the hilltops)
+    for (const lx of [-anchorX, anchorX]) {
+      for (const lz of [-legZ, legZ]) {
+        const wx = B.x - lz;
+        const wz = B.riverZ + lx;
+        world.obstacles.push({ minX: wx - 0.8, maxX: wx + 0.8, minZ: wz - 1, maxZ: wz + 1, height: H + 1.4 });
       }
     }
 
-    // soft fog banks that thin when she is on the bridge (US2)
+    // soft fog banks over the water that thin when she is on the bridge (US2)
     this.fogSheets = [];
+    const fogTex = softBlobTexture();
     for (const [x, z] of [
-      [-8, -7],
-      [8, 7],
+      [-3, -9],
+      [3, 9],
     ] as const) {
       const fog = new THREE.Mesh(
-        new THREE.PlaneGeometry(12, 3.5),
-        new THREE.MeshBasicMaterial({ color: 0xf1f3f5, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }),
+        new THREE.PlaneGeometry(10, 3.5),
+        new THREE.MeshBasicMaterial({ color: 0xf1f3f5, map: fogTex, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }),
       );
-      fog.position.set(x, 3.2, z);
+      fog.position.set(x, H - 1.2, z);
       fog.rotation.x = -0.4;
       g.add(fog);
       this.fogSheets.push(fog);
     }
 
-    world.walkable = world.walkable ?? [];
-    world.walkable.push(deck);
+    // her feet / the car / coins / creatures follow the hills and the deck (only here; flat elsewhere)
     const h0 = world.heightAt;
-    world.heightAt = (x, z) => {
-      const local = g.worldToLocal(new THREE.Vector3(x, 0, z));
-      if (Math.abs(local.x) < 16 && Math.abs(local.z) < 2.0) return 4.25;
-      return h0?.(x, z) ?? 0;
-    };
+    world.heightAt = (x, z) => valleyHeight(x, z) ?? h0?.(x, z) ?? 0;
+    setGroundHeight((x, z) => valleyHeight(x, z) ?? 0);
+    world.walkable = world.walkable ?? [];
+    world.walkable.push(...walk);
 
     this.things.push({
-      object: g,
-      position: new THREE.Vector3(at.x, 0, at.z),
-      radius: 18,
+      object: firstTower ?? g,
+      position: new THREE.Vector3(B.x, 0, B.riverZ),
+      radius: 4,
       interact: () => {
-        this.ctx.say(['Atravessa a ponte! Olha o nevoeiro…']);
+        this.ctx.say(['Estás em cima da ponte! Lá em baixo passa o rio.']);
       },
     });
   }
@@ -685,6 +890,9 @@ export class UsaLandmarks {
       // keep base near the water surface while the jet stretches up
       jet.position.y = 0.55 + wave * (jet.geometry as THREE.CylinderGeometry).parameters.height * 0.5;
     }
+    // the river flows west (the spring pond just ripples)
+    if (this.waterTex) this.waterTex.offset.x = (this.time * 0.18) % 1;
+    if (this.pondTex) this.pondTex.offset.y = (this.time * 0.05) % 1;
     // fog thins when she is near the bridge
     if (this.bridgeGroup && this.fogSheets.length) {
       const p = this.ctx.player;
@@ -703,5 +911,6 @@ export class UsaLandmarks {
 
   dispose(): void {
     this.fireworks.clear();
+    setGroundHeight(null);
   }
 }

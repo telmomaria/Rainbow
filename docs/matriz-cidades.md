@@ -1,7 +1,7 @@
 # Matriz das cidades — o que existe em cada nível
 
 - **Data:** 2026-11-21
-- **Commit:** `705615f` + alterações de 2026-11-21 (Clérigos, Rio, aviador, Nuuk, tanque, Estátua da Liberdade, Hotel das Fontes) + 2026-11-28 (Cidade do México: Teotihuacán, Tula, Casa Azul, bandeirinhas, crianças)
+- **Commit:** `705615f` + alterações de 2026-11-21 (Clérigos, Rio, aviador, Nuuk, tanque, Estátua da Liberdade, Hotel das Fontes) + 2026-11-28 (Cidade do México: Teotihuacán, Tula, Casa Azul, bandeirinhas, crianças; praia do Rio)
 - **Fonte:** o código (`src/`), não o CLAUDE.md. As diferenças estão na última secção.
 
 **Legenda:** ✅ existe · — não existe · número = quantidade.
@@ -28,7 +28,7 @@ usam o `usa.ts`).
 
 | Elemento | POR | ROM | MAD | LON | PAR | VAR | VIL | MOS | PEQ | TÓQ | RIO | MÉX | REI | NUU | EUA | LUA |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Nº de ex-líbris | 1 | 1 | **0** | 2 | 1 | 6 | **0** | 2 | 1 | 1 | 2 | 3 | **0** | **0** | 4 | — |
+| Nº de ex-líbris | 1 | 1 | **0** | 2 | 1 | 6 | **0** | 2 | 1 | 1 | 2 + praia | 3 | **0** | **0** | 4 | — |
 | Nº onde se sobe / se anda | 1 | — | — | 1 | — | 2 | — | — | — | — | 1 | 1 | — | — | 2 | — |
 | Nº de joias de ex-líbris | 1 | 1 | — | 2 | 1 | 6 | — | 1 | 1 | 1 | 1 | 1 | — | — | 2 | — |
 | Custa moedas | — | 1 (desejo) | — | — | — | — | — | — | — | — | 2 (teleférico) | — | — | — | — | — |
@@ -54,8 +54,9 @@ usam o `usa.ts`).
 | Tóquio | Templo (portão, sino, pétalas de cerejeira) | "O sino do templo!" | — | ✅ `templo` |
 | Rio de Janeiro | Pão de Açúcar (Urca baixa + Pão alto, 3 estações, bondinho) + músicos de samba | bondinho: entrar a andar / tocar / Enter; sobe 2 moedas, desce grátis | ✅ anda (bondinho) | ✅ `pao` (no cimo) |
 | Rio de Janeiro | Cristo Redentor no Corcovado | tocar no morro = carrilhão + narradora | — | — |
+| Rio de Janeiro | Praia comprida em todo o lado +Z (`beach.ts` + `beachlife.ts`, 2026-11-28): calçadão de ondas pretas e brancas (z 110–116), palmeiras, areia (116–138), mar animado até ao horizonte; 14 chapéus de sol + toalhas, 6 a apanhar sol, vólei de praia (rede + 4 jogadores), 4 a passear (calçadão e areia molhada), 5 no mar (2 em boias, 1 a chapinhar) | 1.ª vez na praia: "Que praia tão comprida! É como Copacabana!"; molha os pés à beira da água (salpicos); mais fundo não passa (onda + aviso falado); chegar ao lado do campo / tocar no campo = a bola vem até ela e volta ao jogo; quem passeia/está deitado acena quando ela chega perto | ✅ anda (areia, beira-mar) | — |
 | EUA | Estátua da Liberdade | sobe as escadas até ao terraço (`towerClimb`) | ✅ sobe | ✅ `gem:usa:liberdade` |
-| EUA | Ponte do Pacífico (suspensa, laranja) | atravessa-se; "Olha o nevoeiro…" | ✅ atravessa | — |
+| EUA | Ponte do Pacífico (suspensa, laranja) sobre um rio, entre dois montes (`usa.ts` `BRIDGE`) | sobe o monte pela estrada, atravessa a pé ou de carro, desce o outro; o rio não se pisa; 5 moedas no tabuleiro; a meio: "Estás em cima da ponte!…" | ✅ atravessa | — |
 | EUA | Parque Arco-Íris (castelo) | fogo de artifício à noite | — | — |
 | EUA | Hotel das Fontes (lago + fontes dançantes) | "As fontes dançam no lago!" | — | ✅ `gem:usa:palace` |
 | Cidade do México | Teotihuacán (pirâmide em 5 patamares, ~18,5 m, escadaria central, templo no cimo) — `src/landmarks-mexico.ts` | sobe as escadas (`towerClimb`: clicar/Enter), vista no terraço, andar = descer | ✅ sobe | ✅ `gem:Cidade do México:teotihuacan` (no topo, pedestal ao lado dela) |

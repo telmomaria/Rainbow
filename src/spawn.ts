@@ -30,6 +30,18 @@ export function inPlayArea(x: number, z: number, r = 0): boolean {
   return Math.abs(x) <= lim && Math.abs(z) <= lim;
 }
 
+/**
+ * Ground height where the city isn't flat (USA: the hills and the deck of the Ponte do Pacífico). Set by usa.ts,
+ * cleared on dispose. The climbs' "never leave her floating" safeties drop her to this height, not to y = 0.
+ */
+let groundFn: ((x: number, z: number) => number) | null = null;
+export function setGroundHeight(fn: ((x: number, z: number) => number) | null): void {
+  groundFn = fn;
+}
+export function groundHeight(x: number, z: number): number {
+  return groundFn?.(x, z) ?? 0;
+}
+
 /** Areas where nothing may be spawned (e.g. inside the concert venue, which needs a ticket). Set per city. */
 const noSpawn: Obstacle[] = [];
 export function setNoSpawnZones(zones: Obstacle[]): void {

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { City } from './cities';
 import { AIRPORT_ZONE } from './airport';
 import { setPlayArea } from './spawn';
+import { BEACH, BEACH_CITY, buildBeachScenery } from './beach';
 
 /** Axis-aligned obstacle on the XZ plane (used for simple circle-vs-box collision). */
 export interface Obstacle {
@@ -69,13 +70,19 @@ export interface InteractCtx {
  */
 export const ROADS = { width: 8, xs: [-80, 0], zs: [-70, 0, 75], extent: 150 } as const;
 
+/**
+ * Far end (+Z) of the north–south roads. Normally the map edge; in Rio de Janeiro they stop at the beach promenade
+ * (beach.ts) and the cars there go back into the traffic pool (traffic.ts). Set per city by createWorld.
+ */
+export const ROAD_ENDS: { zMax: number } = { zMax: ROADS.extent };
+
 /** Start point of every city: on the pavement (not on the road), facing +X towards the airport. */
 export const SPAWN = { x: 7, z: 7, h: -Math.PI / 2 } as const;
 
 /** True if (x, z) is on a road surface, with an optional margin (m). */
 export function onRoad(x: number, z: number, margin = 0): boolean {
   const half = ROADS.width / 2 + margin;
-  return ROADS.xs.some((rx) => Math.abs(x - rx) < half) || ROADS.zs.some((rz) => Math.abs(z - rz) < half);
+  return ROADS.xs.some((rx) => Math.abs(x - rx) < half && z < ROAD_ENDS.zMax + margin) || ROADS.zs.some((rz) => Math.abs(z - rz) < half);
 }
 
 export interface World {
@@ -105,6 +112,8 @@ export function createWorld(scene: THREE.Scene, city: City): World {
   scene.fog = new THREE.Fog(city.sky, 60, 160);
   // coins / creatures / people spawn only well inside the 300 m ground (see spawn.ts inPlayArea)
   setPlayArea(ROADS.extent - 10);
+  const beachCity = city.name === BEACH_CITY;
+  ROAD_ENDS.zMax = beachCity ? BEACH.prom0 : ROADS.extent;
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x7fbf6a, 1.6);
   scene.add(hemi);
@@ -130,12 +139,15 @@ export function createWorld(scene: THREE.Scene, city: City): World {
   const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const L = ROADS.extent * 2;
   const addRoad = (vertical: boolean, at: number) => {
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(vertical ? ROADS.width : L, vertical ? L : ROADS.width), roadMat);
+    // north–south roads stop at ROAD_ENDS.zMax (Rio: the beach promenade)
+    const len = vertical ? ROADS.extent + ROAD_ENDS.zMax : L;
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(vertical ? ROADS.width : L, vertical ? len : ROADS.width), roadMat);
     road.rotation.x = -Math.PI / 2;
-    road.position.set(vertical ? at : 0, 0.01, vertical ? 0 : at);
+    road.position.set(vertical ? at : 0, 0.01, vertical ? (ROAD_ENDS.zMax - ROADS.extent) / 2 : at);
     road.receiveShadow = true;
     scene.add(road);
-    for (let t = -ROADS.extent + 3; t < ROADS.extent; t += 8) {
+    const end = vertical ? ROAD_ENDS.zMax - 2 : ROADS.extent;
+    for (let t = -ROADS.extent + 3; t < end; t += 8) {
       const dash = new THREE.Mesh(new THREE.PlaneGeometry(vertical ? 0.25 : 3, vertical ? 3 : 0.25), lineMat);
       dash.rotation.x = -Math.PI / 2;
       dash.position.set(vertical ? at : t, 0.015, vertical ? t : at);
@@ -159,6 +171,7 @@ export function createWorld(scene: THREE.Scene, city: City): World {
     const hitsRoad =
       ROADS.xs.some((rx) => x + w / 2 > rx - 6 && x - w / 2 < rx + 6) || ROADS.zs.some((rz) => z + d / 2 > rz - 6 && z - d / 2 < rz + 6);
     if (hitsRoad || corners.some(([cx, cz]) => Math.hypot(cx - SPAWN.x, cz - SPAWN.z) < 9)) continue;
+    if (beachCity && z + d / 2 > BEACH.prom0 - 4) continue; // Rio: the beach side stays open (beach.ts)
     const z0 = AIRPORT_ZONE;
     if (x + w / 2 > z0.minX && x - w / 2 < z0.maxX && z + d / 2 > z0.minZ && z - d / 2 < z0.maxZ) continue; // airport
     const mesh = new THREE.Mesh(
@@ -191,6 +204,9 @@ export function createWorld(scene: THREE.Scene, city: City): World {
 
   const interactables: Interactable[] = [createLamp(scene, new THREE.Vector3(6, 0, -8), obstacles)];
 
+  // Rio de Janeiro: long beach + promenade + sea along the +Z side (beach.ts); world.update animates the waves
+  const beach = beachCity ? buildBeachScenery(scene, obstacles) : null;
+
   const buildings = new Set(buildingMeshes.keys());
   const clearArea = (a: Obstacle, m: number): void => {
     for (const [ob, mesh] of buildingMeshes) {
@@ -203,7 +219,7 @@ export function createWorld(scene: THREE.Scene, city: City): World {
       }
     }
   };
-  return { ground, hemi, sun, obstacles, interactables, update: () => {}, buildings, clearArea };
+  return { ground, hemi, sun, obstacles, interactables, update: beach ? (dt) => beach.update(dt) : () => {}, buildings, clearArea };
 }
 
 /** Street lamp with a button on its post: touch it and the light switches on/off. */

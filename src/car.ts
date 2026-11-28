@@ -49,6 +49,8 @@ export class Car {
   private riderFrom = new THREE.Vector3();
   private exitTo = new THREE.Vector3();
   private onDone: (() => void) | null = null;
+  /** Ground height where the city isn't flat (USA hills + bridge deck): the car rides on it, nose up/down. */
+  heightAt: ((x: number, z: number) => number) | null = null;
 
   constructor(
     scene: THREE.Scene,
@@ -67,6 +69,7 @@ export class Car {
     this.door = built.door;
     this.body = built.body;
     this.group.position.copy(at);
+    this.group.rotation.order = 'YXZ'; // heading first, then the pitch on a slope
     this.group.rotation.y = heading;
     scene.add(this.group);
     this.box = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
@@ -115,9 +118,10 @@ export class Car {
       new THREE.Vector3(0, 0, HALF_LEN + 1.2),
     ]) {
       const p = this.group.localToWorld(local.clone());
-      if (isFree(p.x, p.z, 0.5, others)) return p.setY(0);
+      if (isFree(p.x, p.z, 0.5, others)) return p.setY(this.heightAt?.(p.x, p.z) ?? 0);
     }
-    return this.group.localToWorld(new THREE.Vector3(0, 0, HALF_LEN + 1.6)).setY(0);
+    const p = this.group.localToWorld(new THREE.Vector3(0, 0, HALF_LEN + 1.6));
+    return p.setY(this.heightAt?.(p.x, p.z) ?? 0);
   }
 
   /** Start the get-in animation; `rider` is the character's root (it stays visible inside the car). */
@@ -257,11 +261,36 @@ export class Car {
     }
     this.steerVis += (steer - this.steerVis) * Math.min(1, dt * 8);
     this.group.rotation.y = this.heading;
+    this.followGround();
     for (const w of this.wheels) w.rotation.x -= (this.speed * dt) / 0.4;
     for (const fw of this.frontWheels) fw.rotation.y = this.steerVis * 0.5;
     this.body.position.y = BODY_Y + Math.sin(performance.now() / 60) * 0.015 * Math.min(1, Math.abs(this.speed) / 6);
     this.updateBox();
     return bumped;
+  }
+
+  /** Sit on the ground under the front and back wheels (hills / bridge deck); flat cities stay at y = 0. */
+  private followGround(): void {
+    if (!this.heightAt) return;
+    const fx = -Math.sin(this.heading);
+    const fz = -Math.cos(this.heading);
+    const off = HALF_LEN - 0.5;
+    const p = this.position;
+    const hf = this.heightAt(p.x + fx * off, p.z + fz * off);
+    const hb = this.heightAt(p.x - fx * off, p.z - fz * off);
+    p.y = (hf + hb) / 2;
+    this.group.rotation.x = Math.atan2(hf - hb, off * 2);
+  }
+
+  /** QA (?debug): park the car at (x, z) facing h. */
+  place(x: number, z: number, h: number): void {
+    if (this.phase !== 'parked') return;
+    this.position.set(x, 0, z);
+    this.heading = h;
+    this.speed = 0;
+    this.group.rotation.y = h;
+    this.followGround();
+    this.updateBox();
   }
 
   /** Two circles (front and back) approximate the car. */

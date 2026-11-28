@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { sfx, speak, tone } from './audio';
 import type { GameCtx } from './gamectx';
-import { ROADS, SPAWN, onRoad, type Obstacle } from './world';
+import { ROAD_ENDS, ROADS, SPAWN, onRoad, type Obstacle } from './world';
 import { BUS_ROUTES, DOOR_FWD, routeLanes, type BusStop, type Crossing } from './busstops';
 import { isFree } from './spawn';
 
@@ -277,6 +277,15 @@ function laneOf(axis: Axis, road: number, dir: number): number {
   return axis === 'x' ? road + LANE * dir : road - LANE * dir;
 }
 
+/** How far a lane runs in its driving direction (Rio: the north–south roads stop at the beach, world.ts ROAD_ENDS). */
+function laneEnd(axis: Axis, dir: number): number {
+  return axis === 'z' && dir > 0 ? ROAD_ENDS.zMax : ROADS.extent;
+}
+/** Where cars enter a lane (its far end behind them). */
+function laneEntry(axis: Axis, dir: number): number {
+  return axis === 'z' && dir < 0 ? ROAD_ENDS.zMax - 3 : -dir * (ROADS.extent - 3);
+}
+
 function shuffle<T>(a: T[]): T[] {
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -433,6 +442,7 @@ export class Traffic {
       const s = (Math.random() * 2 - 1) * (ROADS.extent - 12);
       const crosses = lane.axis === 'x' ? ROADS.xs : ROADS.zs;
       if (crosses.some((c) => Math.abs(c - s) < 16)) continue;
+      if (lane.axis === 'z' && s > ROAD_ENDS.zMax - 12) continue; // Rio: past the end of the road (beach)
       const l = laneOf(lane.axis, lane.road, lane.dir);
       const x = lane.axis === 'x' ? s : l;
       const z = lane.axis === 'x' ? l : s;
@@ -514,7 +524,7 @@ export class Traffic {
     // prefer entry points far from the character
     options.sort((a, b) => entryDist(b, p) - entryDist(a, p));
     for (const lane of options.slice(0, 6)) {
-      const s = -lane.dir * (ROADS.extent - 3);
+      const s = laneEntry(lane.axis, lane.dir);
       const l = laneOf(lane.axis, lane.road, lane.dir);
       const x = lane.axis === 'x' ? s : l;
       const z = lane.axis === 'x' ? l : s;
@@ -860,7 +870,7 @@ export class Traffic {
           return;
         }
       }
-      if (car.s * car.dir > ROADS.extent - 1) {
+      if (car.s * car.dir > laneEnd(car.axis, car.dir) - 1) {
         this.respawn(car);
         return;
       }
@@ -1165,7 +1175,7 @@ export class Traffic {
 }
 
 function entryDist(lane: { axis: Axis; road: number; dir: number }, p: THREE.Vector3): number {
-  const s = -lane.dir * (ROADS.extent - 3);
+  const s = laneEntry(lane.axis, lane.dir);
   const l = laneOf(lane.axis, lane.road, lane.dir);
   return lane.axis === 'x' ? Math.hypot(s - p.x, l - p.z) : Math.hypot(l - p.x, s - p.z);
 }

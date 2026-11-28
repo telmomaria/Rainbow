@@ -3,6 +3,7 @@ import { speak, tone } from './audio';
 import { feel } from './bus';
 import type { GameCtx } from './gamectx';
 import { parkSite, reserveGround, roadsideSite, siteBox, siteGroup, siteToWorld } from './places';
+import { groundHeight } from './spawn';
 import type { SwingSeat } from './props';
 import { mulberry32, onRoad, SPAWN, type Interactable, type Obstacle, type World } from './world';
 
@@ -956,10 +957,11 @@ function buildTerraceStairs(
     update(dt) {
       if (phase === 'idle') {
         // safety: never leave her floating if something interrupted a climb
-        if (ctx.player.y > 0.35) {
+        const ground = groundHeight(ctx.player.x, ctx.player.z); // USA hills / bridge deck
+        if (ctx.player.y > ground + 0.35) {
           const d = Math.hypot(ctx.player.x - topPos.x, ctx.player.z - topPos.z);
           const dFoot = Math.hypot(ctx.player.x - footPos.x, ctx.player.z - footPos.z);
-          if (d > 6 && dFoot > 4) ctx.player.y = 0;
+          if (d > 6 && dFoot > 4) ctx.player.y = ground;
         }
         return;
       }

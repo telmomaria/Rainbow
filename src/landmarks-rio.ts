@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AIRPORT_ZONE } from './airport';
 import { tone } from './audio';
+import { buildBeachLife } from './beachlife';
 import type { GameCtx } from './gamectx';
 import { gemMesh, mat } from './places';
 import { inNoSpawn } from './spawn';
@@ -25,6 +26,9 @@ import { ROADS, SPAWN, type Interactable, type Obstacle, type World } from './wo
  *
  * Cristo Redentor: white-grey statue with open arms on a tall green hill (Corcovado), on another plot of the
  * map (≥ 75 m from the Pão de Açúcar), seen from much of the city. Touching the hill = the narrator names it.
+ *
+ * Beach (Telmo 2026-11-28): beach.ts (sand, calçadão, sea — built with the world) + beachlife.ts (people, built
+ * here last, after both landmarks have picked their plots: it drops the guard that kept them off the sand).
  *
  * Lives in its own file (landmarks.ts is shared); landmarks.ts passes in its private helpers.
  */
@@ -1048,5 +1052,7 @@ export function buildRio(
   dbg.count = (pao.centre ? 1 : 0) + (cristo.length ? 1 : 0);
   if (!pao.centre) dbg.failed = 'pao';
   if (!cristo.length) dbg.failed = ((dbg.failed as string) ?? '') + ' cristo';
-  return [...pao.things, ...cristo];
+  // the long beach along the +Z side (people, splashes, volleyball) — last: it releases the sand for walking/spawning
+  const beach = buildBeachLife(scene, obstacles, ctx, Math.floor(rng() * 1e6), dbg);
+  return [...pao.things, ...cristo, ...beach];
 }
