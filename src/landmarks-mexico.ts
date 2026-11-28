@@ -666,8 +666,9 @@ interface Bunting {
 }
 
 /**
- * Strings of papel picado between pairs of nearby placeholder buildings (gap 3–18 m, facing walls), above head height,
- * never over a road, never through another building. Up to 12 strings.
+ * Strings of papel picado between pairs of nearby placeholder buildings (gap 3–24 m, facing walls), above head height,
+ * never over a road, never through another building. Long facing walls get two parallel strings. Up to 40 strings
+ * (Telmo, 2026-11-28: "mais bandeirinhas").
  */
 function buildBunting(scene: THREE.Scene, world: World, obstacles: Obstacle[]): Bunting | null {
   const bs = [...world.buildings].filter((b) => (b.roof ?? 0) >= 4.2);
@@ -688,6 +689,8 @@ function buildBunting(scene: THREE.Scene, world: World, obstacles: Obstacle[]): 
     }
     return true;
   };
+  /** Where along the shared wall a string hangs: one in the middle, two when the walls face each other ≥ 5 m. */
+  const along = (overlap: number): number[] => (overlap >= 5 ? [0.25, 0.75] : [0.5]);
   for (let i = 0; i < bs.length; i++) {
     for (let j = 0; j < bs.length; j++) {
       if (i === j) continue;
@@ -699,21 +702,25 @@ function buildBunting(scene: THREE.Scene, world: World, obstacles: Obstacle[]): 
       const gx = B.minX - A.maxX;
       const oz0 = Math.max(A.minZ, B.minZ);
       const oz1 = Math.min(A.maxZ, B.maxZ);
-      if (gx >= 3 && gx <= 18 && oz1 - oz0 >= 1.5) {
-        const z = (oz0 + oz1) / 2;
-        const a = new THREE.Vector3(A.maxX, h, z);
-        const b = new THREE.Vector3(B.minX, h, z);
-        if (clearPath(a, b, h, A, B)) cands.push({ a, b, ia: A, ib: B, len: gx });
+      if (gx >= 3 && gx <= 24 && oz1 - oz0 >= 1.2) {
+        for (const u of along(oz1 - oz0)) {
+          const z = oz0 + (oz1 - oz0) * u;
+          const a = new THREE.Vector3(A.maxX, h, z);
+          const b = new THREE.Vector3(B.minX, h, z);
+          if (clearPath(a, b, h, A, B)) cands.push({ a, b, ia: A, ib: B, len: gx });
+        }
       }
       // B to the +Z of A, overlapping in X
       const gz = B.minZ - A.maxZ;
       const ox0 = Math.max(A.minX, B.minX);
       const ox1 = Math.min(A.maxX, B.maxX);
-      if (gz >= 3 && gz <= 18 && ox1 - ox0 >= 1.5) {
-        const x = (ox0 + ox1) / 2;
-        const a = new THREE.Vector3(x, h, A.maxZ);
-        const b = new THREE.Vector3(x, h, B.minZ);
-        if (clearPath(a, b, h, A, B)) cands.push({ a, b, ia: A, ib: B, len: gz });
+      if (gz >= 3 && gz <= 24 && ox1 - ox0 >= 1.2) {
+        for (const u of along(ox1 - ox0)) {
+          const x = ox0 + (ox1 - ox0) * u;
+          const a = new THREE.Vector3(x, h, A.maxZ);
+          const b = new THREE.Vector3(x, h, B.minZ);
+          if (clearPath(a, b, h, A, B)) cands.push({ a, b, ia: A, ib: B, len: gz });
+        }
       }
     }
   }
@@ -721,10 +728,10 @@ function buildBunting(scene: THREE.Scene, world: World, obstacles: Obstacle[]): 
   const used = new Map<Obstacle, number>();
   const chosen: Cand[] = [];
   for (const c of cands) {
-    if (chosen.length >= 12) break;
-    if ((used.get(c.ia) ?? 0) >= 2 || (used.get(c.ib) ?? 0) >= 2) continue;
+    if (chosen.length >= 40) break;
+    if ((used.get(c.ia) ?? 0) >= 4 || (used.get(c.ib) ?? 0) >= 4) continue;
     const mid = c.a.clone().add(c.b).multiplyScalar(0.5);
-    if (chosen.some((o) => o.a.clone().add(o.b).multiplyScalar(0.5).distanceTo(mid) < 5)) continue;
+    if (chosen.some((o) => o.a.clone().add(o.b).multiplyScalar(0.5).distanceTo(mid) < 2.2)) continue;
     chosen.push(c);
     used.set(c.ia, (used.get(c.ia) ?? 0) + 1);
     used.set(c.ib, (used.get(c.ib) ?? 0) + 1);
