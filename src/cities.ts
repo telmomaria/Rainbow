@@ -48,7 +48,7 @@ export const CITIES: City[] = [
 ];
 
 /** Things a city does NOT have, so the cities are not all the same (Telmo, 2026-11-21). Nuuk: snow play instead of the fair (snowplay.ts). */
-export type CityVenue = 'stadium' | 'bar' | 'pool' | 'fair' | 'concert' | 'scooter';
+export type CityVenue = 'stadium' | 'bar' | 'pool' | 'fair' | 'concert' | 'scooter' | 'goal';
 const CITY_WITHOUT: Record<string, CityVenue[]> = {
   Reiquiavique: ['stadium', 'bar'],
   Moscovo: ['pool'],
@@ -56,8 +56,9 @@ const CITY_WITHOUT: Record<string, CityVenue[]> = {
   Vilnius: ['concert'],
   'Rio de Janeiro': ['scooter'],
   Nuuk: ['fair'],
+  'Estados Unidos': ['concert', 'goal'], // a rodeo in the concert's place (rodeo.ts); no ball + goal (play.ts) nor football folk
 };
-export const cityHas = (city: City, v: CityVenue): boolean => !CITY_WITHOUT[city.name]?.includes(v);
+export const cityHas = (city: City | string, v: CityVenue): boolean => !CITY_WITHOUT[typeof city === 'string' ? city : city.name]?.includes(v);
 
 export function cityAt(level: number): City {
   return CITIES[Math.min(Math.max(level, 0), CITIES.length - 1)];

@@ -76,7 +76,7 @@ Fontes: `addCityExtras()` e `spawnActors()` em `src/main.ts`, `CITY_WITHOUT`/`ci
 
 ### 2a. Iguais em todas as cidades (todas exceto a Lua, EUA incluídos)
 
-Casa com as cores da bandeira · parque infantil vedado · brincadeiras de rua (`play.ts`: baliza, balancé, macaca, piano
+Casa com as cores da bandeira · parque infantil vedado · brincadeiras de rua (`play.ts`: baliza (nos EUA não), balancé, macaca, piano
 de rua, banco, biblioteca; o escorrega antigo só se não houver parque) · padaria + pombos · bancas de gelado, chocolate e
 chupa · sapataria, chapelaria/acessórios e loja de roupa com provador · cabeleireiro (corte + pintar) · cabina de
 massagem · consultório do médico · fotógrafo · banco, joalheiro e baú do tesouro · hospital · trânsito + 4 autocarros
@@ -90,7 +90,8 @@ tempo real e hora local.
 | Aeroporto (avião) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (só chegada) | — |
 | Foguetão (Cabo Canaveral) | — | — | — | — | — | — | — | — | — | — | — | — | — | — | ✅ | — |
 | Feira popular (nº diversões) | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | **—** | 15 | 15 | 15 | **—** | 15 | — |
-| Concerto | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **—** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Concerto | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **—** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **—** (rodeo) | — |
+| Rodeo (`rodeo.ts`: bilhete 5, bancadas com 56 espectadores, sentar; cavalo aos pulos, laço, palhaço com barril) | — | — | — | — | — | — | — | — | — | — | — | — | — | — | ✅ | — |
 | Piscina | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **—** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | Estádio + adeptos | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **—** | ✅ | ✅ | — |
 | Bar (dois homens) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **—** | ✅ | ✅ | — |
@@ -155,7 +156,7 @@ só existe em Londres (`onlyIn`); o pescador é extra só em Reiquiavique. Os EU
 | Feiticeiro (3 copos, achar a bola) | ✅ | ✅ | — | ✅ | — | ✅ | — | ✅ | ✅ | — | ✅ | — | ✅ | — | ✅ | — | 9 |
 | Aviador (avião de papel) | — | ✅ | — | ✅ | — | ✅ | ✅ | — | ✅ | — | ✅ | — | ✅ | ✅ | — | — | 8 |
 | Corredor (corrida até ao candeeiro) | — | ✅ | — | — | ✅ | — | ✅ | — | ✅ | — | ✅ | ✅ | — | ✅ | — | — | 7 |
-| Futebolista (passa a bola) | — | — | ✅ | — | ✅ | — | ✅ | — | — | ✅ | — | ✅ | — | ✅ | — | — | 6 |
+| Futebolista (passa a bola; nunca nos EUA, `notIn`) | — | — | ✅ | — | ✅ | — | ✅ | — | — | ✅ | — | ✅ | — | ✅ | — | — | 6 |
 | Padeiro (pão no forno) | ✅ | ✅ | ✅ | — | ✅ | ✅ | — | ✅ | ✅ | — | ✅ | ✅ | ✅ | — | ✅ | — | 11 |
 | Pedreiro (constrói muro) | ✅ | ✅ | — | ✅ | ✅ | ✅ | — | ✅ | ✅ | — | ✅ | ✅ | — | ✅ | ✅ | — | 11 |
 | Cozinheiro (sopa) | ✅ | ✅ | — | ✅ | ✅ | — | ✅ | ✅ | ✅ | — | ✅ | ✅ | — | ✅ | ✅ | — | 11 |

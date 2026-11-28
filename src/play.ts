@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { speak, tone } from './audio';
 import { feel } from './bus';
+import { cityHas } from './cities';
 import type { GameCtx } from './gamectx';
 import { parkSite, reserveGround, roadsideSite, siteBox, siteGroup, siteToWorld } from './places';
 import { groundHeight } from './spawn';
@@ -1160,7 +1161,7 @@ export function createPlaygrounds(
   const out: Interactable[] = [];
   const builders: Array<(scene: THREE.Scene, obstacles: Obstacle[], rng: () => number, ctx: GameCtx) => Interactable | null> = [
     ...(hasPark ? [] : [buildSlide]),
-    buildBallGoal,
+    ...(cityHas(ctx.city(), 'goal') ? [buildBallGoal] : []), // no ball + goal in the USA (CITY_WITHOUT)
     buildSeesaw,
     buildHopscotch,
     buildStreetPiano,

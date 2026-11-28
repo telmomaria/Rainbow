@@ -41,6 +41,7 @@ import { createPostman, noPostman, type Postman } from './postman';
 import { createLivingStatue, noLivingStatue, type LivingStatue } from './livingstatue';
 import { isFree, setNoSpawnZones } from './spawn';
 import { Concert } from './concert';
+import { Rodeo, asRodeo } from './rodeo';
 import { SUNGLASSES_KIND, itemDef } from './items';
 import { Pool } from './pool';
 import { House, houseColors } from './house';
@@ -695,8 +696,11 @@ function addCityExtras(): Car {
     ? new Concert(scene, world.obstacles, mulberry32(city.seed * 53 + 11), gameCtx, [
         ...world.interactables.map((i) => i.position),
       ])
-    : (quietVenue() as unknown as Concert);
+    : city.kind === 'usa' // USA: a rodeo in the concert's place (rodeo.ts — same slot: booth, no-spawn zone, update, dispose)
+      ? (new Rodeo(scene, world.obstacles, mulberry32(city.seed * 53 + 11), gameCtx, [...world.interactables.map((i) => i.position)]) as unknown as Concert)
+      : (quietVenue() as unknown as Concert);
   if (concert.booth) world.interactables.push(concert.booth);
+  world.interactables.push(...(asRodeo(concert)?.seats ?? [])); // USA: tap a grandstand = sit
   const concertBlock = concert.interior ? padZone(concert.interior) : null;
   if (concertBlock) {
     world.obstacles.push(concertBlock);
@@ -2097,6 +2101,7 @@ function tick(time: number): void {
         trouble: trouble.positions(),
         sites: trouble.sites(),
         concert: concert.debug(),
+        rodeo: asRodeo(concert)?.debug() ?? null,
         riding: riding ? riding.i : null,
         house: house.debug(),
         fair: fair.debug(),

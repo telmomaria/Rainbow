@@ -708,6 +708,7 @@ registerFolk({
 registerFolk({
   id: 'futebolista',
   ref: 'I10',
+  notIn: ['Estados Unidos'], // no football goal in the USA (Telmo, 2026-11-28)
   group: 'fantasia',
   hw: 2.4,
   depth: 4,

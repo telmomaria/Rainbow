@@ -62,7 +62,7 @@ Tag definitions live ONCE in `-SKILLS_GLOBAL/tags/` (short defs) + the skills in
 - **Botões fixos:** Casa (ponto de partida) e retrato → abre a página principal (Continuar · Novo jogo · ⚙ Definições), em qualquer momento exceto a meio do voo ou de uma pergunta (também no hospital). Definições: monstros Zero (sem monstros) / Fácil ×0.5 / Médio / Difícil ×2; som da chuva Sem som / Médio (×0,4) / Normal (a chuva continua a ver-se).
   **Cidade (testes)** nas Definições: salta para qualquer um dos 16 níveis (moedas/joias ficam; "Novo jogo" começa na cidade escolhida). Só aparece em `npm run dev` (localhost) ou com `?debug` — nunca na versão publicada.
 - **Cidades sem certas coisas (src/cities.ts `CITY_WITHOUT`, Telmo 2026-11-21):** Reiquiavique sem estádio nem bar ·
-  Moscovo sem piscina · Tóquio e Nuuk sem feira · Vilnius sem concerto · Rio de Janeiro sem trotinete. O rei (folk) só existe em Londres
+  Moscovo sem piscina · Tóquio e Nuuk sem feira · Vilnius sem concerto · Rio de Janeiro sem trotinete · Estados Unidos sem concerto (rodeo no lugar, src/rodeo.ts: bilhete 5, bancadas cheias onde se senta, cavalo aos pulos / laço / palhaço com barril em ciclo de 74 s; QA `?debug` + `rainbow-rodeo-time`) e sem baliza. O rei (folk) só existe em Londres
   (`onlyIn`). Reiquiavique tem um pescador (src/folk/pescador.ts, `onlyIn` + `extra`): lago com pontão num lado da cidade, pesca
   sozinho; ao chegar perto mostra um peixe; tocar nele = a vez dela (toca quando a boia afunda → peixinho, +1 moeda uma vez).
 - **Matriz por cidade:** [docs/matriz-cidades.md](docs/matriz-cidades.md) (ex-líbris · atividades · objetos/personagens), tirada do código — atualizar quando se acrescenta/tira algo a uma cidade.
